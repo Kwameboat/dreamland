@@ -1,0 +1,5 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Spin Wheel</title>
+<style>body{margin:0;display:grid;place-items:center;height:100vh;background:#0a0a0a;color:#fff;font-family:Segoe UI,sans-serif}.wheel{width:180px;height:180px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(#ff0055,#fff,#ff0055);color:#000;font-weight:800;cursor:pointer}</style></head>
+<body><div class="wheel" id="w">SPIN</div><p id="r"></p>
+<script>document.getElementById('w').onclick=()=>{document.getElementById('r').textContent=['+1','+2','Jackpot!','Try again'][Math.floor(Math.random()*4)]};</script></body></html>

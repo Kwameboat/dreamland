@@ -1,0 +1,9 @@
+{
+  "terms": [
+    { "term": "wawa", "category": "profanity", "severity": 2 },
+    { "term": "banza", "category": "profanity", "severity": 2 },
+    { "term": "dan iska", "category": "harassment", "severity": 2 },
+    { "term": "karya", "category": "fraud", "severity": 2 },
+    { "term": "sata", "category": "hate", "severity": 2 }
+  ]
+}

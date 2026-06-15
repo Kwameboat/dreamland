@@ -1,0 +1,63 @@
+name: Smoke test
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: secret
+          MYSQL_DATABASE: yii2advanced
+          MYSQL_USER: yii2advanced
+          MYSQL_PASSWORD: secret
+        ports:
+          - 3309:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, intl
+
+      - name: Install Composer dependencies
+        working-directory: backend/sayhi_v1.6_code
+        run: composer install --no-interaction --prefer-dist --no-dev --optimize-autoloader
+
+      - name: Bootstrap local config
+        working-directory: backend/sayhi_v1.6_code
+        run: |
+          cp common/config/params-local.messages.php common/config/params-local.php 2>/dev/null || true
+          php -r "
+          file_put_contents('common/config/params-local.php', '<?php return array_merge(require __DIR__ . \"/params-local.messages.php\", [\"siteUrl\"=>\"http://localhost:8080\",\"dreamlandDevMode\"=>true,\"db\"=>[\"host\"=>\"127.0.0.1\",\"port\"=>3309,\"name\"=>\"yii2advanced\",\"username\"=>\"yii2advanced\",\"password\"=>\"secret\",\"charset\"=>\"utf8mb4\"],\"smtp\"=>[\"host\"=>\"localhost\",\"username\"=>\"x\",\"password\"=>\"x\",\"port\"=>\"587\"]]);');
+          "
+          cp common/config/main-local.example.php common/config/main-local.php 2>/dev/null || true
+
+      - name: Start API server
+        working-directory: backend/sayhi_v1.6_code
+        run: |
+          php -S localhost:8080 -t api/web api/web/router.php &
+          sleep 3
+
+      - name: Health check
+        run: |
+          curl -sf http://localhost:8080/v1/health | tee health.json
+          grep -q '"status":"ok"' health.json || grep -q '"status": "ok"' health.json
+
+      - name: PWA static sanity
+        run: test -f web/index.html && test -f web/js/config.js

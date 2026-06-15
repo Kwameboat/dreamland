@@ -1,0 +1,10 @@
+{
+  "terms": [
+    { "term": "ashawo", "category": "sexual", "severity": 3 },
+    { "term": "ashaw", "category": "sexual", "severity": 3 },
+    { "term": "chale you dey craze", "category": "harassment", "severity": 2 },
+    { "term": "make i beat you", "category": "violence", "severity": 2 },
+    { "term": "i go slap you", "category": "violence", "severity": 2 },
+    { "term": "no dey whine me", "category": "harassment", "severity": 1 }
+  ]
+}

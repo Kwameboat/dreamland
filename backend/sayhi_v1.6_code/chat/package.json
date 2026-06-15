@@ -1,0 +1,17 @@
+{
+    "name": "socket-chat",
+    "version": "0.0.1",
+    "description": "chat socket.io",
+    "dependencies": {
+        "agora-access-token": "^2.0.4",
+        "apn": "2.2.0",
+        "crypto-js": "^4.1.1",
+        "express": "^4.17.1",
+        "firebase-admin": "^13.2.0",
+        "ip": "^1.1.8",
+        "mysql": "^2.18.1",
+        "mysql2": "^3.3.1",
+        "socket.io": "^4.1.2",
+        "uuid": "^8.3.2"
+    }
+}

@@ -1,0 +1,12 @@
+{
+  "terms": [
+    { "term": "kwasia", "category": "profanity", "severity": 3 },
+    { "term": "gyimii", "category": "profanity", "severity": 3 },
+    { "term": "aboa", "category": "profanity", "severity": 3 },
+    { "term": "shwee", "category": "profanity", "severity": 2 },
+    { "term": "kweku fool", "category": "profanity", "severity": 2 },
+    { "term": "wo shi", "category": "harassment", "severity": 1 },
+    { "term": "shi wo", "category": "violence", "severity": 2 },
+    { "term": "ga insult", "category": "profanity", "severity": 2 }
+  ]
+}

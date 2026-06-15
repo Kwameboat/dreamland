@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 300" aria-hidden="true">
+  <!-- connection lines -->
+  <line x1="160" y1="150" x2="70" y2="55" stroke="#FFFFFF" stroke-width="2" opacity="0.55"/>
+  <line x1="160" y1="150" x2="250" y2="65" stroke="#FFFFFF" stroke-width="2" opacity="0.55"/>
+  <line x1="160" y1="150" x2="55" y2="210" stroke="#FFFFFF" stroke-width="2" opacity="0.55"/>
+  <line x1="160" y1="150" x2="265" y2="220" stroke="#FFFFFF" stroke-width="2" opacity="0.55"/>
+  <line x1="70" y1="55" x2="250" y2="65" stroke="#FFFFFF" stroke-width="1.5" opacity="0.35"/>
+  <line x1="55" y1="210" x2="265" y2="220" stroke="#FFFFFF" stroke-width="1.5" opacity="0.35"/>
+
+  <!-- top-left white bubble -->
+  <g transform="translate(38, 28)">
+    <rect x="0" y="0" width="64" height="52" rx="14" fill="#FFFFFF"/>
+    <circle cx="32" cy="22" r="9" fill="#FF0055"/>
+    <path d="M20 38 Q32 32 44 38 L44 44 Q32 50 20 44 Z" fill="#FF0055"/>
+  </g>
+
+  <!-- top-right magenta bubble -->
+  <g transform="translate(228, 32)">
+    <rect x="0" y="0" width="58" height="48" rx="14" fill="#FF0055"/>
+    <circle cx="29" cy="20" r="8" fill="#FFFFFF"/>
+    <path d="M18 34 Q29 29 40 34 L40 40 Q29 45 18 40 Z" fill="#FFFFFF"/>
+  </g>
+
+  <!-- center-left magenta bubble (largest) -->
+  <g transform="translate(118, 118)">
+    <rect x="0" y="0" width="84" height="68" rx="18" fill="#FF0055"/>
+    <circle cx="42" cy="28" r="12" fill="#000000"/>
+    <path d="M24 50 Q42 42 60 50 L60 58 Q42 66 24 58 Z" fill="#000000"/>
+  </g>
+
+  <!-- bottom-left white circle -->
+  <g transform="translate(28, 188)">
+    <circle cx="32" cy="32" r="32" fill="#FFFFFF"/>
+    <circle cx="32" cy="26" r="10" fill="#FF0055"/>
+    <path d="M18 44 Q32 38 46 44 L46 50 Q32 56 18 50 Z" fill="#FF0055"/>
+  </g>
+
+  <!-- bottom-right white bubble -->
+  <g transform="translate(210, 198)">
+    <rect x="0" y="0" width="62" height="50" rx="14" fill="#FFFFFF"/>
+    <circle cx="31" cy="20" r="9" fill="#FF0055"/>
+    <path d="M19 36 Q31 31 43 36 L43 42 Q31 47 19 42 Z" fill="#FF0055"/>
+  </g>
+
+  <!-- small accent bubbles -->
+  <g transform="translate(168, 42)">
+    <rect x="0" y="0" width="44" height="36" rx="10" fill="#FF0055"/>
+    <circle cx="22" cy="15" r="6" fill="#FFFFFF"/>
+    <path d="M14 26 Q22 22 30 26 L30 30 Q22 34 14 30 Z" fill="#FFFFFF"/>
+  </g>
+</svg>

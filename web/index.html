@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Dreamland" />
+  <meta name="format-detection" content="telephone=no" />
+  <meta name="description" content="Dreamland — Play, Watch, Earn. Premium short-video ecosystem." />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/png" href="/assets/logo.png" />
+  <link rel="apple-touch-icon" href="/assets/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Glide.js/3.6.0/css/glide.core.min.css" />
+  <link rel="stylesheet" href="/css/onboarding.css" />
+  <link rel="stylesheet" href="/css/app.css?v=58" />
+  <title>Dreamland — Play, Watch, Earn</title>
+  <script src="/env-config.js"></script>
+  <script>
+    (function () {
+      if (window.__DL_ENV__?.api) {
+        window.__DL_API__ = window.__DL_ENV__.api;
+      }
+      var h = location.hostname;
+      var p = location.port;
+      if (h === 'localhost' || h === '127.0.0.1' || p === '3000') {
+        window.__DL_API__ = location.protocol + '//' + (h === '127.0.0.1' ? '127.0.0.1' : 'localhost') + ':8080/v1';
+        document.documentElement.classList.add('dev-local');
+        window.__DL_BOOT_TIMER__ = setTimeout(function () {
+          if (window.__DL_APP_READY__) return;
+          window.__DL_bindEmergencyUi && window.__DL_bindEmergencyUi(true);
+        }, 6000);
+        window.__DL_BOOT_PROMISE__ = (async function () {
+          if ('serviceWorker' in navigator) {
+            var regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map(function (r) { return r.unregister(); }));
+          }
+          if (window.caches) {
+            var keys = await caches.keys();
+            await Promise.all(keys.map(function (k) { return caches.delete(k); }));
+          }
+        })();
+      }
+    })();
+
+    window.addEventListener('error', function (event) {
+      window.__DL_LAST_ERROR__ = event.message || 'Script error';
+    });
+    window.addEventListener('unhandledrejection', function (event) {
+      window.__DL_LAST_ERROR__ = (event.reason && event.reason.message) || String(event.reason || 'Promise rejected');
+    });
+
+    /** Minimal UI when the ES module fails — keeps dock/tabs/auth clickable in dev */
+    window.__DL_bindEmergencyUi = function (fromTimeout) {
+      if (window.__DL_APP_READY__) return;
+      var app = document.getElementById('app');
+      if (app) app.classList.remove('hidden');
+      var feed = document.getElementById('feed-list');
+      if (feed && fromTimeout) {
+        var errHint = window.__DL_LAST_ERROR__ ? '<p class="muted">Error: ' + window.__DL_LAST_ERROR__ + '</p>' : '';
+        feed.innerHTML = '<div class="boot-error glass-card" style="margin:16px;padding:20px;text-align:center">'
+          + '<h2 style="margin:0 0 8px">Dreamland scripts did not load</h2>'
+          + '<p class="muted">Start services with <strong>start-walkthrough.ps1</strong>, then hard refresh (Ctrl+Shift+R).</p>'
+          + errHint
+          + '<p class="muted">Check DevTools Console for red errors on <code>/js/app.js</code>.</p>'
+          + '<button type="button" class="btn-primary" onclick="location.reload()">Reload</button></div>';
+      }
+      function switchView(viewId) {
+        document.querySelectorAll('.view').forEach(function (v) { v.classList.remove('active'); });
+        var view = document.getElementById(viewId);
+        if (view) view.classList.add('active');
+        document.querySelectorAll('.dock-item[data-view]').forEach(function (n) {
+          n.classList.toggle('active', n.getAttribute('data-view') === viewId);
+        });
+      }
+      document.querySelectorAll('.dock-item[data-view]').forEach(function (btn) {
+        if (btn.__dlEmergency) return;
+        btn.__dlEmergency = true;
+        btn.addEventListener('click', function () { switchView(btn.getAttribute('data-view')); });
+      });
+      document.querySelectorAll('.feed-mode-tab').forEach(function (tab) {
+        if (tab.__dlEmergency) return;
+        tab.__dlEmergency = true;
+        tab.addEventListener('click', function () {
+          var mode = tab.getAttribute('data-feed-mode');
+          document.querySelectorAll('.feed-mode-tab').forEach(function (t) {
+            var on = t.getAttribute('data-feed-mode') === mode;
+            t.classList.toggle('active', on);
+            t.setAttribute('aria-selected', on ? 'true' : 'false');
+          });
+          document.querySelectorAll('.feed-mode-panel').forEach(function (p) {
+            var on = p.getAttribute('data-feed-mode') === mode;
+            p.classList.toggle('feed-mode-panel--active', on);
+            p.hidden = !on;
+          });
+        });
+      });
+      var authBtn = document.getElementById('auth-btn');
+      if (authBtn && !authBtn.__dlEmergency) {
+        authBtn.__dlEmergency = true;
+        authBtn.addEventListener('click', function () {
+          document.getElementById('auth-modal') && document.getElementById('auth-modal').classList.remove('hidden');
+        });
+      }
+      var authClose = document.getElementById('auth-close');
+      if (authClose && !authClose.__dlEmergency) {
+        authClose.__dlEmergency = true;
+        authClose.addEventListener('click', function () {
+          document.getElementById('auth-modal') && document.getElementById('auth-modal').classList.add('hidden');
+        });
+      }
+    };
+  </script>
+</head>
+<body class="dreamland-body">
+  <div id="onboarding" class="ob-screen hidden" aria-label="Dreamland onboarding">
+    <div class="glide ob-glide">
+      <div class="glide__track" data-glide-el="track">
+        <ul class="glide__slides">
+          <li class="glide__slide">
+            <article class="ob-slide ob-slide-brand">
+              <div class="ob-brand-hero">
+                <div class="ob-logo-stage">
+                  <img src="/assets/logo.png" alt="Dreamland" class="ob-logo-full" width="200" height="200" />
+                </div>
+                <h1 class="ob-app-name">DREAMLAND</h1>
+                <p class="ob-app-tagline">Play · Watch · Earn</p>
+              </div>
+              <p class="ob-caption">UNLOCK PREMIUM STORIES</p>
+            </article>
+          </li>
+          <li class="glide__slide">
+            <article class="ob-slide">
+              <header class="ob-head">
+                <p class="ob-line ob-line-light">EXPLORE GENRES</p>
+                <h1 class="ob-line ob-line-bold">&amp; GENUITY</h1>
+              </header>
+              <div class="ob-visual">
+                <img src="/assets/community-network.svg" alt="" class="ob-community" width="320" height="300" />
+              </div>
+              <p class="ob-caption">WATCH &amp; FOLLOW YOUR FAVORITE CREATORS</p>
+            </article>
+          </li>
+          <li class="glide__slide">
+            <article class="ob-slide ob-slide-install">
+              <header class="ob-head ob-head-cta">
+                <p class="ob-line ob-line-magenta">PLAY, WATCH, EARN</p>
+                <h1 class="ob-line ob-line-bold">STAY CONNECTED</h1>
+              </header>
+              <div class="ob-visual ob-visual-install">
+                <button type="button" id="pwaInstallBtn" class="ob-pwa-btn">
+                  <span class="ob-pwa-btn-icon-wrap">
+                    <img src="/assets/logo.png" alt="" class="ob-pwa-btn-logo" width="80" height="80" />
+                  </span>
+                  <span class="ob-pwa-btn-text">ADD TO HOME SCREEN</span>
+                </button>
+                <div id="installGuide" class="ob-install-guide">
+                  <p id="installOsLabel" class="ob-install-os"></p>
+                  <ol id="installStepsList" class="ob-install-steps"></ol>
+                  <p class="ob-install-note">Installation is required. Dreamland unlocks when you open it from your home screen or app list.</p>
+                </div>
+              </div>
+              <p class="ob-caption">INSTALL PWA FOR FAST ACCESS</p>
+            </article>
+          </li>
+        </ul>
+      </div>
+      <div class="ob-dots glide__bullets" data-glide-el="controls[nav]">
+        <button class="glide__bullet" data-glide-dir="=0" aria-label="Screen 1"></button>
+        <button class="glide__bullet" data-glide-dir="=1" aria-label="Screen 2"></button>
+        <button class="glide__bullet" data-glide-dir="=2" aria-label="Screen 3"></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="app" class="app-shell app-shell--watch hidden">
+    <header class="dl-header">
+      <div class="dl-header-left">
+        <button type="button" id="feed-back-btn" class="feed-back-btn" hidden aria-label="Back to reels">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+          <span>Reels</span>
+        </button>
+        <a class="dl-brand-lockup" href="#" id="brand-home" aria-label="Dreamland home">
+          <span class="dl-brand-icon-wrap">
+            <img src="/assets/logo.png" alt="Dreamland" class="dl-brand-icon dreamland-logo-img" width="56" height="56" />
+          </span>
+          <span class="dl-brand-text">
+            <span class="dl-brand-name">DREAMLAND</span>
+            <span class="dl-brand-tag">Play · Watch · Earn</span>
+          </span>
+        </a>
+        <div class="header-mode-switch" role="tablist" aria-label="Watch mode" hidden>
+          <button type="button" class="feed-mode-tab active" data-feed-mode="reels" role="tab" aria-selected="true">Reels</button>
+          <button type="button" class="feed-mode-tab feed-mode-tab--live" data-feed-mode="live" role="tab" aria-selected="false">
+            <span class="live-dot" aria-hidden="true"></span>
+            <span>Live</span>
+          </button>
+        </div>
+      </div>
+      <div class="dl-header-actions">
+        <button type="button" id="search-open-btn" class="dl-icon-btn dl-header-action" aria-label="Search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        </button>
+        <button type="button" id="sound-toggle" class="dl-icon-btn dl-header-action sound-toggle" aria-label="Toggle sound" aria-pressed="false">
+          <svg class="icon-muted" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M18.5 6.5a8 8 0 0 1 0 11"/></svg>
+          <svg class="icon-unmuted" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M22 9 16 15"/><path d="m16 9 6 6"/></svg>
+        </button>
+        <button type="button" id="notif-btn" class="dl-icon-btn dl-notif-btn dl-header-action dl-header-action--featured" aria-label="Notifications">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Z"/><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/></svg>
+        </button>
+        <button type="button" id="auth-btn" class="dl-icon-btn dl-avatar-btn dl-header-action" aria-label="Sign in">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 19.5c0-3.5 3.1-6 7-6s7 2.5 7 6"/></svg>
+        </button>
+      </div>
+      <span id="api-status" class="api-status dev-only" hidden aria-hidden="true"></span>
+      <span id="ai-powered-pill" class="ai-powered-pill" hidden aria-label="Dreamland AI powered">AI Powered</span>
+    </header>
+
+    <main id="views" class="dl-main">
+      <section id="feed-view" class="view view-feed active">
+        <div id="feed-list" class="reels-feed feed-mode-panel feed-mode-panel--active" data-feed-mode="reels" aria-live="polite">
+          <div class="live-loading glass-card" style="margin:16px;padding:16px">
+            <p class="eyebrow">Watch</p>
+            <h2>Starting Dreamland…</h2>
+          </div>
+        </div>
+        <div class="watch-chrome" data-feed-mode="reels">
+          <div class="watch-tabs-row watch-tabs-row--compact">
+            <div class="feed-source-tabs" role="tablist" aria-label="Feed source">
+              <button type="button" class="feed-source-tab active" data-feed-source="foryou" role="tab" aria-selected="true">For You</button>
+              <button type="button" class="feed-source-tab" data-feed-source="following" role="tab" aria-selected="false">Following</button>
+            </div>
+            <button type="button" id="genre-filter-toggle" class="watch-filter-btn" aria-expanded="false" aria-controls="genre-filter">Genres</button>
+          </div>
+          <div id="genre-filter" class="genre-filter genre-filter--collapsed" aria-label="Filter by genre"></div>
+          <div id="feed-streak-bar" class="feed-streak-bar feed-streak-bar--compact" aria-live="polite"></div>
+        </div>
+        <div id="live-list" class="live-feed feed-mode-panel" data-feed-mode="live" hidden aria-live="polite">
+          <div class="live-hub-head" id="live-hub-head">
+            <p class="eyebrow live-hub-eyebrow"><span class="live-dot"></span> Live now</p>
+            <h2 class="live-hub-title">Creators broadcasting</h2>
+            <p class="muted live-hub-sub">Tap a stream to watch · use ← Reels to go back</p>
+          </div>
+          <div id="live-cards" class="live-cards"></div>
+        </div>
+      </section>
+
+      <section id="play-view" class="view view-play">
+        <div class="page-hero">
+          <p class="eyebrow">Play &amp; Earn</p>
+          <h1>Mini games</h1>
+          <p class="lede">Spin, tap, and climb the leaderboard for daily credit rewards.</p>
+        </div>
+        <div class="play-grid">
+          <iframe title="Spin Wheel" src="/games/spin-wheel.html" class="game-frame"></iframe>
+          <iframe title="Tap Rush" src="/games/tap-rush.html" class="game-frame"></iframe>
+        </div>
+        <div class="spin-panel glass-card">
+          <div class="spin-panel-head">
+            <h3>Daily Spin</h3>
+            <span class="chip">Free today</span>
+          </div>
+          <div id="wheel" class="premium-wheel" role="button" tabindex="0">SPIN</div>
+          <p id="spin-result" class="spin-result muted">Tap to reveal your reward</p>
+        </div>
+      </section>
+
+      <section id="wallet-view" class="view view-wallet">
+        <div class="page-hero">
+          <p class="eyebrow">Wallet</p>
+          <h1>Top up credits</h1>
+          <p class="lede">Secure Paystack checkout — admin preset packages only.</p>
+        </div>
+        <div id="wallet-balance" class="balance-card glass-card">
+          <span class="balance-label">Your balance</span>
+          <span id="wallet-credits" class="balance-value">—</span>
+          <span class="balance-unit">credits</span>
+        </div>
+        <div id="package-grid" class="package-grid"></div>
+        <section class="wallet-ledger glass-card">
+          <h3>Transaction history</h3>
+          <div id="wallet-ledger"><p class="muted">Sign in to view your ledger.</p></div>
+        </section>
+      </section>
+
+      <section id="legal-view" class="view view-legal">
+        <div class="legal-page glass-card">
+          <h1>Terms &amp; Community Guidelines</h1>
+          <p>Dreamland is a Play, Watch, Earn ecosystem. Be respectful, do not upload harmful content, and follow local laws.</p>
+          <p>Premium content prices are set by Dreamland administrators. Credits are non-refundable except where required by law.</p>
+          <button type="button" class="btn-ghost" id="legal-back">← Back</button>
+        </div>
+      </section>
+
+      <section id="signup-view" class="view view-signup">
+        <div class="signup-page">
+          <button type="button" id="signup-back" class="btn-ghost signup-back">← Back</button>
+          <div class="dl-logo-stage dl-logo-stage--hero">
+            <img src="/assets/logo.png" alt="Dreamland" class="dreamland-logo-img" width="180" height="180" />
+          </div>
+          <p class="eyebrow center" id="signup-eyebrow">Join Dreamland</p>
+          <h1 class="signup-title" id="signup-heading">Choose your path</h1>
+          <p class="lede center" id="signup-lede">Premium access tailored to how you play, watch, or create.</p>
+          <form id="signup-form" class="auth-form signup-form" novalidate>
+            <div id="signup-errors" class="auth-errors hidden" role="alert"></div>
+
+            <div id="signup-step-role" class="signup-step signup-step--active">
+              <div class="role-picker-premium">
+                <fieldset class="role-picker-grid auth-account-type">
+                  <legend class="sr-only">Join as</legend>
+                  <label class="role-card role-card--viewer account-type-option account-type-option--selected">
+                    <input type="radio" name="account_type" value="viewer" checked />
+                    <span class="role-card-shine" aria-hidden="true"></span>
+                    <span class="role-card-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </span>
+                    <span class="role-card-content">
+                      <span class="role-card-badge">Play · Watch · Earn</span>
+                      <strong class="role-card-name">Viewer</strong>
+                      <small>Binge reels, unlock premium stories, spin rewards &amp; stack credits daily.</small>
+                    </span>
+                    <span class="role-card-ring" aria-hidden="true"></span>
+                  </label>
+                  <label class="role-card role-card--creator account-type-option">
+                    <input type="radio" name="account_type" value="creator" />
+                    <span class="role-card-shine" aria-hidden="true"></span>
+                    <span class="role-card-icon role-card-icon--creator" aria-hidden="true">
+                      <svg viewBox="0 0 24 24"><path d="M4 7h4l2-3h4l2 3h4v12H4V7Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+                    </span>
+                    <span class="role-card-content">
+                      <span class="role-card-badge role-card-badge--creator">Create · Live · Monetize</span>
+                      <strong class="role-card-name">Creator</strong>
+                      <small>Upload reels, broadcast live, set prices &amp; grow your Dreamland audience.</small>
+                    </span>
+                    <span class="role-card-ring" aria-hidden="true"></span>
+                  </label>
+                </fieldset>
+              </div>
+              <button type="button" id="signup-role-continue" class="btn-primary full role-continue-btn" hidden tabindex="-1">Continue</button>
+              <p class="auth-switch muted signup-step-only">Already have an account? <button type="button" id="signup-go-signin" class="link-btn">Sign in</button></p>
+            </div>
+
+            <div id="signup-step-details" class="signup-step hidden">
+              <div class="role-selected-chip" id="signup-role-chip" role="status" aria-live="polite"></div>
+              <button type="button" id="signup-role-back" class="btn-ghost signup-back">← Change path</button>
+              <p id="ai-signup-hint" class="ai-signup-hint muted">Gemini AI checks names in English + Ghana local languages (Twi, Ga, Ewe, Hausa, Dagbani, Pidgin).</p>
+            <label class="field">
+              <span>Full name</span>
+              <input type="text" name="name" id="signup-name" placeholder="Your display name" autocomplete="name" required minlength="2" />
+            </label>
+            <label class="field">
+              <span>Username</span>
+              <input type="text" name="username" id="signup-username" placeholder="yourname" autocomplete="username" required minlength="2" maxlength="30" pattern="[a-zA-Z0-9_]+" />
+            </label>
+            <label class="field">
+              <span>Email</span>
+              <input type="email" name="email" id="signup-email" placeholder="you@dreamland.app" required autocomplete="email" />
+            </label>
+            <label class="field password-field">
+              <span>Password</span>
+              <div class="password-input-wrap">
+                <input type="password" name="password" id="signup-password" placeholder="At least 6 characters" required minlength="6" autocomplete="new-password" />
+                <button type="button" class="password-toggle" aria-label="Show password" aria-pressed="false">
+                  <svg class="password-toggle-icon password-toggle-icon--show" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg class="password-toggle-icon password-toggle-icon--hide" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M3 3l18 18"/><path d="M10.7 10.7A3 3 0 0 0 12 15a3 3 0 0 0 2.3-1"/><path d="M9.9 5.1A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a18.2 18.2 0 0 1-4.1 5.2M6.2 6.2C3.6 8.1 2 12 2 12s3.5 7 10 7c1.3 0 2.5-.3 3.6-.7"/></svg>
+                </button>
+              </div>
+              <small class="field-hint">Minimum 6 characters</small>
+            </label>
+            <label class="field password-field">
+              <span>Confirm password</span>
+              <div class="password-input-wrap">
+                <input type="password" name="password_confirm" id="signup-password-confirm" placeholder="Repeat password" required minlength="6" autocomplete="new-password" />
+                <button type="button" class="password-toggle" aria-label="Show password" aria-pressed="false">
+                  <svg class="password-toggle-icon password-toggle-icon--show" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg class="password-toggle-icon password-toggle-icon--hide" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M3 3l18 18"/><path d="M10.7 10.7A3 3 0 0 0 12 15a3 3 0 0 0 2.3-1"/><path d="M9.9 5.1A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a18.2 18.2 0 0 1-4.1 5.2M6.2 6.2C3.6 8.1 2 12 2 12s3.5 7 10 7c1.3 0 2.5-.3 3.6-.7"/></svg>
+                </button>
+              </div>
+            </label>
+            <label class="auth-terms">
+              <input type="checkbox" name="terms" id="signup-terms" required />
+              <span>I agree to Dreamland's terms and community guidelines</span>
+            </label>
+            <button type="submit" class="btn-primary full">Create account</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section id="viewer-view" class="view view-viewer">
+        <div id="viewer-dashboard" class="viewer-shell"></div>
+      </section>
+
+      <section id="creator-view" class="view view-creator">
+        <div id="creator-dashboard" class="creator-shell"></div>
+      </section>
+
+      <section id="search-view" class="view view-search">
+        <div class="search-shell glass-card">
+          <div class="search-head">
+            <button type="button" id="search-back" class="btn-ghost">← Back</button>
+            <h2>Search Dreamland</h2>
+          </div>
+          <input type="search" id="search-input" class="search-input" placeholder="Creators, reels, hashtags…" autocomplete="off" />
+          <div id="search-results" class="search-results"><p class="muted">Find creators and reels across Ghana.</p></div>
+        </div>
+      </section>
+
+      <section id="profile-view" class="view view-profile">
+        <div id="profile-content" class="profile-shell"></div>
+      </section>
+    </main>
+
+    <nav class="dl-dock" aria-label="Main">
+      <button type="button" data-view="feed-view" class="dock-item active" aria-label="Watch">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7l-8 4.5-8-4.5Z"/><path d="M20 7.2 12 12 4 7.2 12 2.5 20 7.2Z"/></svg>
+        <span>Watch</span>
+      </button>
+      <button type="button" data-view="play-view" class="dock-item guest-gate" data-action="play" aria-label="Play">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5v15l11-7.5L6 4.5Z"/></svg>
+        <span>Play</span>
+      </button>
+      <button type="button" id="create-dock-btn" class="dock-item dock-item--create" aria-label="Create">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        <span>Create</span>
+      </button>
+      <button type="button" data-view="wallet-view" class="dock-item guest-gate" data-action="wallet" aria-label="Wallet">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7a2 2 0 0 1 2-2h12v14H6a2 2 0 0 1-2-2V7Z"/><path d="M18 5h2a2 2 0 0 1 2 2v2h-4V5Z"/></svg>
+        <span>Wallet</span>
+      </button>
+      <button type="button" data-view="viewer-view" data-role="account" class="dock-item" aria-label="Home">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 19.5c0-3.5 3.1-6 7-6s7 2.5 7 6"/></svg>
+        <span>Home</span>
+      </button>
+    </nav>
+  </div>
+
+  <div id="notif-panel" class="notif-panel overlay hidden">
+    <div class="modal glass-modal">
+      <h3>Notifications</h3>
+      <div id="notif-list"></div>
+      <button type="button" id="notif-close" class="btn-ghost full">Close</button>
+    </div>
+  </div>
+
+  <div id="auth-modal" class="overlay hidden">
+    <div class="modal glass-modal auth-modal">
+      <button type="button" id="auth-close" class="icon-close" aria-label="Close">×</button>
+      <div class="dl-logo-stage dl-logo-stage--modal">
+        <img src="/assets/logo.png" alt="Dreamland" class="dreamland-logo-img modal-logo" width="152" height="152" />
+      </div>
+      <div class="auth-tabs" role="tablist">
+        <button type="button" id="auth-tab-signin" class="auth-tab active" role="tab" aria-selected="true">Sign in</button>
+        <button type="button" id="auth-tab-signup" class="auth-tab" role="tab" aria-selected="false">Sign up</button>
+      </div>
+      <h2 class="modal-title" id="auth-modal-title">Welcome back</h2>
+      <p class="modal-sub muted" id="auth-modal-sub">Sign in to watch, play, and earn on Dreamland.</p>
+
+      <form id="auth-form" class="auth-form" novalidate>
+        <div id="auth-errors" class="auth-errors hidden" role="alert"></div>
+
+        <div id="auth-signup-step-role" class="auth-signup-step auth-signup-only hidden">
+          <div class="role-picker-premium role-picker-premium--compact">
+            <fieldset class="role-picker-grid auth-account-type">
+              <legend class="sr-only">Join as</legend>
+              <label class="role-card role-card--viewer account-type-option account-type-option--selected">
+                <input type="radio" name="account_type" value="viewer" checked />
+                <span class="role-card-shine" aria-hidden="true"></span>
+                <span class="role-card-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                </span>
+                <span class="role-card-content">
+                  <span class="role-card-badge">Play · Watch · Earn</span>
+                  <strong class="role-card-name">Viewer</strong>
+                  <small>Binge reels, unlock premium, spin rewards &amp; earn credits.</small>
+                </span>
+                <span class="role-card-ring" aria-hidden="true"></span>
+              </label>
+              <label class="role-card role-card--creator account-type-option">
+                <input type="radio" name="account_type" value="creator" />
+                <span class="role-card-shine" aria-hidden="true"></span>
+                <span class="role-card-icon role-card-icon--creator" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M4 7h4l2-3h4l2 3h4v12H4V7Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+                </span>
+                <span class="role-card-content">
+                  <span class="role-card-badge role-card-badge--creator">Create · Live · Monetize</span>
+                  <strong class="role-card-name">Creator</strong>
+                  <small>Upload reels, go live &amp; monetize your content.</small>
+                </span>
+                <span class="role-card-ring" aria-hidden="true"></span>
+              </label>
+            </fieldset>
+          </div>
+          <button type="button" id="auth-role-continue" class="btn-primary full role-continue-btn" hidden tabindex="-1">Continue</button>
+        </div>
+
+        <div id="auth-signup-step-details" class="auth-signup-step auth-signup-only hidden">
+          <div class="role-selected-chip" id="auth-role-chip" role="status" aria-live="polite"></div>
+          <button type="button" id="auth-role-back" class="btn-ghost signup-back">← Change path</button>
+          <p class="ai-signup-hint muted">Gemini AI checks profile text in English + Ghana local languages.</p>
+          <label class="field auth-signup-detail hidden">
+            <span>Full name</span>
+            <input type="text" name="name" id="auth-name" placeholder="Your display name" autocomplete="name" minlength="2" />
+          </label>
+          <label class="field auth-signup-detail hidden">
+            <span>Username</span>
+            <input type="text" name="username" id="auth-username" placeholder="yourname" autocomplete="username" minlength="2" maxlength="30" pattern="[a-zA-Z0-9_]+" />
+          </label>
+          <label class="field auth-signup-detail hidden">
+            <span>Email</span>
+            <input type="email" name="email" id="auth-email" placeholder="you@dreamland.app" autocomplete="email" />
+          </label>
+          <label class="field auth-signup-detail hidden password-field">
+            <span>Password</span>
+            <div class="password-input-wrap">
+              <input type="password" name="password" id="auth-password" placeholder="At least 6 characters" minlength="6" autocomplete="new-password" />
+              <button type="button" class="password-toggle" aria-label="Show password" aria-pressed="false">
+                <svg class="password-toggle-icon password-toggle-icon--show" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="password-toggle-icon password-toggle-icon--hide" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M3 3l18 18"/><path d="M10.7 10.7A3 3 0 0 0 12 15a3 3 0 0 0 2.3-1"/><path d="M9.9 5.1A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a18.2 18.2 0 0 1-4.1 5.2M6.2 6.2C3.6 8.1 2 12 2 12s3.5 7 10 7c1.3 0 2.5-.3 3.6-.7"/></svg>
+              </button>
+            </div>
+            <small class="field-hint">Minimum 6 characters</small>
+          </label>
+          <label class="field auth-signup-detail hidden password-field">
+            <span>Confirm password</span>
+            <div class="password-input-wrap">
+              <input type="password" name="password_confirm" id="auth-password-confirm" placeholder="Repeat password" minlength="6" autocomplete="new-password" />
+              <button type="button" class="password-toggle" aria-label="Show password" aria-pressed="false">
+                <svg class="password-toggle-icon password-toggle-icon--show" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="password-toggle-icon password-toggle-icon--hide" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M3 3l18 18"/><path d="M10.7 10.7A3 3 0 0 0 12 15a3 3 0 0 0 2.3-1"/><path d="M9.9 5.1A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a18.2 18.2 0 0 1-4.1 5.2M6.2 6.2C3.6 8.1 2 12 2 12s3.5 7 10 7c1.3 0 2.5-.3 3.6-.7"/></svg>
+              </button>
+            </div>
+          </label>
+          <label class="auth-terms auth-signup-detail hidden">
+            <input type="checkbox" name="terms" id="auth-terms" />
+            <span>I agree to Dreamland's terms and community guidelines</span>
+          </label>
+        </div>
+
+        <label class="field auth-signin-only">
+          <span>Email</span>
+          <input type="email" name="signin_email" id="auth-signin-email" placeholder="you@dreamland.app" required autocomplete="email" />
+        </label>
+        <label class="field auth-signin-only password-field">
+          <span>Password</span>
+          <div class="password-input-wrap">
+            <input type="password" name="signin_password" id="auth-signin-password" placeholder="••••••••" required autocomplete="current-password" minlength="6" />
+            <button type="button" class="password-toggle" aria-label="Show password" aria-pressed="false">
+              <svg class="password-toggle-icon password-toggle-icon--show" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="password-toggle-icon password-toggle-icon--hide" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M3 3l18 18"/><path d="M10.7 10.7A3 3 0 0 0 12 15a3 3 0 0 0 2.3-1"/><path d="M9.9 5.1A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a18.2 18.2 0 0 1-4.1 5.2M6.2 6.2C3.6 8.1 2 12 2 12s3.5 7 10 7c1.3 0 2.5-.3 3.6-.7"/></svg>
+            </button>
+          </div>
+        </label>
+        <p class="auth-forgot-link auth-signin-only">
+          <button type="button" id="auth-forgot-open" class="link-btn">Forgot password?</button>
+        </p>
+
+        <div id="auth-forgot-panel" class="auth-forgot-panel hidden">
+          <button type="button" id="auth-forgot-back" class="btn-ghost signup-back">← Back to sign in</button>
+          <div id="auth-forgot-step-email" class="auth-forgot-step">
+            <label class="field">
+              <span>Email</span>
+              <input type="email" id="forgot-email" name="forgot_email" placeholder="you@dreamland.app" autocomplete="email" />
+            </label>
+            <button type="button" id="forgot-send-code" class="btn-primary full">Send reset code</button>
+          </div>
+          <div id="auth-forgot-step-otp" class="auth-forgot-step hidden">
+            <label class="field">
+              <span>Verification code</span>
+              <input type="text" id="forgot-otp" name="forgot_otp" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code" />
+            </label>
+            <p id="forgot-dev-otp" class="forgot-dev-otp dev-only hidden" aria-live="polite"></p>
+            <button type="button" id="forgot-verify-otp" class="btn-primary full">Verify code</button>
+          </div>
+          <div id="auth-forgot-step-password" class="auth-forgot-step hidden">
+            <label class="field password-field">
+              <span>New password</span>
+              <div class="password-input-wrap">
+                <input type="password" id="forgot-new-password" name="forgot_new_password" placeholder="At least 6 characters" minlength="6" autocomplete="new-password" />
+                <button type="button" class="password-toggle" aria-label="Show password" aria-pressed="false">
+                  <svg class="password-toggle-icon password-toggle-icon--show" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg class="password-toggle-icon password-toggle-icon--hide" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M3 3l18 18"/><path d="M10.7 10.7A3 3 0 0 0 12 15a3 3 0 0 0 2.3-1"/><path d="M9.9 5.1A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a18.2 18.2 0 0 1-4.1 5.2M6.2 6.2C3.6 8.1 2 12 2 12s3.5 7 10 7c1.3 0 2.5-.3 3.6-.7"/></svg>
+                </button>
+              </div>
+            </label>
+            <label class="field password-field">
+              <span>Confirm new password</span>
+              <div class="password-input-wrap">
+                <input type="password" id="forgot-new-password-confirm" name="forgot_new_password_confirm" placeholder="Repeat password" minlength="6" autocomplete="new-password" />
+                <button type="button" class="password-toggle" aria-label="Show password" aria-pressed="false">
+                  <svg class="password-toggle-icon password-toggle-icon--show" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg class="password-toggle-icon password-toggle-icon--hide" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M3 3l18 18"/><path d="M10.7 10.7A3 3 0 0 0 12 15a3 3 0 0 0 2.3-1"/><path d="M9.9 5.1A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a18.2 18.2 0 0 1-4.1 5.2M6.2 6.2C3.6 8.1 2 12 2 12s3.5 7 10 7c1.3 0 2.5-.3 3.6-.7"/></svg>
+                </button>
+              </div>
+            </label>
+            <button type="button" id="forgot-save-password" class="btn-primary full">Update password</button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-primary full" id="auth-submit">Sign in</button>
+        <p class="auth-switch auth-signup-only hidden muted">Prefer a full-page form? <button type="button" id="auth-go-signup-page" class="link-btn">Open registration page</button></p>
+        <p class="auth-switch auth-signin-only muted">New here? <button type="button" id="auth-go-signup" class="link-btn">Create free account</button></p>
+      </form>
+      <div class="auth-demo-actions dev-only">
+        <button type="button" class="btn-ghost auth-demo-btn" data-demo="viewer">Demo viewer</button>
+        <button type="button" class="btn-ghost auth-demo-btn" data-demo="creator">Demo creator</button>
+      </div>
+      <p class="auth-demo-hint dev-only muted">Demo: viewer@dreamland.app or creator@dreamland.app — password demo123</p>
+    </div>
+  </div>
+
+  <div id="paywall-modal" class="overlay hidden">
+    <div class="modal glass-modal paywall-modal">
+      <div class="paywall-glow"></div>
+      <div class="paywall-logo-wrap">
+        <div class="dl-logo-stage dl-logo-stage--modal">
+          <img src="/assets/logo.png" alt="" class="dreamland-logo-img paywall-logo" width="140" height="140" />
+        </div>
+      </div>
+      <p class="eyebrow center" id="paywall-eyebrow">Premium content</p>
+      <h3 id="paywall-title">Unlock full video</h3>
+      <p id="paywall-message" class="paywall-price"></p>
+      <p id="paywall-copy" class="paywall-copy muted">Support creators. Watch the full reel without limits.</p>
+      <button type="button" id="paywall-unlock" class="btn-primary full guest-gate" data-action="unlock">Unlock with credits</button>
+      <button type="button" id="paywall-close" class="btn-ghost full">Keep browsing</button>
+    </div>
+  </div>
+
+  <div id="live-watch" class="live-room hidden" aria-label="Live stream" aria-hidden="true">
+    <div class="live-room__camera">
+      <div class="live-watch-visual" id="live-watch-visual">
+        <video id="live-watch-video" class="live-room__video" playsinline autoplay></video>
+      </div>
+    </div>
+    <div class="live-room__shade" aria-hidden="true"></div>
+
+    <header class="live-room__top">
+      <div class="live-room__host">
+        <div class="live-room__avatar" id="live-watch-avatar">D</div>
+        <div class="live-room__host-copy">
+          <p class="live-room__creator" id="live-watch-creator">@creator</p>
+          <h2 class="live-room__title" id="live-watch-title">Dreamland Live</h2>
+        </div>
+        <span class="live-room__badge"><span class="live-dot"></span> LIVE</span>
+      </div>
+      <div class="live-room__top-actions">
+        <span class="live-room__viewers" id="live-watch-viewers">0 watching</span>
+        <button type="button" id="live-watch-close" class="live-room__icon-btn" aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="live-chat-list" class="live-room__chat" aria-live="polite"></div>
+
+    <footer class="live-room__dock">
+      <div class="live-room__compose">
+        <input type="text" id="live-chat-input" class="live-room__chat-input" placeholder="Say something…" maxlength="200" />
+        <button type="button" id="live-chat-send" class="live-room__dock-btn live-room__dock-btn--send" aria-label="Send message">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+        </button>
+      </div>
+      <div class="live-room__dock-rail">
+        <button type="button" id="live-watch-share" class="live-room__dock-btn" aria-label="Share live">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg>
+          <span>Share</span>
+        </button>
+        <button type="button" id="live-watch-leave" class="live-room__dock-btn live-room__dock-btn--leave" aria-label="Leave stream">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+          <span>Leave</span>
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <div id="live-broadcast" class="live-broadcast hidden" aria-label="Live broadcast studio" aria-hidden="true">
+    <div class="live-broadcast__camera">
+      <video id="live-broadcast-video" class="live-broadcast__video" playsinline muted autoplay></video>
+    </div>
+    <div class="live-broadcast__shade" aria-hidden="true"></div>
+
+    <header class="live-broadcast__top">
+      <button type="button" id="live-broadcast-close" class="live-broadcast__icon-btn" aria-label="Close">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+      <div class="live-broadcast__status">
+        <span id="live-broadcast-badge" class="live-broadcast__badge hidden"><span class="live-dot"></span> LIVE</span>
+        <span id="live-broadcast-viewers" class="live-broadcast__viewers hidden">0 watching</span>
+      </div>
+      <button type="button" id="live-broadcast-flip" class="live-broadcast__icon-btn" aria-label="Flip camera">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h8a4 4 0 0 1 0 8H9"/><path d="M9 11 7 9l2-2"/><path d="M17 17H9a4 4 0 0 1 0-8h6"/><path d="M15 13l2 2-2 2"/></svg>
+      </button>
+    </header>
+
+    <div id="live-broadcast-setup" class="live-broadcast__setup">
+      <div class="live-broadcast__setup-sheet">
+        <p class="eyebrow">Broadcast studio</p>
+        <h3>Go live on Dreamland</h3>
+        <p class="muted live-broadcast__setup-copy">Full-screen broadcast — your audience watches in an immersive live room.</p>
+        <label class="studio-field">
+          <span>Live title</span>
+          <input type="text" class="studio-input" id="live-title" placeholder="Dreamland Live" />
+        </label>
+        <label class="studio-switch">
+          <input type="checkbox" id="live-monetized" />
+          <span class="studio-switch__track" aria-hidden="true"></span>
+          <span class="studio-switch__label">Monetized live <small>Viewers pay credits to watch</small></span>
+        </label>
+        <label class="studio-field live-broadcast__price-field hidden">
+          <span>Price (credits)</span>
+          <input type="number" class="studio-input" id="live-price" min="1" value="15" />
+        </label>
+        <button type="button" class="btn-primary full live-broadcast__go-btn" id="live-broadcast-start">Go live</button>
+      </div>
+    </div>
+
+    <div id="live-broadcast-stage" class="live-broadcast__stage hidden">
+      <div id="live-broadcast-chat-list" class="live-broadcast__chat" aria-live="polite"></div>
+      <div class="live-broadcast__dock">
+        <button type="button" id="live-broadcast-flip-live" class="live-broadcast__dock-btn" aria-label="Flip camera">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h8a4 4 0 0 1 0 8H9"/><path d="M9 11 7 9l2-2"/><path d="M17 17H9a4 4 0 0 1 0-8h6"/><path d="M15 13l2 2-2 2"/></svg>
+          <span>Flip</span>
+        </button>
+        <button type="button" id="live-broadcast-end" class="live-broadcast__dock-btn live-broadcast__dock-btn--end">
+          <span class="live-dot"></span>
+          <span>End broadcast</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+
+  <div id="record-capture" class="record-capture hidden" aria-hidden="true">
+    <div class="record-capture__camera">
+      <video id="record-capture-video" class="record-capture__video" playsinline muted autoplay></video>
+    </div>
+    <div class="record-capture__shade" aria-hidden="true"></div>
+
+    <header class="record-capture__top">
+      <button type="button" id="record-capture-close" class="record-capture-icon-btn" aria-label="Close">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+      <span id="record-capture-timer" class="record-capture__timer hidden">0:00</span>
+      <button type="button" id="record-capture-flip" class="record-capture-icon-btn" aria-label="Flip camera">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h8a4 4 0 0 1 0 8H9"/><path d="M9 11 7 9l2-2"/><path d="M17 17H9a4 4 0 0 1 0-8h6"/><path d="M15 13l2 2-2 2"/></svg>
+      </button>
+    </header>
+
+    <div id="record-capture-stage" class="record-capture__stage">
+      <p class="record-capture__hint" id="record-capture-hint">Tap the button to record · up to 60s</p>
+      <div class="record-capture__controls">
+        <button type="button" id="record-capture-shutter" class="record-capture-shutter" aria-label="Start recording">
+          <span class="record-capture-shutter__ring"></span>
+          <span class="record-capture-shutter__core"></span>
+        </button>
+        <button type="button" id="record-capture-end" class="record-capture-end hidden" aria-label="End recording">
+          <span class="live-dot" aria-hidden="true"></span>
+          End record
+        </button>
+      </div>
+    </div>
+
+    <div id="record-capture-review" class="record-capture__review hidden">
+      <div class="record-capture__camera record-capture__camera--playback">
+        <video id="record-capture-playback" class="record-capture__playback" playsinline></video>
+      </div>
+      <div class="record-capture__review-sheet">
+        <p class="eyebrow">Review clip</p>
+        <label class="studio-field">
+          <span>Title</span>
+          <input type="text" class="studio-input" id="record-capture-title" placeholder="Give your reel a headline" />
+        </label>
+        <label class="studio-field">
+          <span>Description</span>
+          <textarea class="studio-textarea" id="record-capture-desc" rows="2" placeholder="Optional caption"></textarea>
+        </label>
+        <button type="button" class="studio-ai-btn" id="record-capture-ai">
+          <span class="studio-ai-btn__icon" aria-hidden="true">✦</span>
+          <span>Gemini caption &amp; hashtags</span>
+        </button>
+        <label class="studio-field">
+          <span>Genre / category</span>
+          <div class="studio-select-wrap">
+            <select class="studio-select" id="record-capture-category" required></select>
+          </div>
+        </label>
+        <label class="studio-switch">
+          <input type="checkbox" id="record-capture-premium" />
+          <span class="studio-switch__track" aria-hidden="true"></span>
+          <span class="studio-switch__label">Mark as premium <small>Review before pricing</small></span>
+        </label>
+        <div class="record-capture__review-actions">
+          <button type="button" class="btn-ghost record-capture__review-btn" id="record-capture-retake">Retake</button>
+          <button type="button" class="btn-primary record-capture__review-btn" id="record-capture-publish">Continue in studio</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Glide.js/3.6.0/glide.min.js"></script>
+  <script type="module">
+    (async function () {
+      try {
+        if (window.__DL_BOOT_PROMISE__) await window.__DL_BOOT_PROMISE__;
+        await import('/js/app.js?v=58');
+      } catch (err) {
+        console.error('Dreamland module load failed:', err);
+        window.__DL_LAST_ERROR__ = err.message || String(err);
+        window.__DL_bindEmergencyUi && window.__DL_bindEmergencyUi(true);
+      }
+    })();
+  </script>
+</body>
+</html>

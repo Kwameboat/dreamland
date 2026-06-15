@@ -1,0 +1,9 @@
+[
+  { "code": "en-gh", "label": "English (Ghana)" },
+  { "code": "tw", "label": "Twi / Akan" },
+  { "code": "ga", "label": "Ga" },
+  { "code": "ee", "label": "Ewe" },
+  { "code": "ha", "label": "Hausa" },
+  { "code": "dag", "label": "Dagbani" },
+  { "code": "pidgin", "label": "Ghana Pidgin" }
+]

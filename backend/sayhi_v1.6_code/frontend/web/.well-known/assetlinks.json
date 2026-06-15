@@ -1,0 +1,11 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.dreamland.app",
+      "sha256_cert_fingerprints":
+        ["B8:30:8F:4D:D2:33:F6:73:C5:19:52:2E:CF:AC:C2:71:CD:BE:C7:15:CC:59:57:5C:F1:90:78:29:09:87:FA:79"]
+    }
+  }
+]

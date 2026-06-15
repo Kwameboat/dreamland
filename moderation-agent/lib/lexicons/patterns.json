@@ -1,0 +1,10 @@
+[
+  { "pattern": "send\\s+\\d{2,}\\s*(cedis|ghs|momo|money)?\\s*(to|for)\\s*\\d{5,}", "category": "fraud", "severity": 3, "label": "momo payment scam" },
+  { "pattern": "double\\s+your\\s+(money|momo|bitcoin|crypto)", "category": "fraud", "severity": 3, "label": "doubling scam" },
+  { "pattern": "(free|win)\\s+(iphone|airtime|data|money)\\s+(giveaway|promo)", "category": "fraud", "severity": 2, "label": "giveaway scam" },
+  { "pattern": "click\\s+(this|here|link)\\s+to\\s+(claim|win|get)", "category": "fraud", "severity": 2, "label": "phishing hook" },
+  { "pattern": "(kill|murder|shoot)\\s+(you|him|her|them)", "category": "violence", "severity": 3, "label": "violent threat" },
+  { "pattern": "(suicide|kill myself|end my life)", "category": "self_harm", "severity": 3, "label": "self harm" },
+  { "pattern": "(nude|naked|sex)\\s+(video|pics|photos|chat)", "category": "sexual", "severity": 3, "label": "explicit content" },
+  { "pattern": "(hate|kill)\\s+(all\\s+)?(tribe|muslims|christians|ewes|akans|gas)", "category": "hate", "severity": 3, "label": "tribal/religious hate" }
+]

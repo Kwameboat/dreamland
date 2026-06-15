@@ -1,0 +1,52 @@
+# Dependencies
+**/node_modules/
+**/vendor/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+!**/.env.example
+**/params-local.php
+**/main-local.php
+**/frontend/web/uploads/**/*
+!**/frontend/web/uploads/.gitkeep
+**/runtime/**
+**/api/runtime/**
+**/backend/runtime/**
+**/frontend/runtime/**
+**/console/runtime/**
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs & caches
+*.log
+**/.phpunit.result.cache
+**/npm-debug.log*
+
+# Build / generated
+.vercel/
+dist/
+build/
+
+# Mobile / Flutter (separate app — not part of web deploy)
+mobile/
+
+# Large media (keep repo lean)
+*.mp4
+*.webm
+*.mov
+!**/doc/**/*.mp4
+
+# Firebase / certs
+**/serviceAccountKey.json
+**/uploads/cert/
+
+# Supabase local
+.supabase/

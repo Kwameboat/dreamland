@@ -1,0 +1,9 @@
+{
+  "terms": [
+    { "term": "ewei", "category": "profanity", "severity": 2 },
+    { "term": "gbe na wu", "category": "violence", "severity": 3 },
+    { "term": "dzimakpla", "category": "profanity", "severity": 2 },
+    { "term": "amegbeto", "category": "harassment", "severity": 2 },
+    { "term": "nyonyo", "category": "harassment", "severity": 1 }
+  ]
+}

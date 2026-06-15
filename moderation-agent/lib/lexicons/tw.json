@@ -1,0 +1,22 @@
+{
+  "terms": [
+    { "term": "kwasia", "category": "profanity", "severity": 3 },
+    { "term": "kwasea", "category": "profanity", "severity": 3 },
+    { "term": "kwasia man", "category": "profanity", "severity": 3 },
+    { "term": "gyimii", "category": "profanity", "severity": 3 },
+    { "term": "gyimi", "category": "profanity", "severity": 3 },
+    { "term": "gyimii papa", "category": "profanity", "severity": 3 },
+    { "term": "aboa", "category": "profanity", "severity": 3 },
+    { "term": "aboa ba", "category": "profanity", "severity": 3 },
+    { "term": "obolo", "category": "harassment", "severity": 2 },
+    { "term": "kooko", "category": "harassment", "severity": 2 },
+    { "term": "tafratchi", "category": "profanity", "severity": 2 },
+    { "term": "ma wu", "category": "violence", "severity": 3 },
+    { "term": "wu wu", "category": "violence", "severity": 2 },
+    { "term": "kum wo", "category": "violence", "severity": 3 },
+    { "term": "wo hu", "category": "harassment", "severity": 1 },
+    { "term": "chale nonsense", "category": "profanity", "severity": 1 },
+    { "term": "wo y3 fool", "category": "profanity", "severity": 2 },
+    { "term": "y3 fool", "category": "profanity", "severity": 2 }
+  ]
+}

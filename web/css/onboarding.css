@@ -1,0 +1,354 @@
+/* Dreamland onboarding — stable 3-screen carousel */
+
+:root {
+  --ob-black: #000000;
+  --ob-white: #ffffff;
+  --ob-magenta: #ff0055;
+  --ob-slide-h: calc(100dvh - max(48px, env(safe-area-inset-top)) - max(56px, env(safe-area-inset-bottom)));
+}
+
+.ob-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--ob-black);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+}
+
+.ob-screen:not(.hidden) {
+  display: flex;
+}
+
+.ob-screen.fade-out {
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.ob-glide {
+  width: 100%;
+  max-width: 420px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: max(48px, env(safe-area-inset-top)) 0 max(8px, env(safe-area-inset-bottom));
+}
+
+.ob-glide .glide__track,
+.ob-glide .glide__slides {
+  height: var(--ob-slide-h);
+  overflow: hidden;
+}
+
+.ob-glide .glide__slide {
+  height: var(--ob-slide-h);
+  overflow: hidden;
+}
+
+.ob-slide {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-items: center;
+  height: 100%;
+  padding: 0 24px;
+  text-align: center;
+  overflow: hidden;
+}
+
+.ob-head {
+  flex-shrink: 0;
+  padding-top: 4vh;
+  width: 100%;
+  align-self: start;
+}
+
+.ob-head-cta {
+  padding-top: 2vh;
+}
+
+.ob-line {
+  margin: 0;
+  text-transform: uppercase;
+  line-height: 1.15;
+}
+
+.ob-line-light {
+  font-size: clamp(1.2rem, 5vw, 1.5rem);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--ob-white);
+}
+
+.ob-line-bold {
+  font-size: clamp(1.5rem, 6.5vw, 2rem);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--ob-white);
+  margin-top: 0.35rem;
+}
+
+.ob-line-magenta {
+  font-size: clamp(0.85rem, 3.5vw, 1rem);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--ob-magenta);
+}
+
+.ob-head-cta .ob-line-bold {
+  font-size: clamp(1.65rem, 7vw, 2.25rem);
+  margin-top: 0.4rem;
+}
+
+.ob-visual {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 0;
+}
+
+.ob-logo-full {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  transform: scale(2.85);
+  transform-origin: center center;
+  filter: drop-shadow(0 0 40px rgba(255, 0, 85, 0.55));
+}
+
+.ob-slide-brand {
+  grid-template-rows: 1fr auto;
+  gap: 1rem;
+}
+
+.ob-brand-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 0;
+  padding: 0 16px;
+}
+
+.ob-logo-stage {
+  position: relative;
+  width: min(62vw, 260px);
+  height: min(62vw, 260px);
+  margin-bottom: 20px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  border-radius: 0;
+  background: #000;
+}
+
+.ob-logo-stage::before {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  border-radius: 50%;
+  background: radial-gradient(circle at center, rgba(255, 0, 85, 0.18) 0%, transparent 68%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.ob-app-name {
+  margin: 0;
+  font-size: clamp(1.75rem, 8vw, 2.25rem);
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ob-white);
+}
+
+.ob-app-tagline {
+  margin: 10px 0 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ob-magenta);
+}
+
+.ob-community {
+  width: min(82vw, 280px);
+  height: auto;
+  display: block;
+}
+
+/* ── Screen 3: fixed layout (no height jump) ── */
+.ob-slide-install {
+  gap: 0.35rem;
+  padding-bottom: 0.25rem;
+}
+
+.ob-slide-install .ob-head-cta {
+  padding-top: 1.5vh;
+}
+
+.ob-visual-install {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  gap: 0.65rem;
+}
+
+.ob-pwa-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem;
+  width: 180px;
+  min-height: 180px;
+  flex-shrink: 0;
+  padding: 1rem;
+  border: 0;
+  border-radius: 2rem;
+  background: var(--ob-magenta);
+  cursor: pointer;
+  box-shadow: 0 12px 40px rgba(255, 0, 85, 0.35);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.ob-pwa-btn:active {
+  transform: scale(0.97);
+}
+
+.ob-pwa-btn-icon-wrap {
+  width: 104px;
+  height: 104px;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #000;
+  display: grid;
+  place-items: center;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.ob-pwa-btn-logo {
+  width: 104px;
+  height: 104px;
+  object-fit: contain;
+  display: block;
+  transform: scale(2.65);
+  transform-origin: center center;
+  filter: drop-shadow(0 0 24px rgba(255, 0, 85, 0.45));
+}
+
+.ob-pwa-btn-text {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--ob-white);
+  text-transform: uppercase;
+  line-height: 1.3;
+  max-width: 140px;
+}
+
+.ob-install-guide {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.85rem;
+  padding: 0.75rem 0.9rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.ob-install-os {
+  margin: 0 0 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ob-magenta);
+}
+
+.ob-install-steps {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--ob-white);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.ob-install-steps li {
+  margin-bottom: 0.5rem;
+  padding-left: 0.15rem;
+}
+
+.ob-install-steps li:last-child {
+  margin-bottom: 0;
+}
+
+.ob-install-steps li::marker {
+  color: var(--ob-magenta);
+  font-weight: 700;
+}
+
+.ob-install-note {
+  margin: 0.65rem 0 0;
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.35;
+  letter-spacing: 0.03em;
+}
+
+.ob-caption {
+  flex-shrink: 0;
+  margin: 0;
+  padding-bottom: 0.25rem;
+  align-self: end;
+  font-size: clamp(0.72rem, 2.8vw, 0.82rem);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: var(--ob-white);
+  text-transform: uppercase;
+}
+
+.ob-dots {
+  flex-shrink: 0;
+  display: flex !important;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  padding: 0.75rem 0 0.5rem;
+}
+
+.ob-dots .glide__bullet {
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 50% !important;
+  background: var(--ob-white) !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  opacity: 1 !important;
+}
+
+.ob-dots .glide__bullet--active {
+  background: var(--ob-magenta) !important;
+  transform: scale(1.15);
+}
+
+.glide__arrows {
+  display: none;
+}

@@ -1,0 +1,29 @@
+{
+  "terms": [
+    { "term": "chale fool", "category": "profanity", "severity": 2 },
+    { "term": "you be fool", "category": "profanity", "severity": 2 },
+    { "term": "stupid fool", "category": "profanity", "severity": 2 },
+    { "term": "foolish bar", "category": "profanity", "severity": 2 },
+    { "term": "sakora head", "category": "harassment", "severity": 2 },
+    { "term": "momo thief", "category": "fraud", "severity": 3 },
+    { "term": "nonsense talk", "category": "profanity", "severity": 1 },
+    { "term": "shut up fool", "category": "harassment", "severity": 2 },
+    { "term": "you dey mad", "category": "harassment", "severity": 2 },
+    { "term": "craze person", "category": "harassment", "severity": 2 },
+    { "term": "kill yourself", "category": "self_harm", "severity": 3 },
+    { "term": "go die", "category": "self_harm", "severity": 3 },
+    { "term": "dead body", "category": "violence", "severity": 2 },
+    { "term": "sakawa", "category": "fraud", "severity": 3 },
+    { "term": "sakawa boy", "category": "fraud", "severity": 3 },
+    { "term": "double your money", "category": "fraud", "severity": 3 },
+    { "term": "free iphone giveaway", "category": "fraud", "severity": 2 },
+    { "term": "send momo to claim", "category": "fraud", "severity": 3 },
+    { "term": "bitcoin doubling", "category": "fraud", "severity": 3 },
+    { "term": "format boy", "category": "fraud", "severity": 2 },
+    { "term": "419", "category": "fraud", "severity": 2 },
+    { "term": "prostitute", "category": "sexual", "severity": 2 },
+    { "term": "porn", "category": "sexual", "severity": 3 },
+    { "term": "nude video", "category": "sexual", "severity": 3 },
+    { "term": "sex tape", "category": "sexual", "severity": 3 }
+  ]
+}

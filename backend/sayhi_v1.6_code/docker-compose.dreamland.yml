@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: verysecret
+      MYSQL_DATABASE: yii2advanced
+      MYSQL_USER: yii2advanced
+      MYSQL_PASSWORD: secret
+    ports:
+      - "3306:3306"
+    volumes:
+      - dreamland_mysql:/var/lib/mysql
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    ports:
+      - "8080:80"
+    volumes:
+      - ./:/app
+    depends_on:
+      - mysql
+    environment:
+      PAYSTACK_PUBLIC_KEY: ${PAYSTACK_PUBLIC_KEY:-}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ASSEMBLYAI_API_KEY: ${ASSEMBLYAI_API_KEY:-}
+
+  safety-worker:
+    image: node:20-alpine
+    working_dir: /app
+    command: node workers/safety-worker.js
+    volumes:
+      - ./:/app
+    depends_on:
+      - mysql
+    environment:
+      DB_HOST: mysql
+      DB_USER: yii2advanced
+      DB_PASSWORD: secret
+      DB_NAME: yii2advanced
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ASSEMBLYAI_API_KEY: ${ASSEMBLYAI_API_KEY:-}
+
+  cron-worker:
+    image: node:20-alpine
+    working_dir: /app
+    command: node workers/cron-worker.js
+    volumes:
+      - ./:/app
+    depends_on:
+      - api
+
+  pwa:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+    volumes:
+      - ../../web:/usr/share/nginx/html:ro
+
+volumes:
+  dreamland_mysql:

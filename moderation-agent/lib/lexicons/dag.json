@@ -1,0 +1,7 @@
+{
+  "terms": [
+    { "term": "bunsuru", "category": "profanity", "severity": 2 },
+    { "term": "kpema", "category": "profanity", "severity": 2 },
+    { "term": "zunzoya", "category": "harassment", "severity": 2 }
+  ]
+}

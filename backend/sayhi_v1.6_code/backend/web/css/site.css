@@ -1,0 +1,41 @@
+
+.sold_btn {
+	background:#8a8a8a;
+	color:#fff;
+	transition: all 1s ease;
+	font-size: 13px;
+	padding: 0 11px;
+	line-height: 10px;
+	height: 20px;
+	width: 80px;
+}
+.active_btn {
+	background: #5dd679;
+	color: #fff;
+	transition: all 1s ease;
+	font-size: 13px;
+	padding: 0 11px;
+	line-height: 10px;
+	height: 20px;
+	width: 80px;
+}
+.pending_btn {
+	background: #f28847; 
+	color: #fff;
+	transition: all 1s ease;
+	font-size: 13px;
+	padding: 0 11px;
+	line-height: 10px;
+	height: 20px;
+	width: 80px;
+}
+.expired_btn {
+	background: #ef6f75;
+	color: #fff;
+	transition: all 1s ease;
+	font-size: 13px;
+	padding: 0 11px;
+	line-height: 10px;
+	height: 20px;
+	width: 80px;
+}

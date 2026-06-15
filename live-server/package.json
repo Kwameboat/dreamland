@@ -1,0 +1,20 @@
+{
+  "name": "dreamland-live-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dreamland self-hosted WebRTC live SFU (no Agora)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "mediasoup": "^3.14.16",
+    "socket.io": "^4.8.1"
+  }
+}
