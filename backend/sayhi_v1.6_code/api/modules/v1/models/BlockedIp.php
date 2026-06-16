@@ -44,6 +44,20 @@ class BlockedIp extends \yii\db\ActiveRecord
   
         return $fields;
     }
+
+    public static function isIpBlocked(?string $ip): bool
+    {
+        $ip = trim((string) $ip);
+        if ($ip === '') {
+            return false;
+        }
+        try {
+            return (int) static::find()->where(['ip_address' => $ip])->count() > 0;
+        } catch (\Throwable $e) {
+            Yii::warning($e->getMessage(), __METHOD__);
+            return false;
+        }
+    }
     
 
 }

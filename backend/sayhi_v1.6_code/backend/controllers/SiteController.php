@@ -95,7 +95,7 @@ class SiteController extends Controller
         $modelPayment = new Payment();
         $modelCompetition = new Competition();
         $modelSetting = new Setting();
-        $graphSetting = $modelSetting->getGraphSetting();
+        $graphSetting = $this->safeCall(fn () => $modelSetting->getGraphSetting(), true);
         $modelReels = new Audio();
         $modelClubs = new Club();
         $modelEvents = new Event();
@@ -103,20 +103,20 @@ class SiteController extends Controller
         $modelStory = new Story();
         $modelSupportReq = new SupportRequest();
         $modelUserLiveHistory = new UserLiveHistory();
-        $totalPost = $modelPost->getTotalPostCount();
+        $totalPost = $this->safeCall(fn () => $modelPost->getTotalPostCount());
 
-        $totalComment = $modelPostComment->getTotalCommetCount();
-        $totalAudio = $modelAudio->getTotalAudioCount();
+        $totalComment = $this->safeCall(fn () => $modelPostComment->getTotalCommetCount());
+        $totalAudio = $this->safeCall(fn () => $modelAudio->getTotalAudioCount());
         
         //$pendingJobCount = $modelAd->getPendingJobCount();
-        $totalEarning = $modelPayment->getTotalEarning();
+        $totalEarning = $this->safeCall(fn () => $modelPayment->getTotalEarning());
 
         $totalEarning = isset($totalEarning)?$totalEarning:0;
 
         $totalEarning = round($totalEarning);
 
         
-        $totalEarningLastMonth = $modelPayment->getTotalEarningLastMonth();
+        $totalEarningLastMonth = $this->safeCall(fn () => $modelPayment->getTotalEarningLastMonth());
         $totalEarningLastMonth = isset($totalEarningLastMonth)?$totalEarningLastMonth:0;
 
         $totalEarningLastMonth = round($totalEarningLastMonth);
@@ -130,33 +130,33 @@ class SiteController extends Controller
         
         $earnings=['totalEarning'=>$totalEarning,'totalEarningLastMonth' =>$totalEarningLastMonth,'lastMonthPercentage'=>$lastMonthPercentage];
         
-       $support = $modelSupportReq->getTotalSupportRequest();
-       $liveHistory = $modelUserLiveHistory->getTotalLiveHistory(); 
+       $support = $this->safeCall(fn () => $modelSupportReq->getTotalSupportRequest());
+       $liveHistory = $this->safeCall(fn () => $modelUserLiveHistory->getTotalLiveHistory()); 
 
 
-        $userCount = $modelUser->getUserCount();
-        $latestUsers = $modelUser->getLatestUsers();
-        $competitionCount = $modelCompetition->getCompetitionCount();
+        $userCount = $this->safeCall(fn () => $modelUser->getUserCount());
+        $latestUsers = $this->safeCall(fn () => $modelUser->getLatestUsers(), []);
+        $competitionCount = $this->safeCall(fn () => $modelCompetition->getCompetitionCount());
 
-        $reelCount = $modelPost->getTotalReelsCount();
-        $clubCount = $modelClubs->getTotalClubCount();
-        $eventCount = $modelEvents->getTotalEventCount();
-        $couponCount = $modelCoupons->getTotalCouponCount();
+        $reelCount = $this->safeCall(fn () => $modelPost->getTotalReelsCount());
+        $clubCount = $this->safeCall(fn () => $modelClubs->getTotalClubCount());
+        $eventCount = $this->safeCall(fn () => $modelEvents->getTotalEventCount());
+        $couponCount = $this->safeCall(fn () => $modelCoupons->getTotalCouponCount());
 
        
-        $firstGraph = $modelPost->getLastTweleveMonthPost();
+        $firstGraph = $this->safeCall(fn () => $modelPost->getLastTweleveMonthPost(), []);
 
-        $userGraph = $modelUser->getLastTweleveMonthUser();
+        $userGraph = $this->safeCall(fn () => $modelUser->getLastTweleveMonthUser(), []);
 
-        $paymentGraph = $modelPayment->getLastTweleveMonthPayments();
-        $clubGraph = $modelClubs->getLastTweleveMonthClub();
-        $totalStory = $modelStory->getStoryTotalCount();
-        $reelsGraph = $modelPost->getLastTweleveMonthReels();
-        $storyGraph = $modelStory->getLastTweleveMonthStory();
+        $paymentGraph = $this->safeCall(fn () => $modelPayment->getLastTweleveMonthPayments(), []);
+        $clubGraph = $this->safeCall(fn () => $modelClubs->getLastTweleveMonthClub(), []);
+        $totalStory = $this->safeCall(fn () => $modelStory->getStoryTotalCount());
+        $reelsGraph = $this->safeCall(fn () => $modelPost->getLastTweleveMonthReels(), []);
+        $storyGraph = $this->safeCall(fn () => $modelStory->getLastTweleveMonthStory(), []);
         if(!$graphSetting){
-            return $this->goHome();
+            $graphSetting = true;
         }
-        $postLatest = $modelPost->getLatestPost();
+        $postLatest = $this->safeCall(fn () => $modelPost->getLatestPost(), []);
 
         //print_r($paymentGraph);
 
@@ -560,6 +560,20 @@ class SiteController extends Controller
 
     }
 
-
+    /**
+     * @template T
+     * @param callable(): T $fn
+     * @param T $default
+     * @return T
+     */
+    private function safeCall(callable $fn, $default = 0)
+    {
+        try {
+            return $fn();
+        } catch (\Throwable $e) {
+            Yii::warning($e->getMessage(), __METHOD__);
+            return $default;
+        }
+    }
 
 }

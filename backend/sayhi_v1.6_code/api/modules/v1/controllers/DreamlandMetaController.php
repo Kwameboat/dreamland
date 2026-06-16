@@ -45,9 +45,7 @@ class DreamlandMetaController extends Controller
             'ai_provider' => 'google-gemini',
             'gemini_model' => (string) (Yii::$app->params['dreamlandGeminiModel'] ?? 'gemini-2.0-flash'),
             'gemini_multimodal' => true,
-            'ai_capabilities' => Yii::$app->has('dreamlandAi')
-                ? (Yii::$app->dreamlandAi->getStatus()['capabilities'] ?? [])
-                : [],
+            'ai_capabilities' => $this->aiCapabilities(),
             'dev_mode' => (bool) (Yii::$app->params['dreamlandDevMode'] ?? false),
             'api_base' => rtrim((string) (Yii::$app->params['siteUrl'] ?? 'http://localhost:8080'), '/') . '/v1',
             'uploads_base' => rtrim((string) (Yii::$app->params['siteUrl'] ?? 'http://localhost:8080'), '/') . '/frontend/web/uploads/image',
@@ -162,5 +160,19 @@ class DreamlandMetaController extends Controller
             'message' => 'ok',
             'post' => $provider,
         ];
+    }
+
+    /** @return array<int, string> */
+    private function aiCapabilities(): array
+    {
+        if (!Yii::$app->has('dreamlandAi')) {
+            return [];
+        }
+        try {
+            return Yii::$app->dreamlandAi->getStatus()['capabilities'] ?? [];
+        } catch (\Throwable $e) {
+            Yii::warning($e->getMessage(), __METHOD__);
+            return [];
+        }
     }
 }

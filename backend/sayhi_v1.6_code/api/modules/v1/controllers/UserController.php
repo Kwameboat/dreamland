@@ -82,14 +82,12 @@ class UserController extends ActiveController
     {
 
         $model          = new User();
-        $modelBlockedIp = new BlockedIp();
         $model->scenario = 'login';
         $request = Yii::$app->request;
         $params = $request->bodyParams;
         // check blocked ip        
         $loginIp = @trim($params['login_ip']);
-        $isBlocked = (int)$modelBlockedIp->find()->where(['ip_address'=>$loginIp])->count();
-        if($isBlocked>0){
+        if (BlockedIp::isIpBlocked($loginIp)) {
             $response['statusCode'] = 401;
             $errors['message'][] = Yii::$app->params['apiMessage']['common']['blocked'];
             $response['errors'] = $errors;
@@ -234,15 +232,13 @@ class UserController extends ActiveController
     {
 
         $model = new User();
-        $modelBlockedIp = new BlockedIp();
         $model->scenario = 'loginSocial';
         $request = Yii::$app->request;
         $params = $request->bodyParams;
 
         // check blocked ip        
         $loginIp = @trim($params['login_ip']);
-        $isBlocked = (int)$modelBlockedIp->find()->where(['ip_address'=>$loginIp])->count();
-        if($isBlocked>0){
+        if (BlockedIp::isIpBlocked($loginIp)) {
             $response['statusCode'] = 401;
             $errors['message'][] = Yii::$app->params['apiMessage']['common']['blocked'];
             $response['errors'] = $errors;
@@ -347,8 +343,6 @@ class UserController extends ActiveController
     {
         $model = new User();
         $modelPackage = new Package();
-        $modelBlockedIp = new BlockedIp();
-
         $model->scenario = 'register';
         $request = Yii::$app->request;
         $params = $request->bodyParams;
@@ -358,8 +352,7 @@ class UserController extends ActiveController
 
         // check blocked ip        
         $loginIp = @trim($params['login_ip']);
-        $isBlocked = (int)$modelBlockedIp->find()->where(['ip_address'=>$loginIp])->count();
-        if($isBlocked>0){
+        if (BlockedIp::isIpBlocked($loginIp)) {
             $response['statusCode'] = 401;
             $errors['message'][] = Yii::$app->params['apiMessage']['common']['blocked'];
             $response['errors'] = $errors;
@@ -1945,7 +1938,6 @@ class UserController extends ActiveController
     {
        
         $model = new User();
-        $modelBlockedIp = new BlockedIp();
         $model->scenario = 'loginWithMobile';
         $request = Yii::$app->request;
         $params = $request->bodyParams;
@@ -1953,8 +1945,7 @@ class UserController extends ActiveController
 
          // check blocked ip        
          $loginIp = @trim($params['login_ip']);
-         $isBlocked = (int)$modelBlockedIp->find()->where(['ip_address'=>$loginIp])->count();
-         if($isBlocked>0){
+         if (BlockedIp::isIpBlocked($loginIp)) {
              $response['statusCode'] = 401;
              $errors['message'][] = Yii::$app->params['apiMessage']['common']['blocked'];
              $response['errors'] = $errors;
@@ -2129,7 +2120,6 @@ class UserController extends ActiveController
      {
  
          $model = new User();
-         $modelBlockedIp = new BlockedIp();
          $model->scenario = 'loginWithMobile';
          $request = Yii::$app->request;
          $params = $request->bodyParams;
@@ -2137,8 +2127,7 @@ class UserController extends ActiveController
  
           // check blocked ip        
           $loginIp = @trim($params['login_ip']);
-          $isBlocked = (int)$modelBlockedIp->find()->where(['ip_address'=>$loginIp])->count();
-          if($isBlocked>0){
+          if (BlockedIp::isIpBlocked($loginIp)) {
               $response['statusCode'] = 401;
               $errors['message'][] = Yii::$app->params['apiMessage']['common']['blocked'];
               $response['errors'] = $errors;
@@ -2263,7 +2252,6 @@ class UserController extends ActiveController
     {
         //$id = Yii::$app->user->identity->id;
         $model = new User();
-        $modelBlockedIp = new BlockedIp();
         $model->scenario = 'verifyPhonenuberLogin';
         $request = Yii::$app->request;
         $params = $request->bodyParams;
@@ -2275,8 +2263,7 @@ class UserController extends ActiveController
         }
          // check blocked ip        
          $loginIp = @trim($params['login_ip']);
-         $isBlocked = (int)$modelBlockedIp->find()->where(['ip_address'=>$loginIp])->count();
-         if($isBlocked>0){
+         if (BlockedIp::isIpBlocked($loginIp)) {
              $response['statusCode'] = 401;
              $errors['message'][] = Yii::$app->params['apiMessage']['common']['blocked'];
              $response['errors'] = $errors;

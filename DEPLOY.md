@@ -172,7 +172,7 @@ Root URL `/` returns 404 — that is normal.
 SITE_URL=https://YOUR-ADMIN.onrender.com
 YII_ENV=prod
 YII_DEBUG=0
-COOKIE_VALIDATION_KEY=any-long-random-string-here
+COOKIE_VALIDATION_KEY=<64-char hex from `php -r "echo bin2hex(random_bytes(32));"`>
 ```
 
 **Login:** `https://YOUR-ADMIN.onrender.com/site/login`

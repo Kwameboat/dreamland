@@ -15,11 +15,21 @@ class DreamlandWalletService extends Component
 {
     public function getPaystackKeys()
     {
-        $settings = DreamlandSetting::getSettings();
-        return [
-            'public' => getenv('PAYSTACK_PUBLIC_KEY') ?: $settings->paystack_public_key,
-            'secret' => getenv('PAYSTACK_SECRET_KEY') ?: $settings->paystack_secret_key,
-        ];
+        $public = getenv('PAYSTACK_PUBLIC_KEY') ?: '';
+        $secret = getenv('PAYSTACK_SECRET_KEY') ?: '';
+        if ($public !== '' && $secret !== '') {
+            return ['public' => $public, 'secret' => $secret];
+        }
+
+        try {
+            $settings = DreamlandSetting::getSettings();
+            $public = $public ?: (string) ($settings->getAttribute('paystack_public_key') ?? '');
+            $secret = $secret ?: (string) ($settings->getAttribute('paystack_secret_key') ?? '');
+        } catch (\Throwable $e) {
+            Yii::warning($e->getMessage(), __METHOD__);
+        }
+
+        return ['public' => $public, 'secret' => $secret];
     }
 
     public function initializeCheckout($userId, $packageId, $email)
