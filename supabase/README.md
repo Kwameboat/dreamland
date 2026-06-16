@@ -1,89 +1,124 @@
 # Supabase setup for Dreamland
 
-Dreamland's Yii2 backend currently uses **MySQL** locally. Production targets **Supabase PostgreSQL**.
+Connect Dreamland's Yii2 API to **Supabase PostgreSQL**.
 
-## Architecture
+## Quick start
 
-| Layer | Host | Notes |
-|-------|------|--------|
-| **PWA** | Vercel | Static `web/` — set `DREAMLAND_API_URL` |
-| **API + Admin** | Railway / Render / Fly.io / Docker | PHP 8.2 + Yii2 — **not** Vercel |
-| **Database** | Supabase Postgres | Connection pooler on port **6543** |
-| **Live / Moderation** | Railway or separate Node hosts | Optional for full features |
+### 1. Create Supabase project
 
-## 1. Create Supabase project
+1. [supabase.com/dashboard](https://supabase.com/dashboard) → **New project**
+2. Save your **database password**
+3. Open **Project Settings → Database → Connection string**
+4. Copy the **Transaction pooler** URI (port **6543**) — best for PHP
 
-1. [supabase.com/dashboard](https://supabase.com/dashboard) → New project
-2. Save **Database password** and **Project URL**
-3. Copy keys from **Settings → API** (`anon`, `service_role`)
+### 2. Configure env
 
-## 2. Link CLI (optional)
-
-```bash
-npm i -g supabase
+```powershell
 cd dreamland
-supabase login
-supabase link --project-ref YOUR_PROJECT_REF
+copy .env.supabase.example .env.supabase
+# Edit .env.supabase with your Supabase credentials
 ```
 
-## 3. Apply schema
+Or set in PowerShell before running scripts:
 
-The full SayHi/Yii2 schema lives in MySQL format under:
-
-```
-backend/sayhi_v1.6_code/doc/db/
+```powershell
+$env:DATABASE_URL = "postgresql://postgres.YOUR_REF:YOUR_PASSWORD@aws-0-REGION.pooler.supabase.com:6543/postgres"
 ```
 
-**Recommended path for production:**
+### 3. Build schema (one-time)
 
-1. Spin up local MySQL and apply all Dreamland migration scripts (see `README.md`).
-2. Export structure + seed with your DBA tool, then port to PostgreSQL (types: `TINYINT` → `SMALLINT`, `AUTO_INCREMENT` → `SERIAL`, etc.).
-3. Or use a migration service (e.g. pgloader) from MySQL → Supabase Postgres.
+From the bundled SayHi SQL dump (no Docker required):
 
-Dreamland-specific columns/tables are applied by:
-
-```bash
-cd backend/sayhi_v1.6_code
-php scripts/apply-dreamland-v2-migration.php
-php scripts/apply-dreamland-v3-migration.php
-php scripts/apply-dreamland-moderation-migration.php
-php scripts/apply-dreamland-push-migration.php
-php scripts/apply-dreamland-creator-approval-migration.php
-php scripts/apply-dreamland-rejection-migration.php
-php scripts/seed-demo-data.php
+```powershell
+php scripts/build-core-schema-from-sayhi.php
+php scripts/export-mysql-to-supabase.php   # copies Dreamland v1–v4 migrations
 ```
 
-Port the resulting MySQL schema to Postgres before pointing production at Supabase.
+Or export from local Docker MySQL if you already applied all Dreamland migrations there:
 
-## 4. Configure Yii2 for Supabase Postgres
-
-Copy `backend/sayhi_v1.6_code/common/config/params-supabase.example.php` to `params-local.php` on your API server and set env vars from `env.example`.
-
-DSN example (direct):
-
-```
-pgsql:host=db.YOUR_REF.supabase.co;port=5432;dbname=postgres
+```powershell
+docker start dreamland-mysql
+php scripts/export-mysql-to-supabase.php
 ```
 
-Pooler (recommended for PHP):
+### 4. Apply migrations to Supabase
 
+```powershell
+$env:DATABASE_URL = "postgresql://..."   # from Supabase dashboard
+php scripts/apply-supabase.php
+php scripts/seed-supabase-demo.php
 ```
-pgsql:host=aws-0-REGION.pooler.supabase.com;port=6543;dbname=postgres
+
+### 5. Point Yii2 API at Supabase
+
+On your API server (Railway/local):
+
+```powershell
+copy backend\sayhi_v1.6_code\common\config\params-supabase.example.php backend\sayhi_v1.6_code\common\config\params-local.php
+copy backend\sayhi_v1.6_code\common\config\main-local.example.php backend\sayhi_v1.6_code\common\config\main-local.php
 ```
 
-Enable PHP `pdo_pgsql` on your API host.
+Set env vars from `.env.supabase.example`:
 
-## 5. Supabase features (optional)
+| Variable | Value |
+|----------|--------|
+| `DB_DRIVER` | `pgsql` |
+| `DB_HOST` | pooler host from Supabase |
+| `DB_PORT` | `6543` |
+| `DB_NAME` | `postgres` |
+| `DB_USER` | `postgres.YOUR_PROJECT_REF` |
+| `DB_PASSWORD` | your DB password |
 
-- **Auth**: Can replace custom JWT later; PWA currently uses Yii2 bearer tokens.
-- **Storage**: Move `frontend/web/uploads/` to Supabase Storage buckets for CDN delivery.
-- **Realtime**: Live chat / notifications can use Supabase Realtime alongside the Node live server.
+Enable PHP extension: **pdo_pgsql**
 
-## 6. Verify connection
-
-From API server after deploy:
+### 6. Verify
 
 ```bash
 curl https://your-api.example.com/v1/health
-# checks.database should be true
+# data.checks.database should be true
 ```
+
+---
+
+## Migration files
+
+| File | Contents |
+|------|----------|
+| `000001_core_schema.sql` | Auto-exported from MySQL (user, post, etc.) |
+| `000002_dreamland_v1.sql` | Credits, paywall, safety queue |
+| `000003_dreamland_v2_v4.sql` | Creator, live, engagement, appeals |
+| `000004_dreamland_extensions.sql` | Extra columns |
+| `000005_seed_demo.sql` | Settings rebrand (optional) |
+
+---
+
+## Supabase CLI (optional)
+
+```bash
+npm i -g supabase
+supabase login
+supabase link --project-ref YOUR_PROJECT_REF
+supabase db push
+```
+
+---
+
+## Demo logins (after seed)
+
+| Email | Password |
+|-------|----------|
+| viewer@dreamland.app | demo123 |
+| creator@dreamland.app | demo123 |
+
+---
+
+## Troubleshooting
+
+| Issue | Fix |
+|-------|-----|
+| `connection refused` | Use pooler port 6543, not 5432 direct |
+| `relation "user" does not exist` | Run `apply-supabase.php` first |
+| `duplicate column` | Migration already applied — safe to skip |
+| Yii2 errors on Postgres | Ensure `pdo_pgsql` enabled; check `main-local.example.php` schemaMap |
+
+See also: [DEPLOY.md](../DEPLOY.md)

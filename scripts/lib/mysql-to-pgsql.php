@@ -1,0 +1,188 @@
+<?php
+/**
+ * Convert mysqldump (schema) output to PostgreSQL-compatible SQL.
+ */
+function load_env_file(string $path): void
+{
+    if (!is_file($path)) {
+        return;
+    }
+    foreach (file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        $line = trim($line);
+        if ($line === '' || str_starts_with($line, '#')) {
+            continue;
+        }
+        if (!str_contains($line, '=')) {
+            continue;
+        }
+        [$key, $value] = explode('=', $line, 2);
+        $key = trim($key);
+        $value = trim($value, " \t\"'");
+        if ($key !== '' && getenv($key) === false) {
+            putenv("{$key}={$value}");
+            $_ENV[$key] = $value;
+        }
+    }
+}
+
+function pg_quote_table(string $name): string
+{
+    $reserved = ['user', 'order', 'group', 'limit'];
+    return in_array(strtolower($name), $reserved, true) ? '"' . $name . '"' : $name;
+}
+
+function convert_mysql_schema_to_pgsql(string $mysql): string
+{
+    $mysql = str_replace("\r\n", "\n", $mysql);
+    $mysql = str_replace("\r", "\n", $mysql);
+    $lines = explode("\n", $mysql);
+    $out = ["-- Dreamland core schema (converted from MySQL for Supabase PostgreSQL)\n"];
+    $indexes = [];
+    $inCreate = false;
+    $currentTable = '';
+
+    foreach ($lines as $line) {
+        $trim = trim($line);
+
+        if ($trim === '' || str_starts_with($trim, '--') && !str_contains($trim, 'Table structure')) {
+            if (str_starts_with($trim, '--') && preg_match('/^-- Table structure for table `(\w+)`/', $trim, $m)) {
+                $out[] = "\n-- Table: {$m[1]}";
+            }
+            continue;
+        }
+        if (str_starts_with($trim, '/*') || str_starts_with($trim, '/*!')) {
+            continue;
+        }
+        if (preg_match('/^(SET |LOCK TABLES|UNLOCK TABLES)/', $trim)) {
+            continue;
+        }
+
+        if (preg_match('/^DROP TABLE IF EXISTS `(\w+)`/', $trim, $m)) {
+            $out[] = 'DROP TABLE IF EXISTS ' . pg_quote_table($m[1]) . ' CASCADE;';
+            continue;
+        }
+
+        if (preg_match('/^CREATE TABLE(?: IF NOT EXISTS)? `(\w+)` \(/', $trim, $m)) {
+            $currentTable = $m[1];
+            $inCreate = true;
+            $out[] = 'CREATE TABLE IF NOT EXISTS ' . pg_quote_table($currentTable) . ' (';
+            continue;
+        }
+
+        if ($inCreate && (preg_match('/^\) ENGINE=/', $trim) || $trim === ')')) {
+            $out[] = ');';
+            $inCreate = false;
+            $currentTable = '';
+            continue;
+        }
+
+        if (!$inCreate) {
+            continue;
+        }
+
+        if (preg_match('/^\s+PRIMARY KEY \(`([^`]+)`\)/', $line, $m)) {
+            $out[] = '  PRIMARY KEY (' . $m[1] . '),';
+            continue;
+        }
+
+        if (preg_match('/^\s+UNIQUE KEY `(\w+)` \((.+)\)/', $line, $m)) {
+            $cols = preg_replace('/`([^`]+)`/', '$1', $m[2]);
+            $indexes[] = 'CREATE UNIQUE INDEX IF NOT EXISTS ' . $m[1] . ' ON ' . pg_quote_table($currentTable) . ' (' . $cols . ');';
+            continue;
+        }
+
+        if (preg_match('/^\s+KEY `(\w+)` \((.+)\)/', $line, $m)) {
+            $cols = preg_replace('/`([^`]+)`/', '$1', $m[2]);
+            $indexes[] = 'CREATE INDEX IF NOT EXISTS ' . $m[1] . ' ON ' . pg_quote_table($currentTable) . ' (' . $cols . ');';
+            continue;
+        }
+
+        if (!preg_match('/^\s*`(\w+)`/', $line, $colMatch)) {
+            continue;
+        }
+
+        $col = $colMatch[1];
+        $def = rtrim($line);
+        $def = preg_replace('/^\s+`' . preg_quote($col, '/') . '`/', '  ' . $col, $def);
+        $def = str_replace('`', '', $def);
+        $def = preg_replace('/\s+CHARACTER SET [^ ]+(?: COLLATE [^ ]+)?/i', '', $def);
+        $def = preg_replace('/\btinyint\b/i', 'smallint', $def);
+        $def = preg_replace('/\b(smallint|integer|bigint|int)\(\d+\)/i', '$1', $def);
+        $def = preg_replace('/\s+AUTO_INCREMENT/i', '', $def);
+        $def = preg_replace('/\bblob\b/i', 'bytea', $def);
+        $def = preg_replace('/\bmediumtext\b/i', 'text', $def);
+        $def = preg_replace('/\blongtext\b/i', 'text', $def);
+        $def = preg_replace('/\bint unsigned\b/i', 'integer', $def);
+        $def = preg_replace('/\bbigint unsigned\b/i', 'bigint', $def);
+        $def = preg_replace('/\bdouble\b/i', 'double precision', $def);
+        $def = preg_replace('/\bfloat\b/i', 'real', $def);
+        $def = preg_replace("/enum\\([^)]+\\)/i", 'varchar(32)', $def);
+        $def = preg_replace('/\bdatetime\b/i', 'timestamp', $def);
+        $def = preg_replace('/\s+ON UPDATE CURRENT_TIMESTAMP/i', '', $def);
+        $def = preg_replace("/DEFAULT '0000-00-00 00:00:00'/", 'DEFAULT NULL', $def);
+        $def = preg_replace('/\s+COMMENT\s+\'[^\']*\'/i', '', $def);
+        $def = rtrim($def, ',') . ',';
+
+        if ($col === 'id' && str_contains(strtolower($def), 'not null') && !str_contains(strtolower($def), 'default')) {
+            $def = rtrim($def, ',') . ' GENERATED BY DEFAULT AS IDENTITY,';
+        }
+
+        $out[] = $def;
+    }
+
+    if ($indexes) {
+        $out[] = "\n-- Indexes";
+        foreach ($indexes as $idx) {
+            $out[] = $idx;
+        }
+    }
+
+    $sql = implode("\n", $out);
+    $sql = preg_replace('/,\s*\)/', "\n)", $sql);
+    $sql = preg_replace("/,\n\)/", "\n)", $sql);
+
+    return $sql . "\n";
+}
+
+function parse_database_url(?string $url): ?array
+{
+    if (!$url) {
+        return null;
+    }
+    $parts = parse_url($url);
+    if (!$parts || ($parts['scheme'] ?? '') !== 'postgresql') {
+        return null;
+    }
+    return [
+        'host' => $parts['host'] ?? 'localhost',
+        'port' => $parts['port'] ?? 5432,
+        'dbname' => ltrim($parts['path'] ?? '/postgres', '/'),
+        'user' => urldecode($parts['user'] ?? 'postgres'),
+        'password' => urldecode($parts['password'] ?? ''),
+    ];
+}
+
+function supabase_pdo(): PDO
+{
+    $cfg = parse_database_url(getenv('DATABASE_URL'));
+    if (!$cfg) {
+        $cfg = [
+            'host' => getenv('SUPABASE_DB_HOST') ?: getenv('DB_HOST') ?: '127.0.0.1',
+            'port' => getenv('SUPABASE_DB_PORT') ?: getenv('DB_PORT') ?: '5432',
+            'dbname' => getenv('SUPABASE_DB_NAME') ?: getenv('DB_NAME') ?: 'postgres',
+            'user' => getenv('SUPABASE_DB_USER') ?: getenv('DB_USER') ?: 'postgres',
+            'password' => getenv('SUPABASE_DB_PASSWORD') ?: getenv('DB_PASSWORD') ?: '',
+        ];
+    }
+
+    $dsn = sprintf(
+        'pgsql:host=%s;port=%s;dbname=%s',
+        $cfg['host'],
+        $cfg['port'],
+        $cfg['dbname']
+    );
+
+    return new PDO($dsn, $cfg['user'], $cfg['password'], [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    ]);
+}
