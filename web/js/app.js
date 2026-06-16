@@ -588,7 +588,10 @@ async function pingApi() {
       localStorage.setItem('dreamland_uploads', services.uploads);
     }
   } catch {
-    setApiStatus(false, 'API offline — run .\\start-walkthrough.ps1');
+    setApiStatus(
+      false,
+      DEV_ALLOW_BROWSER ? 'API offline — run .\\start-walkthrough.ps1' : 'API offline — try again in a moment'
+    );
   }
 }
 

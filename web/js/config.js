@@ -5,6 +5,10 @@ const { hostname, port, protocol } = window.location;
 const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
 const isDevServer = isLocalHost || port === '3000';
 
+/** Last-resort production API when env-config.js was built without Vercel env vars. */
+const PRODUCTION_API = 'https://dreamland-t1ck.onrender.com/v1';
+const PRODUCTION_UPLOADS = 'https://dreamland-t1ck.onrender.com/frontend/web/uploads/image';
+
 function resolveApiBase() {
   if (window.__DL_API__) return window.__DL_API__.replace(/\/$/, '');
 
@@ -23,15 +27,20 @@ function resolveApiBase() {
     return `${protocol}//${apiHost}:8080/v1`;
   }
 
+  if (hostname.endsWith('.vercel.app') || hostname === 'dreamland-plum.vercel.app') {
+    console.warn('[Dreamland] Using built-in production API URL.');
+    return PRODUCTION_API;
+  }
+
   console.error('[Dreamland] Missing DREAMLAND_API_URL. Set it in Vercel project settings.');
-  return '';
+  return PRODUCTION_API;
 }
 
 export const API_BASE = resolveApiBase();
 
 export const UPLOADS_BASE = localStorage.getItem('dreamland_uploads')
   || window.__DL_ENV__?.uploads
-  || (API_BASE ? `${API_BASE.replace(/\/v1\/?$/, '')}/frontend/web/uploads/image` : '');
+  || (API_BASE ? `${API_BASE.replace(/\/v1\/?$/, '')}/frontend/web/uploads/image` : PRODUCTION_UPLOADS);
 
 /** Localhost service map for walkthrough */
 export const LOCAL_SERVICES = {

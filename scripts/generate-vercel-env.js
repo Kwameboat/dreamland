@@ -1,14 +1,33 @@
 #!/usr/bin/env node
 /**
  * Writes web/env-config.js from Vercel env vars at build time.
- * Set DREAMLAND_API_URL and optionally DREAMLAND_UPLOADS_URL in Vercel project settings.
+ * Falls back to scripts/production-urls.json when env vars are missing.
  */
 const fs = require('fs');
 const path = require('path');
 
-const apiUrl = (process.env.DREAMLAND_API_URL || process.env.VITE_DREAMLAND_API_URL || '').replace(/\/$/, '');
-const uploadsUrl = (process.env.DREAMLAND_UPLOADS_URL || '').replace(/\/$/, '');
-const pwaUrl = (process.env.DREAMLAND_PWA_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')).replace(/\/$/, '');
+const defaults = JSON.parse(
+  fs.readFileSync(path.join(__dirname, 'production-urls.json'), 'utf8')
+);
+
+function cleanUrl(value) {
+  return String(value || '').replace(/\/$/, '');
+}
+
+const apiUrl = cleanUrl(
+  process.env.DREAMLAND_API_URL
+  || process.env.VITE_DREAMLAND_API_URL
+  || defaults.api
+);
+const uploadsUrl = cleanUrl(process.env.DREAMLAND_UPLOADS_URL || defaults.uploads);
+const pwaUrl = cleanUrl(
+  process.env.DREAMLAND_PWA_URL
+  || (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : '')
+  || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
+  || defaults.pwa
+);
 
 const payload = {
   api: apiUrl || null,
