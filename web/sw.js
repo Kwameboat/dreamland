@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dreamland-v22';
+const CACHE_NAME = 'dreamland-v23';
 
 const CORE_ASSETS = [
   '/',
@@ -15,6 +15,8 @@ const CORE_ASSETS = [
   '/icons/icon-192.png',
   '/icons/icon-512.png',
 ];
+
+const NETWORK_FIRST = ['/env-config.js'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -35,6 +37,13 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
   if (url.pathname.startsWith('/v1') || url.pathname.includes('/api/')) return;
+
+  if (NETWORK_FIRST.some((path) => url.pathname === path || url.pathname.endsWith(path))) {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request))
+    );
+    return;
+  }
 
   event.respondWith(
     (async () => {

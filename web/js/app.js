@@ -257,6 +257,7 @@ const state = {
   feedPage: 1,
   feedHasMore: true,
   feedLoading: false,
+  feedError: '',
   packages: [],
   currentPaywallVideo: null,
   currentPaywallLive: null,
@@ -406,12 +407,31 @@ async function validateSession() {
   }
 }
 
+function apiTimeoutMs() {
+  return DEV_ALLOW_BROWSER ? 12000 : 45000;
+}
+
+async function apiWithRetry(path, options = {}, attempts = DEV_ALLOW_BROWSER ? 1 : 3) {
+  let lastErr;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      return await api(path, { ...options, timeoutMs: options.timeoutMs ?? apiTimeoutMs() });
+    } catch (err) {
+      lastErr = err;
+      if (i < attempts - 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 2500 * (i + 1)));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 async function api(path, options = {}) {
   if (!API_BASE) {
     throw new Error('Dreamland API URL is not configured. Set DREAMLAND_API_URL on Vercel.');
   }
   const opts = { ...(options || {}) };
-  const timeoutMs = opts.timeoutMs ?? 12000;
+  const timeoutMs = opts.timeoutMs ?? apiTimeoutMs();
   delete opts.timeoutMs;
   const method = (opts.method || 'GET').toUpperCase();
   const headers = { ...(opts.headers || {}) };
@@ -429,7 +449,9 @@ async function api(path, options = {}) {
   } catch (err) {
     setApiStatus(false, 'Offline');
     if (err.name === 'AbortError') {
-      throw new Error('Request timed out — is the API running on port 8080?');
+      throw new Error(DEV_ALLOW_BROWSER
+        ? 'Request timed out — is the API running on port 8080?'
+        : 'Request timed out — the API may be waking up. Try again.');
     }
     throw new Error(`Network error: ${err.message}`);
   } finally {
@@ -574,7 +596,7 @@ function renderRejectedReelActions(reel) {
 
 async function pingApi() {
   try {
-    const res = await api(API_ROUTES.health);
+    const res = await apiWithRetry(API_ROUTES.health, {}, 2);
     const services = res.data?.services || {};
     const checks = res.data?.checks || {};
     const parts = ['API connected'];
@@ -590,7 +612,7 @@ async function pingApi() {
   } catch {
     setApiStatus(
       false,
-      DEV_ALLOW_BROWSER ? 'API offline — run .\\start-walkthrough.ps1' : 'API offline — try again in a moment'
+      DEV_ALLOW_BROWSER ? 'API offline — run .\\start-walkthrough.ps1' : 'API waking up — tap Reload feed'
     );
   }
 }
@@ -2833,13 +2855,15 @@ const RAIL_ICONS = {
 
 function renderFeed() {
   if (!state.feed.length) {
+    const hint = state.feedError
+      || (DEV_ALLOW_BROWSER ? 'Make sure the API is running on port 8080.' : 'The API may need a moment to wake up on Render free tier.');
     els.feedList.innerHTML = `
       <div class="empty-feed">
         <div class="empty-feed-logo-wrap dl-logo-stage dl-logo-stage--feed">
           <img src="/assets/logo.png" alt="Dreamland" width="140" height="140" class="empty-feed-logo dreamland-logo-img" />
         </div>
         <p>No reels loaded yet</p>
-        <p class="muted">Make sure the API is running on port 8080.</p>
+        <p class="muted">${escapeHtml(hint)}</p>
         <button type="button" id="feed-retry" class="btn-primary">Reload feed</button>
       </div>`;
     document.getElementById('feed-retry')?.addEventListener('click', () => loadFeed(true));
@@ -3298,6 +3322,7 @@ async function loadFeed(force = false, append = false) {
   if (!state.feedHasMore && append) return;
 
   state.feedLoading = true;
+  state.feedError = '';
   try {
     let path = `${API_ROUTES.feed}&page=${state.feedPage}`;
     if (state.feedSource === 'following') {
@@ -3306,7 +3331,7 @@ async function loadFeed(force = false, append = false) {
       path += '&is_ai_feed=1';
     }
     if (state.feedGenre) path += `&category_id=${encodeURIComponent(state.feedGenre)}`;
-    const res = await api(path);
+    const res = await apiWithRetry(path);
     const items = parseFeedItems(res.data).filter((post) => !dlSocial?.isHiddenCreator?.(post.user?.id));
     if (append) state.feed = [...state.feed, ...items];
     else state.feed = items;
@@ -3323,7 +3348,8 @@ async function loadFeed(force = false, append = false) {
     }
   } catch (err) {
     console.warn('Feed API failed:', err.message, API_BASE);
-    if (!append) state.feed = demoFeed();
+    if (!append) state.feed = [];
+    state.feedError = err.message || 'Could not load feed';
   } finally {
     state.feedLoading = false;
   }

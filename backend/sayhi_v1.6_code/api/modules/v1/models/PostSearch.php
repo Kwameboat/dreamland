@@ -16,10 +16,13 @@ use api\modules\v1\models\PostPromotion;
 
 class PostSearch extends Post
 {
-    private static function randomOrderExpression(): Expression
+    private static function randomOrderExpression()
     {
-        $fn = Yii::$app->db->driverName === 'pgsql' ? 'RANDOM()' : 'rand()';
-        return new Expression($fn);
+        if (Yii::$app->db->driverName === 'pgsql') {
+            // PostgreSQL rejects ORDER BY RANDOM() with SELECT DISTINCT.
+            return ['post.id' => SORT_DESC];
+        }
+        return new Expression('rand()');
     }
 
     public $is_popular_post;
