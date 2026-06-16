@@ -173,6 +173,8 @@ function supabase_pdo(): PDO
             'user' => getenv('SUPABASE_DB_USER') ?: getenv('DB_USER') ?: 'postgres',
             'password' => getenv('SUPABASE_DB_PASSWORD') ?: getenv('DB_PASSWORD') ?: '',
         ];
+    } elseif (($cfg['password'] ?? '') === '') {
+        $cfg['password'] = getenv('SUPABASE_DB_PASSWORD') ?: getenv('DB_PASSWORD') ?: '';
     }
 
     $dsn = sprintf(

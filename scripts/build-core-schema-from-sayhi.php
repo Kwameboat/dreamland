@@ -17,6 +17,7 @@ if (!is_file($sayhiSql)) {
 $coreTables = [
     'user', 'post', 'post_gallary', 'post_like', 'post_comment', 'post_view', 'post_share',
     'notification', 'follower', 'user_live_history', 'setting', 'category', 'package', 'payment',
+    'hash_tag', 'collaborate', 'blocked_user', 'pin', 'user_favorite',
 ];
 
 function extract_mysql_table_ddl(string $content, string $table): ?string

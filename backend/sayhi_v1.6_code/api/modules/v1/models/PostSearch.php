@@ -16,6 +16,11 @@ use api\modules\v1\models\PostPromotion;
 
 class PostSearch extends Post
 {
+    private static function randomOrderExpression(): Expression
+    {
+        $fn = Yii::$app->db->driverName === 'pgsql' ? 'RANDOM()' : 'rand()';
+        return new Expression($fn);
+    }
 
     public $is_popular_post;
     public $is_following_user_post;
@@ -262,7 +267,7 @@ class PostSearch extends Post
                 $query->joinWith('favorite');
                 $query->andWhere(['user_favorite.user_id' => $userId]);
             }else{
-                $query->addOrderBy(new Expression('rand()'));
+                $query->addOrderBy(self::randomOrderExpression());
             }
             
         }
@@ -476,7 +481,7 @@ class PostSearch extends Post
                 $query->joinWith('favorite');
                 $query->andWhere(['user_favorite.user_id' => $userId]);
             }else{
-                $query->orderBy(new Expression('rand()'));
+                $query->orderBy(self::randomOrderExpression());
             }
             
         }
