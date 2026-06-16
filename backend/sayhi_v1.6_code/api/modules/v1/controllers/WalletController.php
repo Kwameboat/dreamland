@@ -7,6 +7,7 @@ use common\models\GroupWatchPot;
 use common\models\PurchasedLive;
 use common\models\PurchasedVideo;
 use api\modules\v1\models\Payment;
+use common\models\CreditPackage;
 use Yii;
 use yii\filters\auth\CompositeAuth;
 use yii\filters\auth\HttpBearerAuth;

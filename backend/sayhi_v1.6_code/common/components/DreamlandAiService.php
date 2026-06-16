@@ -33,7 +33,7 @@ class DreamlandAiService extends Component
         return [
             'enabled' => $healthy,
             'provider' => !empty($gemini['configured']) ? 'google-gemini' : 'dreamland-ghana-ai',
-            'primary_provider' => $agentStatus['primary_provider'] ?? ($gemini['configured'] ? 'google-gemini' : 'dreamland-lexicon'),
+            'primary_provider' => $agentStatus['primary_provider'] ?? (!empty($gemini['configured']) ? 'google-gemini' : 'dreamland-lexicon'),
             'capabilities' => $agentStatus['capabilities'] ?? [
                 'multilingual_moderation',
                 'smart_feed_ranking',
