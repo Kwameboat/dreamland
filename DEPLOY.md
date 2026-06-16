@@ -147,6 +147,8 @@ Deploy **two Web Services** from the same GitHub repo.
 
 ```env
 SITE_URL=https://YOUR-API.onrender.com
+DREAMLAND_PWA_URL=https://YOUR-PWA.vercel.app
+DREAMLAND_ADMIN_URL=https://YOUR-ADMIN.onrender.com
 YII_ENV=prod
 YII_DEBUG=0
 DREAMLAND_DEV_MODE=0

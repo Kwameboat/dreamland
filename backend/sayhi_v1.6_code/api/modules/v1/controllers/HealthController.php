@@ -67,12 +67,14 @@ class HealthController extends Controller
     {
         $params = Yii::$app->params;
         $apiBase = rtrim((string) ($params['siteUrl'] ?? 'http://localhost:8080'), '/');
+        $pwaUrl = rtrim((string) ($params['dreamlandPwaUrl'] ?? 'http://localhost:3000'), '/');
+        $adminUrl = rtrim((string) ($params['dreamlandAdminUrl'] ?? 'http://localhost:8081'), '/');
         $geminiModel = is_array($agentHealth) ? ($agentHealth['gemini']['model'] ?? null) : null;
 
         return [
-            'pwa' => 'http://localhost:3000',
+            'pwa' => $pwaUrl,
             'api' => $apiBase . '/v1',
-            'admin' => 'http://localhost:8081',
+            'admin' => $adminUrl,
             'uploads' => $apiBase . '/frontend/web/uploads/image',
             'live_signaling' => (string) ($params['dreamlandLiveSignalingUrl'] ?? 'http://localhost:4443'),
             'live_ok' => $liveOk,

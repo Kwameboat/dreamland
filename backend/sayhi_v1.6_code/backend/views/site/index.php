@@ -1,6 +1,9 @@
 <?php
 use yii\helpers\Url;
 use yii\helpers\Html;
+use backend\assets\ChartJsAsset;
+
+ChartJsAsset::register($this);
 
 /* @var $this yii\web\View */
 

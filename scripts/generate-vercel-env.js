@@ -8,10 +8,12 @@ const path = require('path');
 
 const apiUrl = (process.env.DREAMLAND_API_URL || process.env.VITE_DREAMLAND_API_URL || '').replace(/\/$/, '');
 const uploadsUrl = (process.env.DREAMLAND_UPLOADS_URL || '').replace(/\/$/, '');
+const pwaUrl = (process.env.DREAMLAND_PWA_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')).replace(/\/$/, '');
 
 const payload = {
   api: apiUrl || null,
   uploads: uploadsUrl || null,
+  pwa: pwaUrl || null,
 };
 
 const outPath = path.join(__dirname, '..', 'web', 'env-config.js');

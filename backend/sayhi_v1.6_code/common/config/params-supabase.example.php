@@ -8,7 +8,9 @@ return array_merge(
     require __DIR__ . '/params-local.messages.php',
     [
         'siteUrl' => getenv('SITE_URL') ?: 'https://your-api.example.com',
-        'dreamlandPaystackCallbackUrl' => getenv('DREAMLAND_PAYSTACK_CALLBACK') ?: 'https://your-pwa.vercel.app/wallet/callback',
+        'dreamlandPwaUrl' => getenv('DREAMLAND_PWA_URL') ?: getenv('PWA_URL') ?: 'https://your-pwa.vercel.app',
+        'dreamlandAdminUrl' => getenv('DREAMLAND_ADMIN_URL') ?: getenv('ADMIN_URL') ?: 'https://your-admin.onrender.com',
+        'dreamlandPaystackCallbackUrl' => getenv('DREAMLAND_PAYSTACK_CALLBACK') ?: (getenv('DREAMLAND_PWA_URL') ?: 'https://your-pwa.vercel.app') . '/wallet/callback',
         'dreamlandDevMode' => filter_var(getenv('DREAMLAND_DEV_MODE') ?: '0', FILTER_VALIDATE_BOOLEAN),
         'db' => [
             'driver' => getenv('DB_DRIVER') ?: 'pgsql',

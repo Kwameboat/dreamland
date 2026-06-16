@@ -10,6 +10,8 @@ return [
         'assetManager' => [
             'basePath' => dirname(__DIR__) . '/web/assets',
             'baseUrl' => 'assets',
+            'linkAssets' => false,
+            'appendTimestamp' => true,
         ],
     ],
 ];

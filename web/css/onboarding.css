@@ -256,6 +256,23 @@
   max-width: 140px;
 }
 
+.ob-pwa-btn--ready {
+  animation: ob-pwa-pulse 1.6s ease-in-out infinite;
+}
+
+.ob-pwa-btn--ios {
+  background: linear-gradient(135deg, #ff0055 0%, #7c3aed 100%);
+}
+
+.ob-install-guide--pulse {
+  box-shadow: 0 0 0 2px rgba(255, 0, 85, 0.45);
+}
+
+@keyframes ob-pwa-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+
 .ob-install-guide {
   flex: 1;
   width: 100%;

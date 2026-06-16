@@ -6,14 +6,14 @@ const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
 const isDevServer = isLocalHost || port === '3000';
 
 function resolveApiBase() {
-  if (window.__DL_API__) return window.__DL_API__;
+  if (window.__DL_API__) return window.__DL_API__.replace(/\/$/, '');
 
-  if (window.__DL_ENV__?.api) {
-    return String(window.__DL_ENV__.api).replace(/\/$/, '');
+  const envApi = window.__DL_ENV__?.api;
+  if (envApi) {
+    return String(envApi).replace(/\/$/, '');
   }
 
   const stored = localStorage.getItem('dreamland_api');
-  // Ignore stale values that point at the PWA port instead of the API.
   if (stored && !stored.includes(':3000/v1') && !stored.endsWith(':3000')) {
     return stored.replace(/\/$/, '');
   }
@@ -23,14 +23,15 @@ function resolveApiBase() {
     return `${protocol}//${apiHost}:8080/v1`;
   }
 
-  return `${window.location.origin}/v1`.replace(/\/$/, '');
+  console.error('[Dreamland] Missing DREAMLAND_API_URL. Set it in Vercel project settings.');
+  return '';
 }
 
 export const API_BASE = resolveApiBase();
 
 export const UPLOADS_BASE = localStorage.getItem('dreamland_uploads')
   || window.__DL_ENV__?.uploads
-  || `${API_BASE.replace(/\/v1\/?$/, '')}/frontend/web/uploads/image`;
+  || (API_BASE ? `${API_BASE.replace(/\/v1\/?$/, '')}/frontend/web/uploads/image` : '');
 
 /** Localhost service map for walkthrough */
 export const LOCAL_SERVICES = {

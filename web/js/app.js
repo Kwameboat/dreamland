@@ -120,6 +120,71 @@ function renderInstallGuide() {
   if (!osLabel || !stepsList) return;
   osLabel.textContent = `Detected: ${guide.label}`;
   stepsList.innerHTML = guide.steps.map((step) => `<li>${step}</li>`).join('');
+  updateInstallButtonForPlatform(platform);
+}
+
+function updateInstallButtonForPlatform(platform = detectInstallPlatform()) {
+  const btn = document.getElementById('pwaInstallBtn');
+  const label = document.getElementById('pwaInstallBtnLabel');
+  if (!btn || !label) return;
+
+  btn.classList.remove('ob-pwa-btn--ready', 'ob-pwa-btn--ios');
+
+  if (isStandalone()) {
+    label.textContent = 'OPENING APP…';
+    return;
+  }
+
+  if (deferredPwaPrompt) {
+    label.textContent = platform === 'ios' ? 'ADD TO HOME SCREEN' : 'INSTALL NOW';
+    btn.classList.add('ob-pwa-btn--ready');
+    return;
+  }
+
+  if (platform === 'ios') {
+    label.textContent = 'SHOW iOS STEPS';
+    btn.classList.add('ob-pwa-btn--ios');
+    return;
+  }
+
+  label.textContent = 'ADD TO HOME SCREEN';
+}
+
+async function attemptPwaInstall() {
+  renderInstallGuide();
+
+  if (isStandalone()) {
+    markPwaInstalled();
+    completeOnboarding();
+    return true;
+  }
+
+  if (deferredPwaPrompt) {
+    try {
+      deferredPwaPrompt.prompt();
+      const { outcome } = await deferredPwaPrompt.userChoice;
+      deferredPwaPrompt = null;
+      updateInstallButtonForPlatform();
+      if (outcome === 'accepted') {
+        markPwaInstalled();
+        completeOnboarding();
+        return true;
+      }
+    } catch (err) {
+      console.warn('[Dreamland] PWA install prompt failed', err);
+    }
+  }
+
+  const platform = detectInstallPlatform();
+  const guide = document.getElementById('installGuide');
+  guide?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  guide?.classList.add('ob-install-guide--pulse');
+  setTimeout(() => guide?.classList.remove('ob-install-guide--pulse'), 1200);
+
+  if (platform === 'ios') {
+    updateInstallButtonForPlatform('ios');
+  }
+  return false;
 }
 
 function markPwaInstalled() {
@@ -342,6 +407,9 @@ async function validateSession() {
 }
 
 async function api(path, options = {}) {
+  if (!API_BASE) {
+    throw new Error('Dreamland API URL is not configured. Set DREAMLAND_API_URL on Vercel.');
+  }
   const opts = { ...(options || {}) };
   const timeoutMs = opts.timeoutMs ?? 12000;
   delete opts.timeoutMs;
@@ -2680,6 +2748,7 @@ function initOnboarding() {
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPwaPrompt = e;
+    updateInstallButtonForPlatform();
   });
 
   window.addEventListener('appinstalled', () => {
@@ -2687,19 +2756,20 @@ function initOnboarding() {
     completeOnboarding();
   });
 
-  document.getElementById('pwaInstallBtn')?.addEventListener('click', async () => {
+  onboardingGlide.on('run.after', () => {
+    if (onboardingGlide.index === 2) {
+      renderInstallGuide();
+      if (deferredPwaPrompt && detectInstallPlatform() !== 'ios') {
+        updateInstallButtonForPlatform();
+      }
+    }
+  });
+
+  document.getElementById('pwaInstallBtn')?.addEventListener('click', () => {
     if (onboardingGlide && onboardingGlide.index !== 2) {
       onboardingGlide.go('=2');
     }
-    if (deferredPwaPrompt) {
-      deferredPwaPrompt.prompt();
-      const { outcome } = await deferredPwaPrompt.userChoice;
-      deferredPwaPrompt = null;
-      if (outcome === 'accepted') {
-        markPwaInstalled();
-        completeOnboarding();
-      }
-    }
+    attemptPwaInstall();
   });
 }
 

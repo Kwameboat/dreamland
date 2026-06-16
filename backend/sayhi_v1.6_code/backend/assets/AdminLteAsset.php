@@ -29,7 +29,6 @@ class AdminLteAsset extends BaseAdminLteAsset
         'yii\web\YiiAsset',
         'yii\bootstrap\BootstrapAsset',
         'yii\bootstrap\BootstrapPluginAsset',
-        'backend\assets\ChartJsAsset',
     ];
 
     

@@ -239,9 +239,12 @@ public function getSettingData()
     $setting = $this->find()->orderBy(['id' => SORT_DESC])->one();
     if (!$setting) {
         $setting = new self();
-        $setting->id = self::SETTING_DB_ID;
         $setting->user_p_id = 'bypassed';
-        $setting->save(false);
+        $setting->ads_auto_approve = 0;
+        $setting->site_name = 'Dreamland';
+        if (!$setting->save(false)) {
+            throw new \RuntimeException('Unable to initialize settings row.');
+        }
     }
     return $setting;
 }

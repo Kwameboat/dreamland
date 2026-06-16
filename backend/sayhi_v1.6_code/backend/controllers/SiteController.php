@@ -1,7 +1,7 @@
 <?php
 namespace backend\controllers;
 
-use app\models\User;
+use common\models\User;
 use backend\models\Ad;
 use common\models\LoginForm;
 use common\models\VerifyOtpForm;
@@ -211,6 +211,7 @@ class SiteController extends Controller
      */
     public function actionLogin()
     {
+        $this->layout = 'main-login';
 
         if (!Yii::$app->user->isGuest) {
             return $this->goHome();

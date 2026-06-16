@@ -37,5 +37,19 @@ return [
                 ],
             ] : [],
         ],
+        'mailer' => [
+            'class' => \yii\symfonymailer\Mailer::class,
+            'useFileTransport' => !(getenv('SMTP_HOST') ?: ''),
+            'transport' => [
+                'dsn' => sprintf(
+                    'smtp://%s:%s@%s:%s',
+                    urlencode($params['smtp']['username'] ?? ''),
+                    urlencode($params['smtp']['password'] ?? ''),
+                    $params['smtp']['host'] ?? 'localhost',
+                    $params['smtp']['port'] ?? '587'
+                ),
+            ],
+            'viewPath' => '@common/mail',
+        ],
     ],
 ];
