@@ -7,5 +7,9 @@ return [
         'request' => [
             'cookieValidationKey' => getenv('COOKIE_VALIDATION_KEY') ?: 'dreamland-admin-set-cookie-key-in-render',
         ],
+        'assetManager' => [
+            'basePath' => dirname(__DIR__) . '/web/assets',
+            'baseUrl' => 'assets',
+        ],
     ],
 ];

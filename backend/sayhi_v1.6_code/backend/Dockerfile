@@ -27,8 +27,8 @@ RUN cp common/config/main-local.example.php common/config/main-local.php \
     && cp backend/config/main-local.example.php backend/config/main-local.php \
     && cp backend/config/params-local.example.php backend/config/params-local.php
 
-RUN mkdir -p frontend/web/uploads api/runtime backend/runtime common/runtime \
-    && chown -R www-data:www-data frontend/web/uploads api/runtime backend/runtime common/runtime
+RUN mkdir -p frontend/web/uploads api/runtime backend/runtime common/runtime backend/web/assets \
+    && chown -R www-data:www-data frontend/web/uploads api/runtime backend/runtime common/runtime backend/web/assets
 
 COPY backend/docker/000-default.conf /etc/apache2/sites-available/000-default.conf
 COPY backend/docker/entrypoint.sh /entrypoint.sh
