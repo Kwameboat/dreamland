@@ -6,7 +6,7 @@ use dmstr\widgets\Alert;
 /* @var $this \yii\web\View */
 /* @var $content string */
 
-dmstr\web\AdminLteAsset::register($this);
+backend\assets\AdminLteAsset::register($this);
 ?>
 <?php $this->beginPage() ?>
 <!DOCTYPE html>
@@ -16,7 +16,7 @@ dmstr\web\AdminLteAsset::register($this);
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <?= Html::csrfMetaTags() ?>
     <title><?= Html::encode($this->title) ?></title>
-    <?php $this->registerCssFile('@web/css/dreamland-admin.css', ['depends' => [\dmstr\web\AdminLteAsset::class]]); ?>
+    <?php $this->registerCssFile('@web/css/dreamland-admin.css', ['depends' => [\backend\assets\AdminLteAsset::class]]); ?>
     <?php $this->head() ?>
 </head>
 <body class="login-page dreamland-login">

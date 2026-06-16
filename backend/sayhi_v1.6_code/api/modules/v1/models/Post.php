@@ -156,49 +156,68 @@ class Post extends \yii\db\ActiveRecord
     public function fields()
     {
         $fields = parent::fields();
-      //  $fields[] = "imageUrl"; // now postGallary table used
-        $fields['share_link'] = (function($model){
-        
-            return Yii::$app->params['siteUrl'] . Yii::$app->urlManagerFrontend->baseUrl.'/post/share/?pid='.$model->unique_id;
+        $fields['share_link'] = (function ($model) {
+            return Yii::$app->params['siteUrl'] . Yii::$app->urlManagerFrontend->baseUrl . '/post/share/?pid=' . $model->unique_id;
         });
-        $fields[] = "postGallary";
-      //  $fields[] = "videoUrl";
-        $fields['is_like'] = (function($model){
-            return (@$model->isLike) ? 1: 0;
+        $fields[] = 'postGallary';
+        $fields['is_like'] = (function ($model) {
+            return self::safeFlagRelation($model, 'isLike');
         });
-        $fields['is_reported'] = (function($model){
-            
-            return (@$model->isReported) ? 1: 0;
-        });
-       
-        $fields['hashtags'] = (function($model){
-            $resultArr=[];
-            foreach($model->hashtags as $tag){
-                $resultArr[]=  $tag->hashtag;
+        $fields['is_reported'] = (function ($model) {
+            if (Yii::$app->user->isGuest) {
+                return 0;
             }
-            return $resultArr; 
+            return self::safeFlagRelation($model, 'isReported');
         });
-        $fields['mentionUsers'] = (function($model){
-            $resultArr=[];
-            foreach($model->mentionUsers as $user){
-                $resultArr[]=  ['user_id'=>$user->user_id,'username'=>$user->username];
+        $fields['hashtags'] = (function ($model) {
+            return self::safeMapRelation($model, 'hashtags', static function ($tag) {
+                return $tag->hashtag;
+            });
+        });
+        $fields['mentionUsers'] = (function ($model) {
+            return self::safeMapRelation($model, 'mentionUsers', static function ($user) {
+                return ['user_id' => $user->user_id, 'username' => $user->username];
+            });
+        });
+        $fields['is_promotion'] = (function ($model) {
+            return self::safeFlagRelation($model, 'promotionPost');
+        });
+        $fields['dreamland'] = (function ($model) {
+            try {
+                $viewerId = Yii::$app->user->isGuest ? null : Yii::$app->user->identity->id;
+                return Yii::$app->dreamlandPaywall->decorateFeedItem($model, $viewerId);
+            } catch (\Throwable $e) {
+                return [
+                    'is_paid' => (bool) ($model->is_paid ?? false),
+                    'is_unlocked' => !(bool) ($model->is_paid ?? false),
+                    'price_credits' => (int) ($model->price_credits ?? 0),
+                ];
             }
-            return $resultArr; 
         });
-        $fields['is_promotion'] = (function($model){
-            return (@$model->promotionPost) ? 1: 0;
-        });
-        $fields['dreamland'] = (function($model){
-            $viewerId = Yii::$app->user->isGuest ? null : Yii::$app->user->identity->id;
-            return Yii::$app->dreamlandPaywall->decorateFeedItem($model, $viewerId);
-        });
-        
-      //  $fields[] = "audioDetail";
-        
 
-        
-       
         return $fields;
+    }
+
+    private static function safeFlagRelation(self $model, string $relation): int
+    {
+        try {
+            return @$model->{$relation} ? 1 : 0;
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
+    private static function safeMapRelation(self $model, string $relation, callable $map): array
+    {
+        try {
+            $result = [];
+            foreach ($model->{$relation} as $item) {
+                $result[] = $map($item);
+            }
+            return $result;
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
     
     public function extraFields()
@@ -370,7 +389,12 @@ class Post extends \yii\db\ActiveRecord
      
     public function getisReported()
     {
-        return $this->hasOne(ReportedPost::className(), ['post_id'=>'id'])->andOnCondition(['reported_post.user_id' => Yii::$app->user->identity->id]);
+        if (Yii::$app->user->isGuest) {
+            return $this->hasOne(ReportedPost::className(), ['post_id' => 'id'])
+                ->andOnCondition('0=1');
+        }
+        return $this->hasOne(ReportedPost::className(), ['post_id' => 'id'])
+            ->andOnCondition(['reported_post.user_id' => Yii::$app->user->identity->id]);
     }
 
     public function getPostGallary(){

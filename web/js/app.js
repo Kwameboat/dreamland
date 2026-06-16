@@ -376,10 +376,36 @@ function apiErrorMessage(payload) {
     });
     if (parts.length) return parts.join(' ');
   }
+  const raw = String(payload?.raw?.message || payload?.message || payload?.data?.message || '');
+  if (/SQLSTATE|Database Exception|relation .* does not exist|yii\\\\db/i.test(raw)) {
+    return DEV_ALLOW_BROWSER
+      ? 'API database error — check Supabase migrations.'
+      : 'Could not load from Dreamland API — tap Reload feed.';
+  }
   if (payload?.message) return payload.message;
   if (payload?.data?.message) return String(payload.data.message);
   if (payload?.raw?.message) return String(payload.raw.message);
   return 'Request failed';
+}
+
+function humanizePostText(value, fallback = '') {
+  if (value == null || value === '') return fallback;
+  if (typeof value === 'object') {
+    if (typeof value.title === 'string') return humanizePostText(value.title, fallback);
+    return fallback;
+  }
+  const text = String(value).trim();
+  if (!text || text === '[object Object]' || /^\\x[0-9a-f]+$/i.test(text)) return fallback;
+  if (text.startsWith('{') && text.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed === 'string') return parsed;
+      if (parsed?.title) return humanizePostText(parsed.title, fallback);
+    } catch {
+      return fallback;
+    }
+  }
+  return text;
 }
 
 function clearSession() {
@@ -2878,8 +2904,8 @@ function renderFeed() {
     const creator = post.user?.username || post.user?.name || 'creator';
     const initial = creator.charAt(0).toUpperCase();
     const price = dream.paywall?.price_credits || post.price_credits || 0;
-    const title = post.title || 'Dreamland Reel';
-    const desc = post.description || '';
+    const title = humanizePostText(post.title, 'Dreamland Reel');
+    const desc = humanizePostText(post.description, '');
     const likes = formatCount(post.total_like);
 
     const previewSec = dlFeatures?.getPreviewSeconds?.() || PREVIEW_SECONDS;
