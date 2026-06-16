@@ -131,6 +131,56 @@ SUPABASE_SERVICE_ROLE_KEY=eyJ...
 
 ---
 
+## 3b. Render (PHP API + admin) — free tier friendly
+
+Deploy **two Web Services** from the same GitHub repo.
+
+### Service 1: API (`dreamland-api`)
+
+| Setting | Value |
+|---------|--------|
+| Root Directory | `backend/sayhi_v1.6_code` |
+| Dockerfile Path | `api/Dockerfile` |
+| Instance | Free |
+
+**Environment variables:** same Supabase block as section 2 (`DB_DRIVER`, `DB_HOST`, `DB_PORT`, …) plus:
+
+```env
+SITE_URL=https://YOUR-API.onrender.com
+YII_ENV=prod
+YII_DEBUG=0
+DREAMLAND_DEV_MODE=0
+```
+
+**Verify:** `https://YOUR-API.onrender.com/v1/health` → `"database": true`
+
+Root URL `/` returns 404 — that is normal.
+
+### Service 2: Admin (`dreamland-admin`)
+
+| Setting | Value |
+|---------|--------|
+| Root Directory | `backend/sayhi_v1.6_code` |
+| Dockerfile Path | `backend/Dockerfile` |
+| Instance | Free |
+
+**Environment variables:** copy the same `DB_*` vars as the API, plus:
+
+```env
+SITE_URL=https://YOUR-ADMIN.onrender.com
+YII_ENV=prod
+YII_DEBUG=0
+COOKIE_VALIDATION_KEY=any-long-random-string-here
+```
+
+**Login:** `https://YOUR-ADMIN.onrender.com/site/login`
+
+| Username | Password |
+|----------|----------|
+| `admin` | `demo123` |
+
+---
+
 ## 3. Railway (PHP API + admin)
 
 Vercel cannot run PHP. Deploy the Yii2 backend on Railway (or Render / Fly.io).
