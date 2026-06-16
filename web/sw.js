@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dreamland-v23';
+const CACHE_NAME = 'dreamland-v24';
 
 const CORE_ASSETS = [
   '/',
@@ -10,10 +10,12 @@ const CORE_ASSETS = [
   '/js/dreamland-features.js',
   '/js/dreamland-live.js',
   '/manifest.json',
+  '/assets/logo.svg',
   '/assets/logo.png',
-  '/assets/community-network.svg',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
+  '/icons/apple-touch-icon.png',
+  '/assets/community-network.svg',
 ];
 
 const NETWORK_FIRST = ['/env-config.js'];
@@ -86,8 +88,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || 'Dreamland', {
       body: data.body || '',
-      icon: '/assets/logo.png',
-      badge: '/assets/logo.png',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
       tag: 'dreamland-push',
       renotify: true,
       data: { url: data.url || '/' },

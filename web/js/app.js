@@ -701,7 +701,7 @@ function updateAuthUi() {
     const creatorMode = isCreator();
     accountDock.dataset.view = creatorMode ? 'creator-view' : 'viewer-view';
     accountDock.setAttribute('aria-label', creatorMode ? 'Studio' : 'Home');
-    const label = accountDock.querySelector('span');
+    const label = accountDock.querySelector('.dock-label');
     if (label) label.textContent = creatorMode ? 'Studio' : 'Home';
   }
 
@@ -2826,6 +2826,7 @@ function updateFeedHeaderUi() {
   els.appShell?.classList.toggle('app-shell--watch', onFeed && isReels);
   els.appShell?.classList.toggle('app-shell--live-mode', onFeed && isLive);
   els.appShell?.classList.toggle('app-shell--feed-nav', onFeed);
+  els.appShell?.classList.toggle('app-shell--page-nav', !onFeed);
 }
 
 function switchView(viewId) {

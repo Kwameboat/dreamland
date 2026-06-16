@@ -11,15 +11,15 @@
   <meta name="format-detection" content="telephone=no" />
   <meta name="description" content="Dreamland — Play, Watch, Earn. Premium short-video ecosystem." />
   <link rel="manifest" href="/manifest.json" />
-  <link rel="icon" type="image/png" href="/assets/logo.png" />
-  <link rel="apple-touch-icon" href="/assets/logo.png" />
+  <link rel="icon" type="image/png" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
   <link rel="preconnect" href="https://dreamland-t1ck.onrender.com" />
   <link rel="dns-prefetch" href="https://dreamland-t1ck.onrender.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Glide.js/3.6.0/css/glide.core.min.css" />
   <link rel="stylesheet" href="/css/onboarding.css" />
-  <link rel="stylesheet" href="/css/app.css?v=58" />
+  <link rel="stylesheet" href="/css/app.css?v=59" />
   <title>Dreamland — Play, Watch, Earn</title>
   <script src="/env-config.js?v=2"></script>
   <script>
@@ -419,24 +419,34 @@
 
     <nav class="dl-dock" aria-label="Main">
       <button type="button" data-view="feed-view" class="dock-item active" aria-label="Watch">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7l-8 4.5-8-4.5Z"/><path d="M20 7.2 12 12 4 7.2 12 2.5 20 7.2Z"/></svg>
-        <span>Watch</span>
+        <span class="dock-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 8.5v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7l-8 4.5-8-4.5Z"/><path d="M20 7.2 12 12 4 7.2 12 2.5 20 7.2Z"/></svg>
+        </span>
+        <span class="dock-label">Watch</span>
       </button>
       <button type="button" data-view="play-view" class="dock-item guest-gate" data-action="play" aria-label="Play">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5v15l11-7.5L6 4.5Z"/></svg>
-        <span>Play</span>
+        <span class="dock-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M6 4.5v15l11-7.5L6 4.5Z"/></svg>
+        </span>
+        <span class="dock-label">Play</span>
       </button>
       <button type="button" id="create-dock-btn" class="dock-item dock-item--create" aria-label="Create">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-        <span>Create</span>
+        <span class="dock-icon dock-icon--create" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        </span>
+        <span class="dock-label">Create</span>
       </button>
       <button type="button" data-view="wallet-view" class="dock-item guest-gate" data-action="wallet" aria-label="Wallet">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7a2 2 0 0 1 2-2h12v14H6a2 2 0 0 1-2-2V7Z"/><path d="M18 5h2a2 2 0 0 1 2 2v2h-4V5Z"/></svg>
-        <span>Wallet</span>
+        <span class="dock-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h12v14H6a2 2 0 0 1-2-2V7Z"/><path d="M18 5h2a2 2 0 0 1 2 2v2h-4V5Z"/></svg>
+        </span>
+        <span class="dock-label">Wallet</span>
       </button>
-      <button type="button" data-view="viewer-view" data-role="account" class="dock-item" aria-label="Home">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 19.5c0-3.5 3.1-6 7-6s7 2.5 7 6"/></svg>
-        <span>Home</span>
+      <button type="button" data-view="viewer-view" data-role="account" class="dock-item dock-item--home" aria-label="Home">
+        <span class="dock-icon dock-icon--logo" aria-hidden="true">
+          <img src="/assets/logo.svg" alt="" width="22" height="22" />
+        </span>
+        <span class="dock-label">Home</span>
       </button>
     </nav>
   </div>
@@ -809,7 +819,7 @@
     (async function () {
       try {
         if (window.__DL_BOOT_PROMISE__) await window.__DL_BOOT_PROMISE__;
-        await import('/js/app.js?v=60');
+        await import('/js/app.js?v=61');
       } catch (err) {
         console.error('Dreamland module load failed:', err);
         window.__DL_LAST_ERROR__ = err.message || String(err);

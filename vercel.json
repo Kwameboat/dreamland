@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "name": "dreamland-pwa",
-  "buildCommand": "node scripts/generate-vercel-env.js",
+  "buildCommand": "npm install --no-fund --no-audit && npm run build:web",
   "outputDirectory": "web",
   "framework": null,
   "rewrites": [
