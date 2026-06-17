@@ -21,10 +21,10 @@
   --header-h: calc(72px + env(safe-area-inset-top, 0px));
   --reel-h: 100%;
   --font: "Outfit", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --logo-scale-header: 2.65;
-  --logo-scale-hero: 2.75;
-  --logo-scale-modal: 2.7;
-  --logo-glow: drop-shadow(0 0 32px rgba(255, 0, 85, 0.52));
+  --logo-scale-header: 1;
+  --logo-scale-hero: 1;
+  --logo-scale-modal: 1;
+  --logo-glow: none;
 }
 
 * { box-sizing: border-box; }
@@ -42,25 +42,25 @@
 .dl-logo-stage--header {
   width: 56px;
   height: 56px;
-  border-radius: 16px;
+  border-radius: 12px;
   margin: 0;
 }
 
 .dl-logo-stage--hero {
-  width: min(52vw, 180px);
-  height: min(52vw, 180px);
+  width: min(72vw, 220px);
+  height: min(72vw, 220px);
   margin-bottom: 16px;
 }
 
 .dl-logo-stage--modal {
-  width: min(44vw, 152px);
-  height: min(44vw, 152px);
+  width: min(60vw, 180px);
+  height: min(60vw, 180px);
   margin-bottom: 18px;
 }
 
 .dl-logo-stage--feed {
-  width: min(40vw, 140px);
-  height: min(40vw, 140px);
+  width: min(50vw, 160px);
+  height: min(50vw, 160px);
   margin-bottom: 16px;
 }
 
@@ -83,8 +83,9 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  transform-origin: center center;
-  filter: var(--logo-glow);
+  transform: none;
+  filter: none;
+  image-rendering: auto;
 }
 
 .dl-brand-icon,
@@ -99,7 +100,7 @@
 }
 
 .dl-brand-icon {
-  transform: scale(var(--logo-scale-header));
+  transform: none;
 }
 
 .signup-logo,
@@ -107,12 +108,12 @@
 .paywall-logo,
 .empty-feed-logo,
 .profile-guest-logo {
-  transform: scale(var(--logo-scale-hero));
+  transform: none;
 }
 
 .modal-logo,
 .paywall-logo {
-  transform: scale(var(--logo-scale-modal));
+  transform: none;
 }
 
 html {
@@ -1026,15 +1027,14 @@ body {
 
 .dl-brand-icon-wrap {
   flex-shrink: 0;
-  width: 56px;
-  height: 56px;
-  padding: 0;
-  border-radius: 16px;
+  width: min(34vw, 128px);
+  height: 40px;
+  padding: 2px 6px;
+  border-radius: 10px;
   background: #000;
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow:
     0 6px 20px rgba(0, 0, 0, 0.55),
-    0 0 24px rgba(255, 0, 85, 0.12),
     inset 0 0 0 1px rgba(255, 255, 255, 0.06);
   overflow: hidden;
   display: grid;
@@ -1043,9 +1043,14 @@ body {
 
 .dl-brand-icon {
   display: block;
-  width: 56px;
-  height: 56px;
-  transform: scale(var(--logo-scale-header));
+  width: 100%;
+  height: 100%;
+  transform: none;
+  object-fit: contain;
+}
+
+.app-shell--feed-nav .dl-brand-name {
+  display: none;
 }
 
 .dl-brand-text {

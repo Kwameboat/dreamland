@@ -18,7 +18,7 @@ $this->registerJs('document.body.classList.add("dreamland-dashboard");', \yii\we
 <div class="site-index dreamland-dashboard">
 
   <div class="dl-dashboard-hero">
-    <img src="<?= Url::to('@web/img/logo.svg') ?>" alt="Dreamland" class="dl-dashboard-hero__logo">
+    <img src="<?= Url::to('@web/img/logo.png') ?>" alt="Dreamland" class="dl-dashboard-hero__logo">
     <div>
       <h2 class="dl-dashboard-hero__title">Welcome to <span>Dreamland</span></h2>
       <p class="dl-dashboard-hero__subtitle">Play, Watch, Earn — your command center for creators, viewers, and live content.</p>

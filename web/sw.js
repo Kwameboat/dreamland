@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dreamland-v24';
+const CACHE_NAME = 'dreamland-v25';
 
 const CORE_ASSETS = [
   '/',
@@ -10,11 +10,11 @@ const CORE_ASSETS = [
   '/js/dreamland-features.js',
   '/js/dreamland-live.js',
   '/manifest.json',
-  '/assets/logo.svg',
   '/assets/logo.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/apple-touch-icon.png',
+  '/icons/icon-512-maskable.png',
   '/assets/community-network.svg',
 ];
 

@@ -22,8 +22,8 @@ $fieldOptions2 = [
 <div class="login-box">
     <div class="login-logo">
         <a href="#">
-            <img src="<?= \yii\helpers\Url::to('@web/img/logo.svg') ?>" alt="Dreamland" class="dl-login-logo">
-            <b><?= Html::encode(Yii::$app->name) ?></b>
+            <img src="<?= \yii\helpers\Url::to('@web/img/logo.png') ?>" alt="Dreamland" class="dl-login-logo">
+            <!-- wordmark is in the logo image -->
         </a>
     </div>
     <!-- /.login-logo -->

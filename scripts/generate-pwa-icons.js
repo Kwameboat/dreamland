@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Rasterize web/assets/logo.svg into PNG icons for iOS/Android PWA install.
+ * Build PWA install icons from web/assets/logo.png (official Dreamland logo).
  * Requires: npm install (sharp is a devDependency).
  */
 const fs = require('fs');
@@ -14,9 +14,8 @@ try {
   process.exit(0);
 }
 
-const logoSvg = path.join(__dirname, '..', 'web', 'assets', 'logo.svg');
+const logoPng = path.join(__dirname, '..', 'web', 'assets', 'logo.png');
 const iconsDir = path.join(__dirname, '..', 'web', 'icons');
-const svg = fs.readFileSync(logoSvg);
 
 const sizes = [
   { name: 'icon-192.png', size: 192 },
@@ -25,33 +24,48 @@ const sizes = [
   { name: 'icon-512-maskable.png', size: 512, maskable: true },
 ];
 
+async function renderSquareIcon(input, size, maskable = false) {
+  const inner = maskable ? Math.round(size * 0.82) : size;
+  let pipeline = sharp(input).resize(inner, inner, {
+    fit: 'contain',
+    background: '#000000',
+  });
+  if (maskable) {
+    const pad = Math.round((size - inner) / 2);
+    pipeline = pipeline.extend({
+      top: pad,
+      bottom: size - inner - pad,
+      left: pad,
+      right: size - inner - pad,
+      background: '#000000',
+    });
+  }
+  return pipeline.png({ compressionLevel: 9 });
+}
+
 async function main() {
+  if (!fs.existsSync(logoPng)) {
+    console.error('Missing official logo:', logoPng);
+    process.exit(1);
+  }
+
   if (!fs.existsSync(iconsDir)) fs.mkdirSync(iconsDir, { recursive: true });
+
+  const meta = await sharp(logoPng).metadata();
+  console.log(`Source logo: ${meta.width}x${meta.height}`);
 
   for (const { name, size, maskable } of sizes) {
     const out = path.join(iconsDir, name);
-    let pipeline = sharp(svg).resize(size, size, { fit: 'contain', background: '#000000' });
-    if (maskable) {
-      pipeline = sharp(svg).resize(Math.round(size * 0.8), Math.round(size * 0.8), {
-        fit: 'contain',
-        background: '#000000',
-      }).extend({
-        top: Math.round(size * 0.1),
-        bottom: Math.round(size * 0.1),
-        left: Math.round(size * 0.1),
-        right: Math.round(size * 0.1),
-        background: '#000000',
-      });
-    }
-    await pipeline.png({ compressionLevel: 9 }).toFile(out);
+    const pipeline = await renderSquareIcon(logoPng, size, maskable);
+    await pipeline.toFile(out);
     console.log('Wrote', out);
   }
 
-  const logoPng = path.join(__dirname, '..', 'web', 'assets', 'logo.png');
-  await sharp(svg).resize(512, 512, { fit: 'contain', background: '#000000' })
-    .png({ compressionLevel: 9 })
-    .toFile(logoPng);
-  console.log('Wrote', logoPng);
+  const backendLogo = path.join(__dirname, '..', 'backend', 'sayhi_v1.6_code', 'backend', 'web', 'img', 'logo.png');
+  const backendDir = path.dirname(backendLogo);
+  if (!fs.existsSync(backendDir)) fs.mkdirSync(backendDir, { recursive: true });
+  await fs.promises.copyFile(logoPng, backendLogo);
+  console.log('Wrote', backendLogo);
 }
 
 main().catch((err) => {

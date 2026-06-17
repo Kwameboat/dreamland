@@ -12,7 +12,7 @@ use yii\helpers\Url;
 <header class="main-header">
 
     <?= Html::a(
-        '<img src="' . Url::to('@web/img/logo.svg') . '" alt="Dreamland" class="dl-logo-icon"><span class="logo-lg">' . Html::encode(Yii::$app->name) . '</span>',
+        '<img src="' . Url::to('@web/img/logo.png') . '" alt="Dreamland" class="dl-logo-icon">',
         Yii::$app->homeUrl,
         ['class' => 'logo']
     ) ?>

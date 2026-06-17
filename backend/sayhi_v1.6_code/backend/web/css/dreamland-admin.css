@@ -87,16 +87,16 @@ body.dreamland-admin .main-header .logo:hover {
 }
 
 body.dreamland-admin .dl-logo-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: auto;
+  height: 36px;
+  max-width: 148px;
+  object-fit: contain;
+  display: block;
+  border-radius: 0;
 }
 
 body.dreamland-admin .main-header .logo-lg {
-  font-weight: 700;
-  color: var(--dl-text) !important;
-  -webkit-text-fill-color: var(--dl-text);
-  letter-spacing: 0.04em;
+  display: none;
 }
 
 body.dreamland-admin .main-header .logo-lg::after {
@@ -412,10 +412,13 @@ body.dreamland-admin .box-title {
 }
 
 .dl-dashboard-hero__logo {
-  width: 64px;
+  width: auto;
   height: 64px;
-  border-radius: 14px;
-  border: 1px solid var(--dl-border);
+  max-width: 200px;
+  object-fit: contain;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 .dl-dashboard-hero__title {
@@ -760,10 +763,13 @@ body.dreamland-login .login-logo a {
 }
 
 body.dreamland-login .dl-login-logo {
-  width: 80px;
-  height: 80px;
-  border-radius: 16px;
-  border: 1px solid var(--dl-border);
+  width: min(78vw, 280px);
+  height: auto;
+  max-height: 120px;
+  object-fit: contain;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 body.dreamland-login .login-box-body {
