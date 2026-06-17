@@ -229,9 +229,12 @@ class Setting extends \yii\db\ActiveRecord
    
     public function updateSettingData()
     {
-        $res= $this->find()->orderBy(['id'=>SORT_DESC])->one();
-        $res->site_url = Yii::$app->params['siteUrl'];
-        $res->save(false);
+        $res = $this->getSettingData();
+        $siteUrl = Yii::$app->params['siteUrl'] ?? null;
+        if ($siteUrl) {
+            $res->site_url = $siteUrl;
+            $res->save(false);
+        }
     }
 
 public function getSettingData()

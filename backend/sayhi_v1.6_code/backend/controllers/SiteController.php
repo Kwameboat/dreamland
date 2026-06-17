@@ -234,72 +234,82 @@ class SiteController extends Controller
 
         if ($model->load(Yii::$app->request->post())) {
 
-            $user = User::findByUsername($model->username);
-            
-            $data = Yii::$app->request->post();
-            if ($user) {
-                if ($user->role == User::ROLE_ADMIN || $user->role == User::ROLE_SUBADMIN) {
-                    $resUser = $model->login();
-                    if($resUser){
-                        $rememberMe = $data['LoginForm']['rememberMe'];
+            try {
+                $user = User::findByUsername($model->username);
+                
+                $data = Yii::$app->request->post();
+                if ($user) {
+                    if ($user->role == User::ROLE_ADMIN || $user->role == User::ROLE_SUBADMIN) {
+                        $resUser = $model->login();
+                        if($resUser){
+                            $rememberMe = $data['LoginForm']['rememberMe'] ?? 0;
 
-                        if ($rememberMe == 1) {
-                            $hour = time() + 3600 * 24 * 30;
-                            setcookie('username', $data['LoginForm']['username'], $hour);
-                            setcookie('password', $data['LoginForm']['password'], $hour);
-                        }
-                        
-                        $settingData = $modelSetting->getSettingData();
-                        $isTwoFactorAuth = $settingData->is_two_factor_auth;
-
-                        if($isTwoFactorAuth){
-                            $session = Yii::$app->session;
-                            $session->set('loguser', $resUser);
-                            $session->set('rememberMe', $rememberMe);
-                            $otp = mt_rand(1000, 9999);
-                            $token = md5(time() . rand(10, 100));
-                            $expirytTime = time() + 900;
-                        
-                            $token = $token . '_' . $expirytTime;
-                            $user->password_reset_token = $token;
-                            $user->verification_token = $otp;
-
-                            if ($user->save(false)) {
-                                $fromMail = Yii::$app->params['senderEmail'];
-                                $fromName = Yii::$app->params['senderName'];
-                                $from = array($fromMail => $fromName);
-                                Yii::$app->mailer->compose()
-                                    ->setSubject('Admin Login confirmation')
-                                    ->setFrom($from)
-                                    ->setTo($user->email)
-                                    ->setHtmlBody('Hi ' . $user->username . '<br>Please use following OTP Code confirm your admin login.<br> OTP Code is : ' . $otp)
-                                    ->send();
-                                    
-                                    return $this->redirect(['verify-otp', 'token' => $token]);
-
+                            if ($rememberMe == 1) {
+                                $hour = time() + 3600 * 24 * 30;
+                                setcookie('username', $data['LoginForm']['username'], $hour);
+                                setcookie('password', $data['LoginForm']['password'], $hour);
                             }
+                            
+                            $settingData = $modelSetting->getSettingData();
+                            $isTwoFactorAuth = (int) ($settingData->is_two_factor_auth ?? 0);
 
-                        }else{
-                            Yii::$app->user->login($resUser, $rememberMe ? 3600 * 24 * 30 : 0);
-                            $user->last_active = time();
-                            $user->save(false);
-                            $modelSetting->updateSettingData();
+                            if($isTwoFactorAuth){
+                                $session = Yii::$app->session;
+                                $session->set('loguser', $resUser);
+                                $session->set('rememberMe', $rememberMe);
+                                $otp = mt_rand(1000, 9999);
+                                $token = md5(time() . rand(10, 100));
+                                $expirytTime = time() + 900;
+                            
+                                $token = $token . '_' . $expirytTime;
+                                $user->password_reset_token = $token;
+                                $user->verification_token = $otp;
+
+                                if ($user->save(false)) {
+                                    $fromMail = Yii::$app->params['senderEmail'];
+                                    $fromName = Yii::$app->params['senderName'];
+                                    $from = array($fromMail => $fromName);
+                                    Yii::$app->mailer->compose()
+                                        ->setSubject('Admin Login confirmation')
+                                        ->setFrom($from)
+                                        ->setTo($user->email)
+                                        ->setHtmlBody('Hi ' . $user->username . '<br>Please use following OTP Code confirm your admin login.<br> OTP Code is : ' . $otp)
+                                        ->send();
+                                        
+                                        return $this->redirect(['verify-otp', 'token' => $token]);
+
+                                }
+
+                            }else{
+                                Yii::$app->user->login($resUser, $rememberMe ? 3600 * 24 * 30 : 0);
+                                $user->last_active = time();
+                                $user->save(false);
+                                try {
+                                    $modelSetting->updateSettingData();
+                                } catch (\Throwable $e) {
+                                    Yii::warning($e->getMessage(), __METHOD__);
+                                }
+                                return $this->redirect(['site/index']);
+                            }
+                           
+                        } else {
+
+                            Yii::$app->session->setFlash('warning', "Invalid Data.");
                             return $this->goBack();
                         }
-                       
                     } else {
-
                         Yii::$app->session->setFlash('warning', "Invalid Data.");
                         return $this->goBack();
+
                     }
                 } else {
                     Yii::$app->session->setFlash('warning', "Invalid Data.");
                     return $this->goBack();
-
                 }
-            } else {
-                Yii::$app->session->setFlash('warning', "Invalid Data.");
-                return $this->goBack();
+            } catch (\Throwable $e) {
+                Yii::error($e->getMessage(), __METHOD__);
+                Yii::$app->session->setFlash('error', 'Login failed temporarily. Please try again.');
+                return $this->refresh();
             }
 
         } else {

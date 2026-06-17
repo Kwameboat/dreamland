@@ -177,6 +177,8 @@ COOKIE_VALIDATION_KEY=<64-char hex from `php -r "echo bin2hex(random_bytes(32));
 
 **Login:** `https://YOUR-ADMIN.onrender.com/site/login`
 
+> **Important:** Use the exact hostname Render assigns (e.g. `dreamland-admin-450i.onrender.com` — letter **i**, not `4501`). A typo in `SITE_URL` or `DREAMLAND_ADMIN_URL` causes redirects to a dead host and login failures.
+
 | Username | Password |
 |----------|----------|
 | `admin` | `demo123` |
@@ -352,6 +354,8 @@ Add Railway/Vercel deploy hooks separately when ready.
 | Issue | Fix |
 |-------|-----|
 | PWA shows "API offline" | Check `DREAMLAND_API_URL` on Vercel; redeploy |
+| Admin "internal server error" | Fix `SITE_URL` typo (`450i` not `4501`); set exact `COOKIE_VALIDATION_KEY`; Manual Deploy admin |
+| Chrome "not secure" on admin | Redeploy admin after HTTPS proxy fix; always use `https://` URL |
 | Health `database: false` | Verify Supabase pooler credentials; enable `pdo_pgsql` |
 | Upload fails | PHP `upload_max_filesize` / disk space on API host |
 | CORS errors | Add Vercel domain to API CORS allowed origins |

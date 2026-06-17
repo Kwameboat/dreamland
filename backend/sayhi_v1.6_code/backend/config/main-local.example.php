@@ -29,7 +29,7 @@ return [
         'session' => [
             'cookieParams' => [
                 'httponly' => true,
-                'secure' => true,
+                'secure' => (bool) preg_match('/^https:/i', getenv('SITE_URL') ?: getenv('RENDER_EXTERNAL_URL') ?: ''),
                 'sameSite' => 'Lax',
             ],
         ],
