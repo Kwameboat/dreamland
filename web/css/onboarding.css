@@ -146,16 +146,6 @@
   background: #000;
 }
 
-.ob-logo-stage::before {
-  content: "";
-  position: absolute;
-  inset: -20%;
-  border-radius: 50%;
-  background: radial-gradient(circle at center, rgba(255, 0, 85, 0.18) 0%, transparent 68%);
-  pointer-events: none;
-  z-index: -1;
-}
-
 .ob-app-name {
   margin: 0;
   font-size: clamp(1.75rem, 8vw, 2.25rem);

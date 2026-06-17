@@ -17,7 +17,9 @@ $fieldOptions = [
 
 <div class="login-box">
     <div class="login-logo">
-        <a href="#"><b><?=Yii::$app->name?></b></a>
+        <a href="#">
+            <img src="<?= \yii\helpers\Url::to('@web/img/logo.png') ?>" alt="Dreamland" class="dl-login-logo">
+        </a>
     </div>
     <!-- /.login-logo -->
     <div class="login-box-body">
