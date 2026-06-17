@@ -2768,6 +2768,7 @@ function bootMainApp() {
       openAuthModal,
       userInitials,
       updateAuthUi,
+      creatorApprovalStatus,
     });
     els.appShell?.classList.add('app-shell--feed-nav');
     updateAuthUi();
@@ -2780,7 +2781,14 @@ function bootMainApp() {
     window.__dlScrollToReel = scrollToReel;
     setFeedLoadingMessage();
     pingApi();
-    loadFeed(true);
+    const bootFeed = () => {
+      if (document.getElementById('feed-view')?.classList.contains('active')) loadFeed(true);
+    };
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(bootFeed, { timeout: 1500 });
+    } else {
+      window.setTimeout(bootFeed, 80);
+    }
     Promise.allSettled([
       dlAi.init(),
       dlFeatures.init(),

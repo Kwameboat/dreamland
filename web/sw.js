@@ -28,7 +28,9 @@ const NETWORK_FIRST_PATHS = ['/env-config.js', '/build-version.json', '/sw.js'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.allSettled(CORE_ASSETS.map((asset) => cache.add(asset)))
+    ).then(() => self.skipWaiting())
   );
 });
 
@@ -77,15 +79,22 @@ self.addEventListener('fetch', (event) => {
 
   if (isMutableAsset(url.pathname)) {
     event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          if (response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          }
-          return response;
-        })
-        .catch(() => caches.match(event.request).then((cached) => cached || Promise.reject(new Error('Offline'))))
+      caches.open(CACHE_NAME).then(async (cache) => {
+        const cached = await cache.match(event.request);
+        const networkFetch = fetch(event.request)
+          .then((response) => {
+            if (response.ok) cache.put(event.request, response.clone());
+            return response;
+          })
+          .catch(() => null);
+        if (cached) {
+          networkFetch.catch(() => {});
+          return cached;
+        }
+        const response = await networkFetch;
+        if (response) return response;
+        return new Response('Offline', { status: 503, statusText: 'Offline' });
+      })
     );
     return;
   }

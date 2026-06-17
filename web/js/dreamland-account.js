@@ -18,6 +18,7 @@ export function createDreamlandAccount(ctx) {
     openAuthModal,
     userInitials,
     updateAuthUi,
+    creatorApprovalStatus,
   } = ctx;
 
   let categoriesCache = null;
@@ -187,16 +188,25 @@ export function createDreamlandAccount(ctx) {
     const pic = avatarUrl(user);
     const cover = coverUrl(user);
     const selectedCategory = Number(user.profile_category_type || 0);
+    const approval = creatorApprovalStatus?.(user) || 'none';
+    let roleChipClass = 'account-role-chip';
+    let roleChipText = roleLabel(user);
+    if (isCreator(user) && approval === 'pending') {
+      roleChipClass += ' account-role-chip--pending';
+      roleChipText = 'Creator · Pending approval';
+    } else if (isCreator(user)) {
+      roleChipClass += ' account-role-chip--creator';
+    }
 
     root.innerHTML = `
       <div class="account-page">
         <header class="account-topbar">
-          <button type="button" class="btn-ghost account-back" id="account-back">← Back</button>
+          <button type="button" class="btn-ghost account-back" id="account-back" aria-label="Go back">← Back</button>
           <h1>Account</h1>
           <button type="button" class="btn-ghost account-signout-top" id="account-signout-top">Sign out</button>
         </header>
 
-        <div class="account-hero glass-card">
+        <div class="account-hero">
           <div class="account-cover ${cover ? 'account-cover--has-image' : ''}" id="account-cover-preview" ${cover ? `style="background-image:url('${escapeHtml(cover)}')"` : ''}>
             <label class="account-cover-btn">
               <input type="file" id="account-cover-input" accept="image/*" hidden />
@@ -212,14 +222,14 @@ export function createDreamlandAccount(ctx) {
               <span class="account-avatar-edit">Edit photo</span>
             </label>
             <div class="account-hero-copy">
-              <p class="eyebrow">${escapeHtml(roleLabel(user))}</p>
+              <span class="${roleChipClass}">${escapeHtml(roleChipText)}</span>
               <h2>${escapeHtml(user.name || user.username || 'Dreamlander')}</h2>
-              <p class="muted">@${escapeHtml(user.username || 'user')} · ${escapeHtml(user.email || '')}</p>
+              <p class="account-hero-meta">@${escapeHtml(user.username || 'user')}<br>${escapeHtml(user.email || '')}</p>
             </div>
           </div>
         </div>
 
-        <form id="account-form" class="account-form glass-card" novalidate>
+        <form id="account-form" class="account-section account-form" novalidate>
           <div id="account-errors" class="auth-errors hidden" role="alert"></div>
           <h3>Profile details</h3>
           <p class="muted account-form-lede">Update how you appear across Dreamland feeds, search, and studio.</p>
@@ -284,10 +294,10 @@ export function createDreamlandAccount(ctx) {
             </select>
           </label>` : ''}
 
-          <button type="submit" class="btn-primary full" id="account-save">Save profile</button>
+          <button type="submit" class="btn-primary full account-save-btn" id="account-save">Save profile</button>
         </form>
 
-        <section class="account-form glass-card">
+        <section class="account-section">
           <h3>Password</h3>
           <p class="muted account-form-lede">Choose a strong password you do not use elsewhere.</p>
           <form id="account-password-form" novalidate>
@@ -304,7 +314,7 @@ export function createDreamlandAccount(ctx) {
           </form>
         </section>
 
-        <div class="account-danger glass-card">
+        <div class="account-danger">
           <h3>Session</h3>
           <p class="muted">Sign out on this device. You can sign back in anytime.</p>
           <button type="button" class="btn-ghost full account-signout-btn" id="account-signout">Sign out</button>
