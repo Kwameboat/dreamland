@@ -3,7 +3,11 @@ use yii\helpers\Url;
 use yii\helpers\Html;
 use backend\assets\ChartJsAsset;
 
-ChartJsAsset::register($this);
+try {
+    ChartJsAsset::register($this);
+} catch (\Throwable $e) {
+    Yii::warning($e->getMessage(), __METHOD__);
+}
 
 /* @var $this yii\web\View */
 
@@ -451,13 +455,13 @@ $this->registerJs('document.body.classList.add("dreamland-dashboard");', \yii\we
 
             <div class="info-box-content">
               <span class="info-box-text">Support Requests</span>
-              <span class="info-box-number"><?=$support['totalSupport']?></span>
+              <span class="info-box-number"><?= (int) ($support['totalSupport'] ?? 0) ?></span>
 
               <div class="progress">
-                <div class="progress-bar" style="width: <?=$support['percentage']?>%"></div>
+                <div class="progress-bar" style="width: <?= (float) ($support['percentage'] ?? 0) ?>%"></div>
               </div>
               <span class="progress-description">
-             <b><?=$support['totalPendingSupport']?></b> Requests is pending for reply
+             <b><?= (int) ($support['totalPendingSupport'] ?? 0) ?></b> Requests is pending for reply
                   </span>
             </div>
             <!-- /.info-box-content -->
@@ -468,13 +472,13 @@ $this->registerJs('document.body.classList.add("dreamland-dashboard");', \yii\we
 
             <div class="info-box-content">
               <span class="info-box-text">Users Live History</span>
-              <span class="info-box-number"><?=$liveHistory['totallive']?></span>
+              <span class="info-box-number"><?= (int) ($liveHistory['totallive'] ?? 0) ?></span>
 
               <div class="progress">
-                <div class="progress-bar" style="width:  <?=$liveHistory['percentage']?>%"></div>
+                <div class="progress-bar" style="width: <?= (float) ($liveHistory['percentage'] ?? 0) ?>%"></div>
               </div>
               <span class="progress-description">
-              <b><?=$liveHistory['totalCurrentLive']?> Users live now</b>
+              <b><?= (int) ($liveHistory['totalCurrentLive'] ?? 0) ?> Users live now</b>
                   </span>
             </div>
             <!-- /.info-box-content -->

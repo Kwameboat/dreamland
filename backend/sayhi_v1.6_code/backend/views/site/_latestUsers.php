@@ -20,7 +20,7 @@ use yii\helpers\Html;
       <?php
 
       // print_r($latestUsers);
-      foreach ($latestUsers as $user) { ?>
+      foreach ((array) $latestUsers as $user) { ?>
         <li>
 
           <?= Html::img($user->imageUrl, ['alt' => $user->username,'style'=>'height:64px']); ?>

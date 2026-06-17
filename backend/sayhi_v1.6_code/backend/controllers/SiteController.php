@@ -131,8 +131,16 @@ class SiteController extends Controller
         
         $earnings=['totalEarning'=>$totalEarning,'totalEarningLastMonth' =>$totalEarningLastMonth,'lastMonthPercentage'=>$lastMonthPercentage];
         
-       $support = $this->safeCall(fn () => $modelSupportReq->getTotalSupportRequest());
-       $liveHistory = $this->safeCall(fn () => $modelUserLiveHistory->getTotalLiveHistory()); 
+       $support = $this->safeCall(fn () => $modelSupportReq->getTotalSupportRequest(), [
+           'totalSupport' => 0,
+           'totalPendingSupport' => 0,
+           'percentage' => 0,
+       ]);
+       $liveHistory = $this->safeCall(fn () => $modelUserLiveHistory->getTotalLiveHistory(), [
+           'totallive' => 0,
+           'totalCurrentLive' => 0,
+           'percentage' => 0,
+       ]);
 
 
         $userCount = $this->safeCall(fn () => $modelUser->getUserCount());
