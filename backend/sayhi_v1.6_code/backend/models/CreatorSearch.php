@@ -33,11 +33,11 @@ class CreatorSearch extends User
             ->select([
                 'user.*',
                 'reel_count' => new Expression(
-                    '(SELECT COUNT(*) FROM post p WHERE p.user_id = user.id AND p.type = :reelType AND p.status <> 0)',
+                    '(SELECT COUNT(*) FROM post p WHERE p.user_id = "user".id AND p.type = :reelType AND p.status <> 0)',
                     [':reelType' => $reelType]
                 ),
                 'live_count' => new Expression(
-                    '(SELECT COUNT(*) FROM user_live_history ulh WHERE ulh.user_id = user.id)'
+                    '(SELECT COUNT(*) FROM user_live_history ulh WHERE ulh.user_id = "user".id)'
                 ),
             ]);
 
