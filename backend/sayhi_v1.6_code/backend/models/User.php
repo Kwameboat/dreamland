@@ -197,36 +197,12 @@ class User extends \yii\db\ActiveRecord
         $monthArr =[];
         $months = $this->getLastTweleveMonth();
 
-        
-        
-        $res= Yii::$app->db->createCommand("SELECT month(from_unixtime(created_at)) as month, count(id) as total_ad FROM user where role=3 and status!=0 and from_unixtime(created_at) >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR) group by month")->queryAll();
+        $res = \common\helpers\MonthlyGraphQuery::query(
+            "SELECT month(from_unixtime(created_at)) as month, count(id) as total_ad FROM user where role=3 and status!=0 and from_unixtime(created_at) >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR) group by month",
+            "SELECT EXTRACT(MONTH FROM to_timestamp(created_at))::int AS month, count(id) AS total_ad FROM \"user\" WHERE role=3 AND status!=0 AND to_timestamp(created_at) >= (CURRENT_DATE - INTERVAL '1 year') GROUP BY month"
+        );
 
-        foreach($months as $key => $month){
-            $found_key = array_search($key, array_column($res, 'month'));  
-            //echo gettype($found_key), "\n";
-            if(is_int($found_key)){
-                $totalAd =  $res[$found_key]['total_ad'];
-            }else{
-                $totalAd = 0;
-            }
-            //echo $totalAds;
-            /*echo '=====================';
-            echo '<br>';
-            echo $key.'#'.$month;
-            echo '<br>';*/
-
-            //print_r($found_key);
-            
-            $totalAds[]=$totalAd;
-           
-            $monthArr[]=$month;
-
-        }
-        $output=[];
-
-        $output['data'] = $totalAds;
-        $output['dataCaption'] = $monthArr;
-        return $output;
+        return \common\helpers\MonthlyGraphQuery::buildSeries($months, $res);
 
         
     }

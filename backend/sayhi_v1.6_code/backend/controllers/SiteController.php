@@ -73,7 +73,7 @@ class SiteController extends Controller
         return [
             'error' => [
                 'class' => 'yii\web\ErrorAction',
-                'layout' => 'main-login',
+                'layout' => 'error-simple',
             ],
         ];
     }
@@ -145,15 +145,15 @@ class SiteController extends Controller
         $couponCount = $this->safeCall(fn () => $modelCoupons->getTotalCouponCount());
 
        
-        $firstGraph = $this->safeCall(fn () => $modelPost->getLastTweleveMonthPost(), []);
+        $firstGraph = $this->normalizeGraph($this->safeCall(fn () => $modelPost->getLastTweleveMonthPost()));
 
-        $userGraph = $this->safeCall(fn () => $modelUser->getLastTweleveMonthUser(), []);
+        $userGraph = $this->normalizeGraph($this->safeCall(fn () => $modelUser->getLastTweleveMonthUser()));
 
-        $paymentGraph = $this->safeCall(fn () => $modelPayment->getLastTweleveMonthPayments(), []);
-        $clubGraph = $this->safeCall(fn () => $modelClubs->getLastTweleveMonthClub(), []);
+        $paymentGraph = $this->normalizeGraph($this->safeCall(fn () => $modelPayment->getLastTweleveMonthPayments()));
+        $clubGraph = $this->normalizeGraph($this->safeCall(fn () => $modelClubs->getLastTweleveMonthClub()));
         $totalStory = $this->safeCall(fn () => $modelStory->getStoryTotalCount());
-        $reelsGraph = $this->safeCall(fn () => $modelPost->getLastTweleveMonthReels(), []);
-        $storyGraph = $this->safeCall(fn () => $modelStory->getLastTweleveMonthStory(), []);
+        $reelsGraph = $this->normalizeGraph($this->safeCall(fn () => $modelPost->getLastTweleveMonthReels()));
+        $storyGraph = $this->normalizeGraph($this->safeCall(fn () => $modelStory->getLastTweleveMonthStory()));
         if(!$graphSetting){
             $graphSetting = true;
         }
@@ -585,6 +585,22 @@ class SiteController extends Controller
             Yii::warning($e->getMessage(), __METHOD__);
             return $default;
         }
+    }
+
+    /**
+     * @param mixed $graph
+     * @return array{data: array, dataCaption: array}
+     */
+    private function normalizeGraph($graph): array
+    {
+        if (!is_array($graph)) {
+            $graph = [];
+        }
+
+        return [
+            'data' => $graph['data'] ?? [],
+            'dataCaption' => $graph['dataCaption'] ?? [],
+        ];
     }
 
 }

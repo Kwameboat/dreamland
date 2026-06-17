@@ -526,8 +526,8 @@ $this->registerJs('document.body.classList.add("dreamland-dashboard");', \yii\we
     var dlChartPoint = '#ff0055';
     var dlChartBar = '#ff0055';
 
-    var dataArrRow = <?php echo json_encode($firstGraph['data']); ?>;
-    var dataLable = <?php echo json_encode($firstGraph['dataCaption']); ?>;
+    var dataArrRow = <?php echo json_encode($firstGraph['data'] ?? []); ?>;
+    var dataLable = <?php echo json_encode($firstGraph['dataCaption'] ?? []); ?>;
     dataAdsArr = [];
     dataArrRow.forEach(function (item) {
       var value = parseInt(item);
@@ -618,8 +618,8 @@ $this->registerJs('document.body.classList.add("dreamland-dashboard");', \yii\we
     //-------------
 
 
-    var dataStoryArrRow =<?php echo json_encode($storyGraph['data']); ?>;
-    var dataStoryLable =<?php echo json_encode($storyGraph['dataCaption']); ?>;
+    var dataStoryArrRow =<?php echo json_encode($storyGraph['data'] ?? []); ?>;
+    var dataStoryLable =<?php echo json_encode($storyGraph['dataCaption'] ?? []); ?>;
     dataStoryArr = [];
     dataStoryArrRow.forEach(function (item) {
       var value = parseInt(item);
@@ -688,8 +688,8 @@ $this->registerJs('document.body.classList.add("dreamland-dashboard");', \yii\we
     //-------------
 
 
-    var dataPaymentArrRow =<?php echo json_encode($paymentGraph['data']); ?>;
-    var dataPaymentLable =<?php echo json_encode($paymentGraph['dataCaption']); ?>;
+    var dataPaymentArrRow =<?php echo json_encode($paymentGraph['data'] ?? []); ?>;
+    var dataPaymentLable =<?php echo json_encode($paymentGraph['dataCaption'] ?? []); ?>;
     dataPaymentArr = [];
     dataPaymentArrRow.forEach(function (item) {
       var value = parseInt(item);
@@ -752,8 +752,8 @@ $this->registerJs('document.body.classList.add("dreamland-dashboard");', \yii\we
     barChart.Bar(barChartData, barChartOptions)
 
     // users data 
-    var dataUserArrRow =<?php echo json_encode($userGraph['data']); ?>;
-    var dataUserLable =<?php echo json_encode($userGraph['dataCaption']); ?>;
+    var dataUserArrRow =<?php echo json_encode($userGraph['data'] ?? []); ?>;
+    var dataUserLable =<?php echo json_encode($userGraph['dataCaption'] ?? []); ?>;
     dataUserArr = [];
     dataUserArrRow.forEach(function (item) {
       var value = parseInt(item);
@@ -817,8 +817,8 @@ $this->registerJs('document.body.classList.add("dreamland-dashboard");', \yii\we
 
     // club data
 
-    var dataClubArrRow =<?php echo json_encode($clubGraph['data']); ?>;
-    var dataLable =<?php echo json_encode($clubGraph['dataCaption']); ?>;
+    var dataClubArrRow =<?php echo json_encode($clubGraph['data'] ?? []); ?>;
+    var dataLable =<?php echo json_encode($clubGraph['dataCaption'] ?? []); ?>;
     dataAdsArr = [];
     dataClubArrRow.forEach(function (item) {
       var value = parseInt(item);
@@ -908,8 +908,8 @@ $this->registerJs('document.body.classList.add("dreamland-dashboard");', \yii\we
      * Reels Data line chart
      */
 
-    var dataReelsArrRow =<?php echo json_encode($reelsGraph['data']); ?>;
-    var dataLable =<?php echo json_encode($reelsGraph['dataCaption']); ?>;
+    var dataReelsArrRow =<?php echo json_encode($reelsGraph['data'] ?? []); ?>;
+    var dataLable =<?php echo json_encode($reelsGraph['dataCaption'] ?? []); ?>;
     dataAdsArr = [];
     dataReelsArrRow.forEach(function (item) {
       var value = parseInt(item);

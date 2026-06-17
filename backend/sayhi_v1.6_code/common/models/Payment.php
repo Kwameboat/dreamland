@@ -145,24 +145,11 @@ class Payment extends \yii\db\ActiveRecord
         $totalAds = [];
         $monthArr =[];
         $months = $this->getLastTweleveMonth();
-        $res= Yii::$app->db->createCommand("SELECT month(from_unixtime(created_at)) as month, sum(amount) as total FROM payment where transaction_type=1 and from_unixtime(created_at) >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR) group by month")->queryAll();
-        foreach($months as $key => $month){
-            $found_key = array_search($key, array_column($res, 'month'));  
-            $totalAd =0;
-            if(is_int($found_key)){
-                if($res[$found_key]['total']){
-                    $totalAd =   round($res[$found_key]['total']);
-                }
-            }
-            $totalAds[]=$totalAd;
-            $monthArr[]=$month;
-
-        }
-        $output=[];
-
-        $output['data'] = $totalAds;
-        $output['dataCaption'] = $monthArr;
-        return $output;
+        $res = \common\helpers\MonthlyGraphQuery::query(
+            "SELECT month(from_unixtime(created_at)) as month, sum(amount) as total FROM payment where transaction_type=1 and from_unixtime(created_at) >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR) group by month",
+            "SELECT EXTRACT(MONTH FROM to_timestamp(created_at))::int AS month, sum(amount) AS total FROM payment WHERE transaction_type=1 AND to_timestamp(created_at) >= (CURRENT_DATE - INTERVAL '1 year') GROUP BY month"
+        );
+        return \common\helpers\MonthlyGraphQuery::buildSeries($months, $res, 'total');
 
         
     }
