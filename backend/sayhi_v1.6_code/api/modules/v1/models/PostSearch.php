@@ -9,6 +9,7 @@ use yii\data\ActiveDataProvider;
 use yii\db\Expression;
 use yii\db\Query;
 use api\modules\v1\models\BlockedUser;
+use common\helpers\SqlDialect;
 use yii\widgets\ListView;
 use api\modules\v1\models\UserInterest;
 use api\modules\v1\models\PostPromotion;
@@ -258,13 +259,9 @@ class PostSearch extends Post
             $query->addOrderBy('id desc');
         } elseif ($this->is_ai_feed) {
             $categoryId = (int) ($this->category_id ?? 0);
-            if (Yii::$app->has('dreamlandAi')) {
-                $query->addOrderBy(new Expression(Yii::$app->dreamlandAi->feedOrderExpression($categoryId)));
-            } else {
-                $query->addOrderBy(new Expression(
-                    '(LOG(1 + post.total_view) * 0.22 + LOG(1 + post.total_like) * 0.48 + GREATEST(0, 1 - (UNIX_TIMESTAMP() - post.created_at) / 604800) * 0.42) DESC'
-                ));
-            }
+            $query->addOrderBy(new Expression(
+                SqlDialect::feedRankingExpression(0.22, 0.48, 0.42, $categoryId > 0 ? $categoryId : null)
+            ));
         } else {
             if ($this->is_favorite) {
                 $query->joinWith('favorite');

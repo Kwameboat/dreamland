@@ -2,6 +2,7 @@
 
 namespace common\components;
 
+use common\helpers\SqlDialect;
 use Yii;
 use yii\base\Component;
 
@@ -106,15 +107,7 @@ class DreamlandAiService extends Component
      */
     public function feedOrderExpression(?int $categoryId = null): string
     {
-        $genreBonus = $categoryId > 0
-            ? ' + IF(post.category_id = ' . (int) $categoryId . ', 0.35, 0)'
-            : '';
-        return '(LOG(1 + post.total_view) * 0.18'
-            . ' + LOG(1 + post.total_like) * 0.52'
-            . ' + LOG(1 + post.total_share) * 0.28'
-            . ' + GREATEST(0, 1 - (UNIX_TIMESTAMP() - post.created_at) / 604800) * 0.45'
-            . $genreBonus
-            . ') DESC';
+        return SqlDialect::feedRankingExpression(0.18, 0.52, 0.45, $categoryId, 0.35, 0.28);
     }
 
     /**
