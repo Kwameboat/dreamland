@@ -119,9 +119,9 @@ class UserController extends ActiveController
                 $authKey = Yii::$app->security->generateRandomString();
                 $user->auth_key = $authKey;
                 $user->last_active = time();
-                $user->device_token = $params['device_token'];
+                $user->device_token = $params['device_token'] ?? '';
                 $user->device_type = $params['device_type'];
-                $user->device_token_voip_ios = $params['device_token_voip_ios'];
+                $user->device_token_voip_ios = $params['device_token_voip_ios'] ?? null;
 
 
                 if ($user->save(false)) {
@@ -295,9 +295,9 @@ class UserController extends ActiveController
             $authKey = Yii::$app->security->generateRandomString();
             $user->auth_key = $authKey;
             $user->last_active = time();
-            $user->device_token = $params['device_token'];
+            $user->device_token = $params['device_token'] ?? '';
             $user->device_type = $params['device_type'];
-            $user->device_token_voip_ios = @$params['device_token_voip_ios'];
+            $user->device_token_voip_ios = $params['device_token_voip_ios'] ?? null;
             $user->is_login_first_time = $loginTime; // if user login more than one time 
 
 

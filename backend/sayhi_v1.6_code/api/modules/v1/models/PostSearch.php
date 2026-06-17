@@ -259,9 +259,14 @@ class PostSearch extends Post
             $query->addOrderBy('id desc');
         } elseif ($this->is_ai_feed) {
             $categoryId = (int) ($this->category_id ?? 0);
-            $query->addOrderBy(new Expression(
-                SqlDialect::feedRankingExpression(0.22, 0.48, 0.42, $categoryId > 0 ? $categoryId : null)
-            ));
+            $rankSql = SqlDialect::feedRankingExpression(0.22, 0.48, 0.42, $categoryId > 0 ? $categoryId : null);
+            if (Yii::$app->db->driverName === 'pgsql') {
+                $rankBody = preg_replace('/\s+DESC$/i', '', $rankSql);
+                $query->addSelect(['feed_rank' => new Expression($rankBody)]);
+                $query->addOrderBy(['feed_rank' => SORT_DESC]);
+            } else {
+                $query->addOrderBy(new Expression($rankSql));
+            }
         } else {
             if ($this->is_favorite) {
                 $query->joinWith('favorite');

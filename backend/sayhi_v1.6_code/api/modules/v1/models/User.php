@@ -186,22 +186,38 @@ class User extends ActiveRecord implements IdentityInterface
         // remove fields that contain sensitive information
         unset($fields['auth_key'], $fields['password_hash'], $fields['password_reset_token']);
         $fields['is_reported'] = (function ($model) {
-            return (@$model->isReported) ? 1 : 0;
+            if (Yii::$app->user->isGuest) {
+                return 0;
+            }
+            return self::safeFlagRelation($model, 'isReported');
         });
         $fields[] = 'picture';
         $fields[] = 'coverImageUrl';
         $fields[] = 'userStory';
 
         $fields['profileCategoryName'] = (function ($model) {
-            return @$model->profileCategoriesName->name;
+            try {
+                return @$model->profileCategoriesName->name;
+            } catch (\Throwable $e) {
+                return null;
+            }
         });
         $fields['is_like'] = (function ($model) {
-            return @$model->userLikeByUser;
+            return self::safeFlagRelation($model, 'userLikeByUser');
         });
         $fields['is_match'] = (function ($model) {
-            return (@$model->datingMatchProfile) ? 1 : 0;
+            return self::safeFlagRelation($model, 'datingMatchProfile');
         });
         return $fields;
+    }
+
+    private static function safeFlagRelation(self $model, string $relation): int
+    {
+        try {
+            return @$model->{$relation} ? 1 : 0;
+        } catch (\Throwable $e) {
+            return 0;
+        }
     }
 
     public function extraFields()
