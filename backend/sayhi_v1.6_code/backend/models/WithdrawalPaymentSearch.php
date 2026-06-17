@@ -38,7 +38,7 @@ class WithdrawalPaymentSearch extends WithdrawalPayment
      */
     public function search($params,$type)
     {
-        $query = WithdrawalPayment::find();
+        $query = WithdrawalPayment::find()->with('user');
        if($type=='completed'){
         $query->where(['status'=>WithdrawalPayment::STATUS_ACCEPTED]);     
        }
