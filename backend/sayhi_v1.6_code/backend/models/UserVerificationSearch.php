@@ -37,7 +37,7 @@ class UserVerificationSearch extends UserVerification
      */
     public function search($params,$type)
     {
-        $query = UserVerification::find();
+        $query = UserVerification::find()->with('user');
        /*if($type=='completed'){
         $query->where(['status'=>UserVerification::STATUS_PENDING]);     
        }*/
