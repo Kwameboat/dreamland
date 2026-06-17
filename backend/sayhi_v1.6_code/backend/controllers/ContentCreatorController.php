@@ -5,6 +5,7 @@ namespace backend\controllers;
 use app\models\User;
 use backend\models\CreatorForm;
 use backend\models\CreatorSearch;
+use common\helpers\DreamlandCreatorApproval;
 use common\models\DreamlandAudience;
 use common\models\Payment;
 use common\models\Post;
@@ -29,6 +30,7 @@ class ContentCreatorController extends Controller
                     'ban' => ['POST'],
                     'unban' => ['POST'],
                     'approve' => ['POST'],
+                    'reject' => ['POST'],
                     'update-status' => ['POST'],
                     'demote' => ['POST'],
                 ],
@@ -191,7 +193,12 @@ class ContentCreatorController extends Controller
 
     public function actionApprove($id)
     {
-        return $this->setCreatorStatus((int) $id, User::STATUS_ACTIVE, 'Creator approved and activated.');
+        return $this->setCreatorApproval((int) $id, true, 'Creator approved — upload, record, and go live are now unlocked in the PWA.');
+    }
+
+    public function actionReject($id)
+    {
+        return $this->setCreatorApproval((int) $id, false, 'Creator application rejected — they can still sign in but cannot publish.');
     }
 
     public function actionUpdateStatus($id)
@@ -211,10 +218,7 @@ class ContentCreatorController extends Controller
         $model = $this->findCreator($id);
         (new User())->checkPageAccess();
 
-        $model->role = User::ROLE_CUSTOMER;
-        if ($model->hasAttribute('dreamland_account_type')) {
-            $model->dreamland_account_type = 'viewer';
-        }
+        DreamlandCreatorApproval::demoteToViewer($model);
         $model->auth_key = null;
         $model->save(false);
 
@@ -242,9 +246,30 @@ class ContentCreatorController extends Controller
         (new User())->checkPageAccess();
 
         $model->status = $status;
+        if ($status === User::STATUS_PENDING && DreamlandCreatorApproval::hasCreatorStatusColumn()) {
+            DreamlandCreatorApproval::markPending($model);
+        }
         if ($status !== User::STATUS_ACTIVE) {
             $model->auth_key = null;
             $model->is_chat_user_online = 0;
+        }
+        $model->save(false);
+
+        Yii::$app->session->setFlash('success', $message);
+        return $this->redirect(['view', 'id' => $id]);
+    }
+
+    protected function setCreatorApproval(int $id, bool $approved, string $message)
+    {
+        $model = $this->findCreator($id);
+        (new User())->checkPageAccess();
+
+        $model->status = User::STATUS_ACTIVE;
+        DreamlandCreatorApproval::applyCreatorIdentity($model);
+        if ($approved) {
+            DreamlandCreatorApproval::approve($model);
+        } else {
+            DreamlandCreatorApproval::reject($model);
         }
         $model->save(false);
 

@@ -33,6 +33,11 @@ const payload = {
   api: apiUrl || null,
   uploads: uploadsUrl || null,
   pwa: pwaUrl || null,
+  buildVersion: (
+    process.env.VERCEL_GIT_COMMIT_SHA
+    || process.env.GITHUB_SHA
+    || `local-${Date.now()}`
+  ).toString().slice(0, 12),
 };
 
 const outPath = path.join(__dirname, '..', 'web', 'env-config.js');

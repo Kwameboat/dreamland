@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dreamland-v25';
+const CACHE_NAME = 'dreamland-build-178171';
 
 const CORE_ASSETS = [
   '/',
@@ -9,6 +9,11 @@ const CORE_ASSETS = [
   '/js/app.js',
   '/js/dreamland-features.js',
   '/js/dreamland-live.js',
+  '/js/dreamland-ai.js',
+  '/js/dreamland-social.js',
+  '/js/dreamland-profile.js',
+  '/js/dreamland-search.js',
+  '/js/dreamland-account.js',
   '/manifest.json',
   '/assets/logo.png',
   '/icons/icon-192.png',
@@ -16,9 +21,10 @@ const CORE_ASSETS = [
   '/icons/apple-touch-icon.png',
   '/icons/icon-512-maskable.png',
   '/assets/community-network.svg',
+  '/build-version.json',
 ];
 
-const NETWORK_FIRST = ['/env-config.js'];
+const NETWORK_FIRST_PATHS = ['/env-config.js', '/build-version.json', '/sw.js'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -34,47 +40,66 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
+function isMutableAsset(pathname) {
+  return pathname === '/'
+    || pathname.endsWith('.html')
+    || pathname.includes('/js/')
+    || pathname.includes('/css/')
+    || NETWORK_FIRST_PATHS.some((p) => pathname === p || pathname.endsWith(p));
+}
+
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
   if (url.pathname.startsWith('/v1') || url.pathname.includes('/api/')) return;
 
-  if (NETWORK_FIRST.some((path) => url.pathname === path || url.pathname.endsWith(path))) {
+  if (NETWORK_FIRST_PATHS.some((path) => url.pathname === path || url.pathname.endsWith(path))) {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match(event.request))
-    );
-    return;
-  }
-
-  event.respondWith(
-    (async () => {
-      const isAsset = /\.(css|js|png|svg|html|json)$/.test(url.pathname) || url.pathname === '/';
-      if (isAsset && (url.pathname.includes('/js/') || url.pathname.includes('/css/'))) {
-        try {
-          const response = await fetch(event.request);
+      fetch(event.request)
+        .then((response) => {
           if (response.ok) {
             const clone = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
           }
           return response;
-        } catch {
-          const cached = await caches.match(event.request);
-          if (cached) return cached;
-          throw new Error('Offline');
-        }
-      }
-      const cached = await caches.match(event.request);
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  if (isMutableAsset(url.pathname)) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request).then((cached) => cached || Promise.reject(new Error('Offline'))))
+    );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(event.request).then((cached) => {
       if (cached) return cached;
       return fetch(event.request).then((response) => {
         if (!response.ok) return response;
         const clone = response.clone();
-        if (isAsset) {
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         return response;
-      }).catch(() => cached);
-    })()
+      });
+    })
   );
 });
 

@@ -4,6 +4,7 @@ namespace backend\models;
 
 use app\models\User;
 use common\models\DreamlandAudience;
+use common\helpers\DreamlandCreatorApproval;
 use yii\base\Model;
 use yii\data\ActiveDataProvider;
 use yii\db\Expression;
@@ -63,12 +64,19 @@ class CreatorSearch extends User
         switch ($this->filter) {
             case 'active':
                 $query->andWhere(['user.status' => User::STATUS_ACTIVE]);
+                if (DreamlandCreatorApproval::hasCreatorStatusColumn()) {
+                    $query->andWhere(['user.dreamland_creator_status' => DreamlandCreatorApproval::STATUS_APPROVED]);
+                }
                 break;
             case 'banned':
                 $query->andWhere(['user.status' => User::STATUS_INACTIVE]);
                 break;
             case 'pending':
-                $query->andWhere(['user.status' => User::STATUS_PENDING]);
+                if (DreamlandCreatorApproval::hasCreatorStatusColumn()) {
+                    $query->andWhere(['user.dreamland_creator_status' => DreamlandCreatorApproval::STATUS_PENDING]);
+                } else {
+                    $query->andWhere(['user.status' => User::STATUS_PENDING]);
+                }
                 break;
         }
 

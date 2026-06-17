@@ -10,6 +10,7 @@ import { createDreamlandAi } from './dreamland-ai.js';
 import { createDreamlandSocial } from './dreamland-social.js';
 import { createDreamlandProfile } from './dreamland-profile.js';
 import { createDreamlandSearch } from './dreamland-search.js';
+import { createDreamlandAccount } from './dreamland-account.js';
 
 const ONBOARDING_KEY = 'has_completed_onboarding';
 const WALKTHROUGH_KEY = 'has_seen_walkthrough';
@@ -320,6 +321,7 @@ let dlAi = null;
 let dlSocial = null;
 let dlProfile = null;
 let dlSearch = null;
+let dlAccount = null;
 let dreamlandLive = null;
 let feedScrollBound = false;
 
@@ -569,6 +571,24 @@ function userInitials(user) {
   return name.trim().charAt(0).toUpperCase();
 }
 
+function userAvatarHtml(user, className = 'dl-avatar-icon') {
+  const pic = dlAccount?.avatarUrl?.(user)
+    || (user?.picture && String(user.picture).startsWith('http') ? user.picture : null)
+    || (user?.image ? `${UPLOADS_BASE}/${user.image}` : null);
+  if (pic) {
+    return `<img src="${escapeHtml(pic)}" alt="" class="${className} dl-avatar-img" />`;
+  }
+  return `<span class="${className}">${escapeHtml(userInitials(user))}</span>`;
+}
+
+function userAvatarBlock(user) {
+  const pic = dlAccount?.avatarUrl?.(user)
+    || (user?.picture && String(user.picture).startsWith('http') ? user.picture : null)
+    || (user?.image ? `${UPLOADS_BASE}/${user.image}` : null);
+  if (pic) return `<img src="${escapeHtml(pic)}" alt="" class="profile-avatar-img" />`;
+  return escapeHtml(userInitials(user));
+}
+
 function formatCount(n) {
   const num = Number(n) || 0;
   if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
@@ -714,8 +734,8 @@ function updateAuthUi() {
   const btn = document.getElementById('auth-btn');
   if (btn) {
     if (state.user) {
-      btn.innerHTML = `<span class="dl-avatar-icon">${escapeHtml(userInitials(state.user))}</span>`;
-      btn.setAttribute('aria-label', isCreator() ? 'Creator studio' : 'Viewer home');
+      btn.innerHTML = userAvatarHtml(state.user, 'dl-avatar-icon');
+      btn.setAttribute('aria-label', 'Account settings');
     } else {
       btn.innerHTML = '<span class="dl-avatar-icon">◉</span>';
       btn.setAttribute('aria-label', 'Sign in');
@@ -770,7 +790,7 @@ function renderViewerDashboard(data) {
   els.viewerDashboard.innerHTML = `
     <div class="viewer-hero glass-card">
       <div class="creator-hero-top">
-        <div class="profile-avatar-lg">${escapeHtml(userInitials(viewer))}</div>
+        <div class="profile-avatar-lg">${userAvatarBlock(viewer)}</div>
         <div>
           <p class="eyebrow">Viewer Dashboard</p>
           <h2>${escapeHtml(viewer.name || viewer.username || 'Viewer')}</h2>
@@ -789,6 +809,7 @@ function renderViewerDashboard(data) {
       <button type="button" class="btn-primary" id="viewer-watch-feed">Continue watching</button>
       <button type="button" class="btn-primary" id="viewer-watch-live">Browse live</button>
       <button type="button" class="btn-ghost" id="viewer-open-wallet">Top up wallet</button>
+      <button type="button" class="btn-ghost" id="viewer-open-account">Account settings</button>
     </div>
     <section class="creator-section glass-card">
       <h3>Your activity</h3>
@@ -801,6 +822,7 @@ function renderViewerDashboard(data) {
     switchFeedMode('live');
   });
   document.getElementById('viewer-open-wallet')?.addEventListener('click', () => switchView('wallet-view'));
+  document.getElementById('viewer-open-account')?.addEventListener('click', () => dlAccount?.openAccount());
   dlFeatures?.loadStreakPanel(document.getElementById('viewer-streak-panel'));
 }
 
@@ -883,13 +905,20 @@ function renderCreatorDashboard(data) {
         <h3>${approvalStatus === 'rejected' ? 'Creator application not approved' : 'Awaiting creator approval'}</h3>
         <p class="muted">${approvalStatus === 'rejected'
     ? 'You can watch and play on Dreamland, but uploading and going live are disabled.'
-    : 'Your creator application is being reviewed. You can explore Studio, but upload, record, and go live unlock after approval.'}</p>
+    : 'Dreamland is reviewing your application. Tap refresh after admin approves you in the dashboard.'}</p>
+        ${approvalStatus === 'pending' ? '<button type="button" class="btn-ghost full" id="creator-refresh-approval">Check approval status</button>' : ''}
+      </div>` : ''}
+      ${approved && isCreator(creator) ? `
+      <div class="studio-approval-banner studio-approval-banner--ok glass-card">
+        <p class="eyebrow">Creator approved</p>
+        <h3>Studio unlocked</h3>
+        <p class="muted">Upload reels, record in-app, and go live.</p>
       </div>` : ''}
       <header class="studio-hero glass-card">
         <div class="studio-hero__glow" aria-hidden="true"></div>
         <div class="studio-hero__top">
           <div class="studio-avatar-wrap">
-            <div class="profile-avatar-lg studio-avatar">${escapeHtml(userInitials(creator))}</div>
+            <div class="profile-avatar-lg studio-avatar">${userAvatarBlock(creator)}</div>
             ${liveActive ? '<span class="studio-live-pill"><span class="live-dot"></span> Live</span>' : ''}
           </div>
           <div class="studio-hero__copy">
@@ -915,6 +944,9 @@ function renderCreatorDashboard(data) {
             <strong>${formatCount(totals.earned_credits || 0)}</strong>
             <span>Earned</span>
           </div>
+        </div>
+        <div class="studio-quick-actions">
+          <button type="button" class="btn-ghost studio-account-btn" id="creator-open-account">Account settings</button>
         </div>
       </header>
 
@@ -1205,6 +1237,7 @@ function bindCreatorStudioEvents() {
 
   document.getElementById('creator-open-record')?.addEventListener('click', openRecordCapture);
   document.getElementById('creator-open-live')?.addEventListener('click', openLiveBroadcast);
+  document.getElementById('creator-open-account')?.addEventListener('click', () => dlAccount?.openAccount());
   document.getElementById('studio-live-banner')?.addEventListener('click', openLiveBroadcast);
   document.getElementById('studio-live-banner')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -1242,6 +1275,12 @@ function bindCreatorStudioEvents() {
   });
   document.getElementById('creator-watch-feed')?.addEventListener('click', () => switchView('feed-view'));
   document.getElementById('creator-refresh')?.addEventListener('click', () => loadCreatorDashboard(true));
+  document.getElementById('creator-refresh-approval')?.addEventListener('click', async () => {
+    await validateSession();
+    await loadCreatorDashboard(true);
+    if (canPublishReels()) showToast('You are approved — studio unlocked!');
+    else showToast('Still pending admin approval');
+  });
   document.getElementById('creator-ai-caption')?.addEventListener('click', () => {
     dlAi?.applyCaptionAssist(
       document.getElementById('upload-title'),
@@ -2713,6 +2752,23 @@ function bootMainApp() {
       api, API_ROUTES, escapeHtml, formatCount, switchView,
       openProfile: (userId) => dlProfile?.openProfile(userId),
     });
+    dlAccount = createDreamlandAccount({
+      api,
+      apiUpload,
+      API_ROUTES,
+      state,
+      showToast,
+      escapeHtml,
+      switchView,
+      isCreator,
+      clearSession,
+      validateSession,
+      UPLOADS_BASE,
+      accountHomeView,
+      openAuthModal,
+      userInitials,
+      updateAuthUi,
+    });
     els.appShell?.classList.add('app-shell--feed-nav');
     updateAuthUi();
     try { bindUi(); } catch (err) { console.error('bindUi failed:', err); }
@@ -2863,6 +2919,7 @@ function switchView(viewId) {
   if (viewId === 'feed-view' && state.feedMode === 'live') loadLives(true);
   if (viewId === 'creator-view') loadCreatorDashboard();
   if (viewId === 'viewer-view') loadViewerDashboard();
+  if (viewId === 'account-view') dlAccount?.renderAccount();
   if (viewId === 'signup-view') setPageSignupStep('role');
   if (viewId !== 'creator-view') {
     closeRecordCapture();
@@ -4041,7 +4098,7 @@ function bindUi() {
   });
 
   document.getElementById('auth-btn')?.addEventListener('click', () => {
-    if (state.user) switchView(accountHomeView());
+    if (state.user) dlAccount?.openAccount();
     else openAuthModal('signin');
   });
   document.getElementById('auth-close')?.addEventListener('click', closeAuthModal);
@@ -4294,9 +4351,59 @@ function bindUi() {
   }
 }
 
-if ('serviceWorker' in navigator && !DEV_ALLOW_BROWSER) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {});
+function registerPwaUpdates() {
+  if (!('serviceWorker' in navigator) || DEV_ALLOW_BROWSER) return;
+
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
+
+  navigator.serviceWorker.register('/sw.js').then((registration) => {
+    registration.addEventListener('updatefound', () => {
+      const worker = registration.installing;
+      if (!worker) return;
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+          showPwaUpdatePrompt(worker);
+        }
+      });
+    });
+
+    if (registration.waiting) {
+      showPwaUpdatePrompt(registration.waiting);
+    }
+
+    setInterval(() => registration.update().catch(() => {}), 5 * 60 * 1000);
+  }).catch(() => {});
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      navigator.serviceWorker.getRegistration().then((reg) => reg?.update().catch(() => {}));
+    }
+  });
 }
+
+function showPwaUpdatePrompt(worker) {
+  if (document.getElementById('pwa-update-toast')) return;
+  const el = document.createElement('div');
+  el.id = 'pwa-update-toast';
+  el.className = 'pwa-update-toast';
+  el.innerHTML = `
+    <span>Dreamland update ready</span>
+    <button type="button" class="btn-primary" id="pwa-update-apply">Refresh</button>
+    <button type="button" class="btn-ghost" id="pwa-update-dismiss">Later</button>`;
+  document.body.appendChild(el);
+  document.getElementById('pwa-update-apply')?.addEventListener('click', () => {
+    worker.postMessage({ type: 'SKIP_WAITING' });
+    el.remove();
+  });
+  document.getElementById('pwa-update-dismiss')?.addEventListener('click', () => el.remove());
+}
+
+registerPwaUpdates();
 
 function showBootError(message) {
   const app = document.getElementById('app');

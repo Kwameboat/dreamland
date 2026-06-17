@@ -3,6 +3,7 @@
 namespace backend\models;
 
 use app\models\User;
+use common\helpers\DreamlandCreatorApproval;
 use Yii;
 
 /**
@@ -45,6 +46,11 @@ class CreatorForm extends User
     public function prepareForInsert(): void
     {
         $this->applyCreatorIdentity();
+        if ($this->hasAttribute('dreamland_creator_status')) {
+            $this->dreamland_creator_status = (int) $this->status === self::STATUS_ACTIVE
+                ? DreamlandCreatorApproval::STATUS_APPROVED
+                : DreamlandCreatorApproval::STATUS_PENDING;
+        }
         if (!$this->auth_key) {
             $this->auth_key = Yii::$app->security->generateRandomString();
         }

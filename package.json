@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "icons": "node scripts/generate-pwa-icons.js",
-    "build:web": "node scripts/generate-pwa-icons.js && node scripts/generate-vercel-env.js"
+    "build:web": "node scripts/generate-pwa-icons.js && node scripts/generate-vercel-env.js && node scripts/bump-pwa-build.js"
   },
   "devDependencies": {
     "sharp": "^0.33.5"

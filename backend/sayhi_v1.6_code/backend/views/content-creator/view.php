@@ -2,6 +2,7 @@
 use kartik\grid\GridView;
 use yii\helpers\Html;
 use app\models\User;
+use common\helpers\DreamlandCreatorApproval;
 use common\models\DreamlandAudience;
 
 /** @var app\models\User $model */
@@ -14,7 +15,9 @@ $this->params['breadcrumbs'][] = ['label' => 'Content Creators', 'url' => ['inde
 $this->params['breadcrumbs'][] = $this->title;
 
 $isBanned = (int) $model->status === User::STATUS_INACTIVE;
-$isPending = (int) $model->status === User::STATUS_PENDING;
+$creatorStatus = DreamlandCreatorApproval::resolveStatus($model);
+$isPendingApproval = DreamlandCreatorApproval::isPending($model);
+$isApproved = DreamlandCreatorApproval::isApproved($model);
 ?>
 <div class="row">
     <div class="col-xs-12" style="margin-bottom:12px;">
@@ -22,10 +25,18 @@ $isPending = (int) $model->status === User::STATUS_PENDING;
         <?= Html::a('<i class="fa fa-money"></i> Credits', ['update-credits', 'id' => $model->id], ['class' => 'btn btn-default btn-sm']) ?>
         <?= Html::a('<i class="fa fa-bullhorn"></i> Message', ['/broadcast-notification/create', 'audience' => DreamlandAudience::CUSTOM], ['class' => 'btn btn-default btn-sm']) ?>
 
-        <?php if ($isPending): ?>
+        <?php if ($isPendingApproval): ?>
             <?= Html::beginForm(['approve', 'id' => $model->id], 'post', ['style' => 'display:inline']) ?>
-            <?= Html::submitButton('<i class="fa fa-check"></i> Approve', ['class' => 'btn btn-success btn-sm']) ?>
+            <?= Html::submitButton('<i class="fa fa-check"></i> Approve for PWA', ['class' => 'btn btn-success btn-sm']) ?>
             <?= Html::endForm() ?>
+            <?= Html::beginForm(['reject', 'id' => $model->id], 'post', ['style' => 'display:inline']) ?>
+            <?= Html::submitButton('<i class="fa fa-times"></i> Reject', [
+                'class' => 'btn btn-default btn-sm',
+                'data-confirm' => 'Reject this creator application?',
+            ]) ?>
+            <?= Html::endForm() ?>
+        <?php elseif ($isApproved): ?>
+            <span class="label label-success" style="font-size:13px;padding:6px 10px;">Approved — PWA upload unlocked</span>
         <?php endif; ?>
 
         <?php if ($isBanned): ?>
@@ -84,8 +95,8 @@ $isPending = (int) $model->status === User::STATUS_PENDING;
         <div class="info-box">
             <span class="info-box-icon bg-red"><i class="fa fa-flag"></i></span>
             <div class="info-box-content">
-                <span class="info-box-text">Status</span>
-                <span class="info-box-number" style="font-size:18px;"><?= Html::encode($model->getStatus()) ?></span>
+                <span class="info-box-text">PWA approval</span>
+                <span class="info-box-number" style="font-size:16px;"><?= Html::encode(DreamlandCreatorApproval::label($creatorStatus)) ?></span>
             </div>
         </div>
     </div>
@@ -103,6 +114,8 @@ $isPending = (int) $model->status === User::STATUS_PENDING;
                 <p><strong>Username:</strong> <?= Html::encode($model->username) ?></p>
                 <p><strong>Email:</strong> <?= Html::encode($model->email) ?></p>
                 <p><strong>Account type:</strong> <?= Html::encode($model->dreamland_account_type ?: 'creator') ?></p>
+                <p><strong>PWA creator status:</strong> <?= Html::encode(DreamlandCreatorApproval::label($creatorStatus)) ?></p>
+                <p><strong>Account status:</strong> <?= Html::encode($model->getStatus()) ?></p>
                 <p><strong>Role:</strong> <?= Html::encode($model->getRole()) ?></p>
                 <p><strong>Verified:</strong> <?= Html::encode($model->getIsVerifiedString()) ?></p>
                 <p><strong>Joined:</strong> <?= Yii::$app->formatter->asDatetime($model->created_at) ?></p>

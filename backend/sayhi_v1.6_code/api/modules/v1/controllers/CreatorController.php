@@ -7,6 +7,7 @@ use api\modules\v1\models\PostGallary;
 use api\modules\v1\models\User;
 use api\modules\v1\models\UserLiveHistory;
 use common\components\DreamlandContentReview;
+use common\helpers\DreamlandCreatorApproval;
 use common\models\PurchasedLive;
 use common\models\PurchasedVideo;
 use Yii;
@@ -539,11 +540,11 @@ class CreatorController extends ActiveController
         if (!$user || !$this->isCreatorUser($user)) {
             return false;
         }
-        $status = $this->resolveCreatorStatus($user);
-        if ($status === 'approved') {
+        $status = DreamlandCreatorApproval::resolveStatus($user);
+        if ($status === DreamlandCreatorApproval::STATUS_APPROVED) {
             return true;
         }
-        if ($status === 'pending' || $status === 'rejected') {
+        if (in_array($status, [DreamlandCreatorApproval::STATUS_PENDING, DreamlandCreatorApproval::STATUS_REJECTED], true)) {
             return false;
         }
         return isset($user->dreamland_account_type)
@@ -553,24 +554,12 @@ class CreatorController extends ActiveController
 
     private function resolveCreatorStatus($user): string
     {
-        if (!$user) {
-            return 'none';
-        }
-        if (!$this->hasCreatorStatusColumn()) {
-            return 'none';
-        }
-        return strtolower(trim((string) ($user->dreamland_creator_status ?? 'none')));
+        return DreamlandCreatorApproval::resolveStatus($user);
     }
 
     private function hasCreatorStatusColumn(): bool
     {
-        static $cached = null;
-        if ($cached !== null) {
-            return $cached;
-        }
-        $schema = Yii::$app->db->schema->getTableSchema('user', true);
-        $cached = $schema && isset($schema->columns['dreamland_creator_status']);
-        return $cached;
+        return DreamlandCreatorApproval::hasCreatorStatusColumn();
     }
 
     private function findActiveLive(int $userId): ?UserLiveHistory

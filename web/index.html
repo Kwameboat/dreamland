@@ -415,6 +415,10 @@
       <section id="profile-view" class="view view-profile">
         <div id="profile-content" class="profile-shell"></div>
       </section>
+
+      <section id="account-view" class="view view-account">
+        <div id="account-content" class="account-shell"></div>
+      </section>
     </main>
 
     <nav class="dl-dock" aria-label="Main">
@@ -819,7 +823,7 @@
     (async function () {
       try {
         if (window.__DL_BOOT_PROMISE__) await window.__DL_BOOT_PROMISE__;
-        await import('/js/app.js?v=62');
+        await import('/js/app.js?v=build-178171');
       } catch (err) {
         console.error('Dreamland module load failed:', err);
         window.__DL_LAST_ERROR__ = err.message || String(err);
