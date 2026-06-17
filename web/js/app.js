@@ -3926,10 +3926,10 @@ async function registerUser({ name, username, email, password, accountType }) {
     device_type: '3',
   };
   if (referralUserId) payload.referral_user_id = Number(referralUserId);
-  const res = await api(API_ROUTES.register, {
+  const res = await apiWithRetry(API_ROUTES.register, {
     method: 'POST',
     body: JSON.stringify(payload),
-  });
+  }, 3);
   const user = res.data?.user;
   const token = res.data?.auth_key || user?.auth_key;
   if (!token) throw new Error(res.message || 'Registration failed.');
@@ -3962,7 +3962,7 @@ function finishAuthSession(user, token, options = {}) {
 }
 
 async function loginUser(email, password, options = {}) {
-  const res = await api(API_ROUTES.login, {
+  const res = await apiWithRetry(API_ROUTES.login, {
     method: 'POST',
     body: JSON.stringify({
       email,
@@ -3973,7 +3973,7 @@ async function loginUser(email, password, options = {}) {
       login_ip: '127.0.0.1',
       login_location: '',
     }),
-  });
+  }, 3);
 
   const user = res.data?.user;
   const token = res.data?.auth_key || user?.auth_key;
