@@ -36,6 +36,18 @@ class AuthPermission extends Component
     const PROMOTION = 'promotion';
     const SETTING = 'setting';
 
+    /** @var array<string, bool> */
+    private $_canResults = [];
+
+    /** @var bool */
+    private $_contextLoaded = false;
+
+    /** @var array<string, ModuleAuth> */
+    private $_modulesByAlias = [];
+
+    /** @var array<int, ModuleAuthUser> */
+    private $_userPermissions = [];
+
     public function can($moduleName)
     {
         $identity = Yii::$app->user->identity;
@@ -43,17 +55,56 @@ class AuthPermission extends Component
             return false;
         }
 
-        try {
-            $controllerId = Yii::$app->controller->id;
-            $actionId = Yii::$app->controller->action->id;
-            $modelModuleAuthUser = new ModuleAuthUser();
-            $modelModuleAuth = new ModuleAuth();
-            $urlAction = $controllerId . '/' . $actionId;
-            $uid = $identity->id;
-            $resultModule = $modelModuleAuth->find()
-                ->where(['module_auth.alias' => $moduleName, 'module_auth.level' => 1])
-                ->one();
+        $controller = Yii::$app->controller;
+        $urlAction = $controller->id . '/' . $controller->action->id;
+        $cacheKey = $moduleName . ':' . $urlAction;
 
+        if (array_key_exists($cacheKey, $this->_canResults)) {
+            return $this->_canResults[$cacheKey];
+        }
+
+        $this->_canResults[$cacheKey] = $this->evaluateCan($moduleName, $urlAction, (int) $identity->id);
+
+        return $this->_canResults[$cacheKey];
+    }
+
+    private function ensurePermissionContext(): void
+    {
+        if ($this->_contextLoaded) {
+            return;
+        }
+
+        $this->_contextLoaded = true;
+        $identity = Yii::$app->user->identity;
+        if (!$identity) {
+            return;
+        }
+
+        try {
+            $this->_userPermissions = ModuleAuthUser::find()
+                ->where(['user_id' => (int) $identity->id])
+                ->indexBy('module_auth_id')
+                ->all();
+
+            $modules = ModuleAuth::find()
+                ->where(['level' => 1])
+                ->with('moduleAuthChild')
+                ->all();
+
+            foreach ($modules as $module) {
+                $this->_modulesByAlias[$module->alias] = $module;
+            }
+        } catch (\Throwable $e) {
+            Yii::warning($e->getMessage(), __METHOD__);
+        }
+    }
+
+    private function evaluateCan(string $moduleName, string $urlAction, int $uid): bool
+    {
+        try {
+            $this->ensurePermissionContext();
+
+            $resultModule = $this->_modulesByAlias[$moduleName] ?? null;
             if (!$resultModule) {
                 return true;
             }
@@ -61,21 +112,19 @@ class AuthPermission extends Component
             $moduleActionId = 0;
             foreach ($resultModule->moduleAuthChild as $childAction) {
                 $actionListArr = explode(',', (string) $childAction->action_list);
-                $found_key = array_search($urlAction, $actionListArr, true);
-                if (is_int($found_key)) {
-                    $moduleActionId = $childAction->id;
+                $foundKey = array_search($urlAction, $actionListArr, true);
+                if (is_int($foundKey)) {
+                    $moduleActionId = (int) $childAction->id;
                     break;
                 }
             }
+
             if ($moduleActionId === 0) {
-                $moduleActionId = $resultModule->id;
+                $moduleActionId = (int) $resultModule->id;
             }
 
             if ($moduleActionId > 0) {
-                $resultPermission = $modelModuleAuthUser->find()
-                    ->where(['user_id' => $uid, 'module_auth_id' => $moduleActionId])
-                    ->one();
-
+                $resultPermission = $this->_userPermissions[$moduleActionId] ?? null;
                 if ($resultPermission) {
                     return (bool) $resultPermission->is_enabled;
                 }

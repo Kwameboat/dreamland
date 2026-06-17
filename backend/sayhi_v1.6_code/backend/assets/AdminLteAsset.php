@@ -15,11 +15,10 @@ use yii\web\AssetBundle as BaseAdminLteAsset;
 class AdminLteAsset extends BaseAdminLteAsset
 {
     public $sourcePath = '@vendor/almasaeed2010/adminlte/dist';
-    public $jsOptions = ['position' => \yii\web\View::POS_HEAD];
+    public $jsOptions = ['position' => \yii\web\View::POS_END];
 
     public $css = [
-        'css/AdminLTE.css',
-        
+        'css/AdminLTE.min.css',
     ];
     public $js = [
         'js/adminlte.min.js',
@@ -39,7 +38,7 @@ class AdminLteAsset extends BaseAdminLteAsset
      * @var string|bool Choose skin color, eg. `'skin-blue'` or set `false` to disable skin loading
      * @see https://almsaeedstudio.com/themes/AdminLTE/documentation/index.html#layout
      */
-    public $skin = '_all-skins';
+    public $skin = 'skin-black';
     //public $skin = 'skin-purple';
 
     /**

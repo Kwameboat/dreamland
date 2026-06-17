@@ -85,117 +85,160 @@ class SiteController extends Controller
      */
     public function actionIndex()
     {
-        
-        $modelAd = new Ad();
-        
-        $modelPost = new Post();
-        $modelPostComment = new PostComment();
-        $modelAudio = new Audio();
-        
-        $modelUser = new User();
-        $modelPayment = new Payment();
-        $modelCompetition = new Competition();
-        $modelSetting = new Setting();
-        $graphSetting = $this->safeCall(fn () => $modelSetting->getGraphSetting(), true);
-        $modelReels = new Audio();
-        $modelClubs = new Club();
-        $modelEvents = new Event();
-        $modelCoupons = new Coupon();
-        $modelStory = new Story();
-        $modelSupportReq = new SupportRequest();
-        $modelUserLiveHistory = new UserLiveHistory();
-        $totalPost = $this->safeCall(fn () => $modelPost->getTotalPostCount());
+        $auth = Yii::$app->authPermission;
+        $cache = Yii::$app->cache;
 
-        $totalComment = $this->safeCall(fn () => $modelPostComment->getTotalCommetCount());
-        $totalAudio = $this->safeCall(fn () => $modelAudio->getTotalAudioCount());
-        
-        //$pendingJobCount = $modelAd->getPendingJobCount();
-        $totalEarning = $this->safeCall(fn () => $modelPayment->getTotalEarning());
+        $totalPost = $auth->can($auth::POST)
+            ? $this->cachedStat($cache, 'post_count', fn () => (new Post())->getTotalPostCount())
+            : 0;
 
-        $totalEarning = isset($totalEarning)?$totalEarning:0;
+        $userCount = $auth->can($auth::USER)
+            ? $this->cachedStat($cache, 'user_count', fn () => (new User())->getUserCount())
+            : 0;
 
-        $totalEarning = round($totalEarning);
+        $latestUsers = $auth->can($auth::USER)
+            ? $this->cachedStat($cache, 'latest_users', fn () => (new User())->getLatestUsers(), [])
+            : [];
 
-        
-        $totalEarningLastMonth = $this->safeCall(fn () => $modelPayment->getTotalEarningLastMonth());
-        $totalEarningLastMonth = isset($totalEarningLastMonth)?$totalEarningLastMonth:0;
+        $competitionCount = $auth->can($auth::COMPETITION)
+            ? $this->cachedStat($cache, 'competition_count', fn () => (new Competition())->getCompetitionCount())
+            : 0;
 
-        $totalEarningLastMonth = round($totalEarningLastMonth);
-        if($totalEarning>0){
-            $lastMonthPercentage = round($totalEarningLastMonth/$totalEarning*100);
-        }else{
-            $lastMonthPercentage=0;
-        }
-       
-       
-        
-        $earnings=['totalEarning'=>$totalEarning,'totalEarningLastMonth' =>$totalEarningLastMonth,'lastMonthPercentage'=>$lastMonthPercentage];
-        
-       $support = $this->safeCall(fn () => $modelSupportReq->getTotalSupportRequest(), [
-           'totalSupport' => 0,
-           'totalPendingSupport' => 0,
-           'percentage' => 0,
-       ]);
-       $liveHistory = $this->safeCall(fn () => $modelUserLiveHistory->getTotalLiveHistory(), [
-           'totallive' => 0,
-           'totalCurrentLive' => 0,
-           'percentage' => 0,
-       ]);
+        $reelCount = $auth->can($auth::REEL)
+            ? $this->cachedStat($cache, 'reel_count', fn () => (new Post())->getTotalReelsCount())
+            : 0;
 
+        $clubCount = $auth->can($auth::CLUB)
+            ? $this->cachedStat($cache, 'club_count', fn () => (new Club())->getTotalClubCount())
+            : 0;
 
-        $userCount = $this->safeCall(fn () => $modelUser->getUserCount());
-        $latestUsers = $this->safeCall(fn () => $modelUser->getLatestUsers(), []);
-        $competitionCount = $this->safeCall(fn () => $modelCompetition->getCompetitionCount());
+        $eventCount = $auth->can($auth::EVENT)
+            ? $this->cachedStat($cache, 'event_count', fn () => (new Event())->getTotalEventCount())
+            : 0;
 
-        $reelCount = $this->safeCall(fn () => $modelPost->getTotalReelsCount());
-        $clubCount = $this->safeCall(fn () => $modelClubs->getTotalClubCount());
-        $eventCount = $this->safeCall(fn () => $modelEvents->getTotalEventCount());
-        $couponCount = $this->safeCall(fn () => $modelCoupons->getTotalCouponCount());
+        $couponCount = $auth->can($auth::COUPON)
+            ? $this->cachedStat($cache, 'coupon_count', fn () => (new Coupon())->getTotalCouponCount())
+            : 0;
 
-       
-        $firstGraph = $this->normalizeGraph($this->safeCall(fn () => $modelPost->getLastTweleveMonthPost()));
+        $totalStory = $auth->can($auth::STORY)
+            ? $this->cachedStat($cache, 'story_count', fn () => (new Story())->getStoryTotalCount())
+            : 0;
 
-        $userGraph = $this->normalizeGraph($this->safeCall(fn () => $modelUser->getLastTweleveMonthUser()));
+        $firstGraph = $auth->can($auth::POST)
+            ? $this->normalizeGraph($this->cachedStat($cache, 'graph_posts', fn () => (new Post())->getLastTweleveMonthPost(), []))
+            : $this->normalizeGraph([]);
 
-        $paymentGraph = $this->normalizeGraph($this->safeCall(fn () => $modelPayment->getLastTweleveMonthPayments()));
-        $clubGraph = $this->normalizeGraph($this->safeCall(fn () => $modelClubs->getLastTweleveMonthClub()));
-        $totalStory = $this->safeCall(fn () => $modelStory->getStoryTotalCount());
-        $reelsGraph = $this->normalizeGraph($this->safeCall(fn () => $modelPost->getLastTweleveMonthReels()));
-        $storyGraph = $this->normalizeGraph($this->safeCall(fn () => $modelStory->getLastTweleveMonthStory()));
-        if(!$graphSetting){
-            $graphSetting = true;
-        }
-        $postLatest = $this->safeCall(fn () => $modelPost->getLatestPost(), []);
+        $userGraph = $auth->can($auth::USER)
+            ? $this->normalizeGraph($this->cachedStat($cache, 'graph_users', fn () => (new User())->getLastTweleveMonthUser(), []))
+            : $this->normalizeGraph([]);
 
-        //print_r($paymentGraph);
+        $paymentGraph = $auth->can($auth::PAYMENT)
+            ? $this->normalizeGraph($this->cachedStat($cache, 'graph_payments', fn () => (new Payment())->getLastTweleveMonthPayments(), []))
+            : $this->normalizeGraph([]);
 
-        // print_r($activeJob);
+        $clubGraph = $auth->can($auth::CLUB)
+            ? $this->normalizeGraph($this->cachedStat($cache, 'graph_clubs', fn () => (new Club())->getLastTweleveMonthClub(), []))
+            : $this->normalizeGraph([]);
+
+        $reelsGraph = $auth->can($auth::REEL)
+            ? $this->normalizeGraph($this->cachedStat($cache, 'graph_reels', fn () => (new Post())->getLastTweleveMonthReels(), []))
+            : $this->normalizeGraph([]);
+
+        $storyGraph = $auth->can($auth::STORY)
+            ? $this->normalizeGraph($this->cachedStat($cache, 'graph_stories', fn () => (new Story())->getLastTweleveMonthStory(), []))
+            : $this->normalizeGraph([]);
+
+        $postLatest = $auth->can($auth::POST)
+            ? $this->cachedStat($cache, 'latest_posts', fn () => (new Post())->getLatestPost(), [])
+            : [];
+
+        $earnings = $auth->can($auth::PAYMENT)
+            ? $this->cachedStat($cache, 'earnings', fn () => $this->buildEarningsSummary(), [
+                'totalEarning' => 0,
+                'totalEarningLastMonth' => 0,
+                'lastMonthPercentage' => 0,
+            ])
+            : ['totalEarning' => 0, 'totalEarningLastMonth' => 0, 'lastMonthPercentage' => 0];
+
+        $support = $auth->can($auth::USER)
+            ? $this->cachedStat($cache, 'support_stats', fn () => (new SupportRequest())->getTotalSupportRequest(), [
+                'totalSupport' => 0,
+                'totalPendingSupport' => 0,
+                'percentage' => 0,
+            ])
+            : ['totalSupport' => 0, 'totalPendingSupport' => 0, 'percentage' => 0];
+
+        $liveHistory = $auth->can($auth::USER)
+            ? $this->cachedStat($cache, 'live_history_stats', fn () => (new UserLiveHistory())->getTotalLiveHistory(), [
+                'totallive' => 0,
+                'totalCurrentLive' => 0,
+                'percentage' => 0,
+            ])
+            : ['totallive' => 0, 'totalCurrentLive' => 0, 'percentage' => 0];
 
         return $this->render('index', [
             'totalPost' => $totalPost,
-            'totalComment' => $totalComment,
+            'totalComment' => 0,
             'userCount' => $userCount,
             'totalCompetition' => $competitionCount,
-            'reelCount' =>  $reelCount,
-            'clubCount' =>  $clubCount,
+            'reelCount' => $reelCount,
+            'clubCount' => $clubCount,
             'eventCount' => $eventCount,
             'couponCount' => $couponCount,
             'firstGraph' => $firstGraph,
             'paymentGraph' => $paymentGraph,
-            'userGraph' =>  $userGraph,
-            'clubGraph' =>  $clubGraph,
+            'userGraph' => $userGraph,
+            'clubGraph' => $clubGraph,
             'totalStory' => $totalStory,
             'reelsGraph' => $reelsGraph,
             'storyGraph' => $storyGraph,
-            'postLatest'=>$postLatest,
-            'latestUsers'=>$latestUsers,
-            'earnings'=>$earnings,
-            'support' =>$support,
-            'liveHistory'=>$liveHistory,
-            
-
+            'postLatest' => $postLatest,
+            'latestUsers' => $latestUsers,
+            'earnings' => $earnings,
+            'support' => $support,
+            'liveHistory' => $liveHistory,
         ]);
+    }
 
+    /**
+     * @return array{totalEarning:int|float,totalEarningLastMonth:int|float,lastMonthPercentage:int|float}
+     */
+    private function buildEarningsSummary(): array
+    {
+        $modelPayment = new Payment();
+        $totalEarning = $this->safeCall(fn () => $modelPayment->getTotalEarning(), 0);
+        $totalEarning = round((float) $totalEarning);
+        $totalEarningLastMonth = $this->safeCall(fn () => $modelPayment->getTotalEarningLastMonth(), 0);
+        $totalEarningLastMonth = round((float) $totalEarningLastMonth);
+        $lastMonthPercentage = $totalEarning > 0
+            ? round($totalEarningLastMonth / $totalEarning * 100)
+            : 0;
+
+        return [
+            'totalEarning' => $totalEarning,
+            'totalEarningLastMonth' => $totalEarningLastMonth,
+            'lastMonthPercentage' => $lastMonthPercentage,
+        ];
+    }
+
+    /**
+     * @template T
+     * @param \yii\caching\CacheInterface $cache
+     * @param string $key
+     * @param callable():T $fn
+     * @param mixed $default
+     * @return T|mixed
+     */
+    private function cachedStat($cache, string $key, callable $fn, $default = 0)
+    {
+        try {
+            return $cache->getOrSet('admin_dash:' . $key, function () use ($fn, $default) {
+                return $this->safeCall($fn, $default);
+            }, 120);
+        } catch (\Throwable $e) {
+            Yii::warning($e->getMessage(), __METHOD__);
+            return $this->safeCall($fn, $default);
+        }
     }
 
 

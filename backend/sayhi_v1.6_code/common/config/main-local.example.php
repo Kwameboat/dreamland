@@ -30,6 +30,9 @@ return [
             'username' => $user,
             'password' => $pass,
             'charset' => $charset,
+            'enableSchemaCache' => true,
+            'schemaCacheDuration' => 3600,
+            'schemaCache' => 'cache',
             'schemaMap' => $driver === 'pgsql' ? [
                 'pgsql' => [
                     'class' => 'yii\db\pgsql\Schema',

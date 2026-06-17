@@ -25,6 +25,11 @@ return [
             'baseUrl' => 'assets',
             'linkAssets' => false,
             'appendTimestamp' => true,
+            'bundles' => [
+                'backend\assets\AdminLteAsset' => [
+                    'skin' => 'skin-black',
+                ],
+            ],
         ],
         'session' => [
             'cookieParams' => [

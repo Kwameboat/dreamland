@@ -287,6 +287,7 @@ class Post extends \yii\db\ActiveRecord
         $postAllow[] = Post::TYPE_COMPETITION;
         $postAllow[] = Post::TYPE_CLUB;
         return Post::find()
+        ->with('user')
         ->where(['<>','status',Post::STATUS_DELETED])
         ->andWhere(['type'=>$postAllow])->orderBy(['id'=>SORT_DESC])->limit(13)->all();
         

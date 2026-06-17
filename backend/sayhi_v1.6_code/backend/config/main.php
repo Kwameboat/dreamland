@@ -51,8 +51,9 @@ return [
         ],
         */
         'assetManager' => [
+            'appendTimestamp' => true,
             'bundles' => [
-                'dmstr\web\AdminLteAsset' => [
+                'backend\assets\AdminLteAsset' => [
                     'skin' => 'skin-black',
                 ],
             ],
