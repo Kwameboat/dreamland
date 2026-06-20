@@ -26,7 +26,10 @@ $login = req("$api/users/login", [
 ]);
 echo "Login HTTP {$login['status']}\n";
 $data = $login['json']['data'] ?? $login['json'];
-$token = $data['token'] ?? ($data['data']['token'] ?? null);
+$token = $data['auth_key']
+    ?? $data['token']
+    ?? ($data['user']['auth_key'] ?? null)
+    ?? ($data['data']['token'] ?? null);
 if (!$token) {
     echo $login['body'] . "\n";
     exit(1);

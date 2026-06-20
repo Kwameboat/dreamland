@@ -23,16 +23,22 @@ $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 
 $serveUpload = static function (string $relativePath): bool {
     $relativePath = str_replace(['..', '\\'], '', $relativePath);
-    $uploadFile = dirname(__DIR__, 2) . '/frontend/web/uploads/' . $relativePath;
-    if (!is_file($uploadFile)) {
-        return false;
+    $roots = [
+        dirname(__DIR__, 2) . '/api/runtime/uploads/' . $relativePath,
+        dirname(__DIR__, 2) . '/frontend/web/uploads/' . $relativePath,
+    ];
+    foreach ($roots as $uploadFile) {
+        if (!is_file($uploadFile)) {
+            continue;
+        }
+        $mime = mime_content_type($uploadFile) ?: 'application/octet-stream';
+        header('Content-Type: ' . $mime);
+        header('Accept-Ranges: bytes');
+        header('Cache-Control: public, max-age=86400');
+        readfile($uploadFile);
+        return true;
     }
-    $mime = mime_content_type($uploadFile) ?: 'application/octet-stream';
-    header('Content-Type: ' . $mime);
-    header('Accept-Ranges: bytes');
-    header('Cache-Control: public, max-age=86400');
-    readfile($uploadFile);
-    return true;
+    return false;
 };
 
 if (preg_match('#^/frontend/web/uploads/(.+)$#', $path, $matches) && $serveUpload($matches[1])) {

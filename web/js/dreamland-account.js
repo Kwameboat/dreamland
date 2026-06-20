@@ -46,8 +46,12 @@ export function createDreamlandAccount(ctx) {
   }
 
   function flattenErrors(payload) {
-    const errs = payload?.errors;
-    if (!errs) return payload?.message || 'Request failed';
+    if (typeof payload === 'string' && payload) return payload;
+    const errs = payload?.errors || payload?.data?.errors;
+    if (!errs) {
+      const msg = payload?.message || payload?.data?.message || payload?.raw?.message;
+      return msg || 'Request failed';
+    }
     if (Array.isArray(errs.message)) return errs.message[0];
     const flat = [];
     Object.values(errs).forEach((v) => {
@@ -337,7 +341,7 @@ export function createDreamlandAccount(ctx) {
         await uploadProfileImage(file);
         await renderAccount();
       } catch (err) {
-        showErrors(root, [err.message || 'Could not upload photo']);
+        showErrors(root, [flattenErrors(err.payload) || err.message || 'Could not upload photo']);
       }
       e.target.value = '';
     });
@@ -349,7 +353,7 @@ export function createDreamlandAccount(ctx) {
         await uploadCoverImage(file);
         await renderAccount();
       } catch (err) {
-        showErrors(root, [err.message || 'Could not upload cover']);
+        showErrors(root, [flattenErrors(err.payload) || err.message || 'Could not upload cover']);
       }
       e.target.value = '';
     });

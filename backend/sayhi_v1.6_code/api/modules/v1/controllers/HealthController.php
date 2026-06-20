@@ -40,6 +40,7 @@ class HealthController extends Controller
 
         $liveOk = Yii::$app->has('dreamlandLive') ? Yii::$app->dreamlandLive->isHealthy() : false;
         $modOk = Yii::$app->has('dreamlandModeration') ? Yii::$app->dreamlandModeration->isHealthy() : false;
+        $uploadsWritable = Yii::$app->has('fileUpload') ? Yii::$app->fileUpload->isLocalDiskWritable() : false;
         $aiOk = Yii::$app->has('dreamlandAi') ? Yii::$app->dreamlandAi->isEnabled() : false;
         $health = $modOk && Yii::$app->has('dreamlandModeration')
             ? Yii::$app->dreamlandModeration->getHealth()
@@ -51,6 +52,7 @@ class HealthController extends Controller
             'message' => 'Dreamland API is healthy.',
             'checks' => [
                 'database' => $dbOk,
+                'uploads_writable' => $uploadsWritable,
                 'safety_queue_depth' => $queueDepth,
                 'live_server' => $liveOk,
                 'moderation_agent' => $modOk,

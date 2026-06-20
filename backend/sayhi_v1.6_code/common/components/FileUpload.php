@@ -72,7 +72,46 @@ class FileUpload extends Component
         if (is_string($override) && $override !== '') {
             return rtrim($override, '/\\');
         }
-        return Yii::getAlias('@frontend/web/uploads');
+        // api/runtime is writable on Render/Docker; frontend/web/uploads often is not.
+        return Yii::getAlias('@api/runtime/uploads');
+    }
+
+    private function effectiveStorageSystem(): int
+    {
+        if (getenv('DREAMLAND_FORCE_LOCAL_UPLOADS') === '1') {
+            return self::STORAGE_SYSTEM_LOCAL;
+        }
+
+        $storage = (int) ($this->settingData->storage_system ?? self::STORAGE_SYSTEM_LOCAL);
+        if ($storage === self::STORAGE_SYSTEM_AWS_S3) {
+            if (trim((string) ($this->settingData->aws_access_key_id ?? '')) === ''
+                || trim((string) ($this->settingData->aws_bucket ?? '')) === '') {
+                return self::STORAGE_SYSTEM_LOCAL;
+            }
+        } elseif ($storage === self::STORAGE_SYSTEM_WASABI) {
+            if (trim((string) ($this->settingData->wasabi_access_key ?? '')) === ''
+                || trim((string) ($this->settingData->wasabi_bucket ?? '')) === '') {
+                return self::STORAGE_SYSTEM_LOCAL;
+            }
+        } elseif ($storage === self::STORAGE_SYSTEM_AZURE) {
+            if (trim((string) ($this->settingData->azure_account_name ?? '')) === ''
+                || trim((string) ($this->settingData->azure_container ?? '')) === '') {
+                return self::STORAGE_SYSTEM_LOCAL;
+            }
+        }
+
+        return $storage;
+    }
+
+    public function isLocalDiskWritable(): bool
+    {
+        try {
+            $dir = $this->localDiskRoot() . '/user';
+            $this->ensureUploadDir($dir);
+            return is_writable($dir);
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     private function publicUrlForFolder(string $folder): string
@@ -97,7 +136,7 @@ class FileUpload extends Component
         $imagePath = $fileLocation['folder'] . '/' . $mediaFileName;
         $this->ensureUploadDir($fileLocation['folder']);
         if (!$mediaFile->saveAs($imagePath, false)) {
-            throw new \RuntimeException('Could not write uploaded file to disk.');
+            throw new \RuntimeException('Could not write uploaded file to disk: ' . $imagePath);
         }
         $fileUrl = $fileLocation['folderLocation'] . '/' . $mediaFileName;
         return ['file' => $mediaFileName, 'fileUrl' => $fileUrl, 'fileType' => $fileType];
@@ -119,7 +158,7 @@ class FileUpload extends Component
         $folderPath;
         $files = [];
 
-        $storageSystem = (int) ($this->settingData->storage_system ?? self::STORAGE_SYSTEM_LOCAL);
+        $storageSystem = $this->effectiveStorageSystem();
               
 
         if ($isMultiple) { // multiple files
@@ -410,7 +449,7 @@ class FileUpload extends Component
 
     public function getFolderLocation($folder)
     {
-         $storageSystem = (int) ($this->settingData->storage_system ?? self::STORAGE_SYSTEM_LOCAL);
+         $storageSystem = $this->effectiveStorageSystem();
         $folderPath = [];
         if ($storageSystem == FileUpload::STORAGE_SYSTEM_AWS_S3) {
 
@@ -439,7 +478,7 @@ class FileUpload extends Component
     public function deleteFile($type, $fileName)
     {
         $fileLocation = $this->getUploadedLocation($type);
-        $storageSystem = (int) ($this->settingData->storage_system ?? self::STORAGE_SYSTEM_LOCAL);
+        $storageSystem = $this->effectiveStorageSystem();
        
         if ($storageSystem == FileUpload::STORAGE_SYSTEM_AWS_S3) {
             $filename =  $fileLocation['folder'] . "/" . $fileName;

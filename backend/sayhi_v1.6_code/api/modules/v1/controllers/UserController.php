@@ -1465,6 +1465,11 @@ class UserController extends ActiveController
                 return ['statusCode' => 405, 'message' => 'Method not allowed.'];
             }
 
+            $uploadError = $this->resolveImageUploadError('imageFile');
+            if ($uploadError) {
+                return $uploadError;
+            }
+
             $model->imageFile = UploadedFile::getInstanceByName('imageFile');
             if (!$model->validate()) {
                 $response['statusCode'] = 422;
@@ -1744,6 +1749,39 @@ class UserController extends ActiveController
         }
         throw new NotFoundHttpException('The requested page does not exist.');
     }
+
+    private function resolveImageUploadError(string $field = 'imageFile'): ?array
+    {
+        if (!isset($_FILES[$field])) {
+            $contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+            if ($contentLength > 0) {
+                return [
+                    'statusCode' => 422,
+                    'message' => 'Photo was too large for the server (max ' . ini_get('post_max_size') . '). Try a smaller image.',
+                ];
+            }
+            return null;
+        }
+
+        $error = (int) ($_FILES[$field]['error'] ?? UPLOAD_ERR_OK);
+        if ($error === UPLOAD_ERR_OK) {
+            return null;
+        }
+
+        $messages = [
+            UPLOAD_ERR_INI_SIZE => 'Photo exceeds server limit (' . ini_get('upload_max_filesize') . '). Try a smaller image.',
+            UPLOAD_ERR_FORM_SIZE => 'Photo file is too large for this request.',
+            UPLOAD_ERR_PARTIAL => 'Upload was interrupted — try again.',
+            UPLOAD_ERR_NO_FILE => 'imageFile is required.',
+            UPLOAD_ERR_NO_TMP_DIR => 'Server temp folder missing — contact support.',
+            UPLOAD_ERR_CANT_WRITE => 'Server could not save photo — try again.',
+        ];
+
+        return [
+            'statusCode' => 422,
+            'message' => $messages[$error] ?? 'Photo upload failed.',
+        ];
+    }
     /**
      * Profile user
      */
@@ -1918,6 +1956,11 @@ class UserController extends ActiveController
 
             if (!Yii::$app->request->isPost) {
                 return ['statusCode' => 405, 'message' => 'Method not allowed.'];
+            }
+
+            $uploadError = $this->resolveImageUploadError('imageFile');
+            if ($uploadError) {
+                return $uploadError;
             }
 
             $model->imageFile = UploadedFile::getInstanceByName('imageFile');
