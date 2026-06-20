@@ -58,8 +58,9 @@ class DreamlandUploadLimits
             }
             if (!empty($legacy->upload_max_file)) {
                 $v = (int) $legacy->upload_max_file;
-                if ($v > 0 && $limits['max_reel_upload_mb'] === self::DEFAULT_REEL_UPLOAD_MB) {
-                    $limits['max_reel_upload_mb'] = min(512, max(1, $v));
+                // Legacy column often stores file count (1), not megabytes — ignore tiny values.
+                if ($v >= 10 && $limits['max_reel_upload_mb'] === self::DEFAULT_REEL_UPLOAD_MB) {
+                    $limits['max_reel_upload_mb'] = min(512, $v);
                 }
             }
             if (!empty($legacy->free_live_tv_duration_to_view)) {

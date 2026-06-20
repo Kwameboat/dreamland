@@ -1465,7 +1465,6 @@ class UserController extends ActiveController
                 return ['statusCode' => 405, 'message' => 'Method not allowed.'];
             }
 
-            $model->load(Yii::$app->getRequest()->getBodyParams(), '');
             $model->imageFile = UploadedFile::getInstanceByName('imageFile');
             if (!$model->validate()) {
                 $response['statusCode'] = 422;
@@ -1498,7 +1497,7 @@ class UserController extends ActiveController
         } catch (\Throwable $e) {
             Yii::error($e->getMessage(), __METHOD__);
             return [
-                'statusCode' => 500,
+                'statusCode' => 422,
                 'message' => 'Could not upload profile photo. ' . $e->getMessage(),
             ];
         }
@@ -1921,7 +1920,6 @@ class UserController extends ActiveController
                 return ['statusCode' => 405, 'message' => 'Method not allowed.'];
             }
 
-            $model->load(Yii::$app->getRequest()->getBodyParams(), '');
             $model->imageFile = UploadedFile::getInstanceByName('imageFile');
             if (!$model->validate()) {
                 $response['statusCode'] = 422;
@@ -1954,7 +1952,7 @@ class UserController extends ActiveController
         } catch (\Throwable $e) {
             Yii::error($e->getMessage(), __METHOD__);
             return [
-                'statusCode' => 500,
+                'statusCode' => 422,
                 'message' => 'Could not upload cover photo. ' . $e->getMessage(),
             ];
         }

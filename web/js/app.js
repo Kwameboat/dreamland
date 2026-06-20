@@ -528,7 +528,7 @@ async function apiUpload(path, formData, options = {}) {
   if (state.token) headers.Authorization = `Bearer ${state.token}`;
   const url = `${API_BASE.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
 
-  const file = formData.get('videoFile');
+  const file = formData.get('videoFile') || formData.get('imageFile');
   const fileSize = file?.size || 0;
   const timeoutMs = options.timeoutMs
     ?? Math.min(600000, Math.max(90000, 90000 + Math.floor(fileSize / 2048)));

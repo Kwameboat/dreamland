@@ -24,17 +24,20 @@ export function createDreamlandAccount(ctx) {
   let categoriesCache = null;
 
   function avatarUrl(user) {
-    const pic = user?.picture || user?.image;
-    if (!pic) return null;
-    if (String(pic).startsWith('http')) return pic;
-    return `${UPLOADS_BASE}/${pic}`;
+    if (user?.picture && String(user.picture).startsWith('http')) return user.picture;
+    const raw = user?.image;
+    if (!raw) return null;
+    if (String(raw).startsWith('http')) return raw;
+    const uploadsRoot = String(UPLOADS_BASE || '').replace(/\/image\/?$/, '');
+    return `${uploadsRoot}/user/${raw}`;
   }
 
   function coverUrl(user) {
     const cover = user?.coverImageUrl || user?.cover_image;
     if (!cover) return null;
     if (String(cover).startsWith('http')) return cover;
-    return `${UPLOADS_BASE}/${cover}`;
+    const uploadsRoot = String(UPLOADS_BASE || '').replace(/\/image\/?$/, '');
+    return `${uploadsRoot}/user/${cover}`;
   }
 
   function roleLabel(user) {

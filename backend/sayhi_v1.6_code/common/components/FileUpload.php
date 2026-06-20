@@ -66,6 +66,21 @@ class FileUpload extends Component
         }
     }
 
+    private function localDiskRoot(): string
+    {
+        $override = getenv('DREAMLAND_UPLOAD_DIR');
+        if (is_string($override) && $override !== '') {
+            return rtrim($override, '/\\');
+        }
+        return Yii::getAlias('@frontend/web/uploads');
+    }
+
+    private function publicUrlForFolder(string $folder): string
+    {
+        $site = rtrim((string) (Yii::$app->params['siteUrl'] ?? ''), '/');
+        return $site . '/frontend/web/uploads/' . $folder;
+    }
+
     private function ensureUploadDir(string $dir): void
     {
         if (is_dir($dir)) {
@@ -74,6 +89,18 @@ class FileUpload extends Component
         if (!@mkdir($dir, 0775, true) && !is_dir($dir)) {
             throw new \RuntimeException('Upload folder is not writable: ' . $dir);
         }
+    }
+
+    private function storeOnLocalDisk(int $type, $mediaFile, string $mediaFileName, $fileType): array
+    {
+        $fileLocation = $this->getUploadedLocation($type);
+        $imagePath = $fileLocation['folder'] . '/' . $mediaFileName;
+        $this->ensureUploadDir($fileLocation['folder']);
+        if (!$mediaFile->saveAs($imagePath, false)) {
+            throw new \RuntimeException('Could not write uploaded file to disk.');
+        }
+        $fileUrl = $fileLocation['folderLocation'] . '/' . $mediaFileName;
+        return ['file' => $mediaFileName, 'fileUrl' => $fileUrl, 'fileType' => $fileType];
     }
 
     /**
@@ -117,6 +144,8 @@ class FileUpload extends Component
 
 
 
+            $fileResponse = null;
+            try {
             if ($storageSystem == FileUpload::STORAGE_SYSTEM_AWS_S3) {
 
                 $fileLocation = $this->getUploadedLocation($type);
@@ -139,7 +168,7 @@ class FileUpload extends Component
                 ]);
                 $keyObject = './' . $fileLocation['folder'] . '/' . $mediaFileName;
                 
-                $result = $s3->putObject([
+                $s3->putObject([
                     'Bucket'     => $bucket,
                     'Key'        => $keyObject,
                     'SourceFile' => $imagePath,
@@ -149,7 +178,7 @@ class FileUpload extends Component
                 $fileUrl = $fileLocation['folderLocation'] . "/" . $mediaFileName;
                 $fileResponse = ['file' => $mediaFileName, 'fileUrl' => $fileUrl,'fileType'=>$fileType];
               
-            }else if ($storageSystem == FileUpload::STORAGE_SYSTEM_WASABI) {
+            } else if ($storageSystem == FileUpload::STORAGE_SYSTEM_WASABI) {
 
                 $fileLocation = $this->getUploadedLocation($type);
                // print_r($fileLocation);
@@ -206,16 +235,15 @@ class FileUpload extends Component
                 }
 
             } else { // local storage
-                $fileLocation = $this->getUploadedLocation($type);
+                $fileResponse = $this->storeOnLocalDisk($type, $mediaFile, $mediaFileName, $fileType);
+            }
+            } catch (\Throwable $e) {
+                Yii::warning('Primary upload storage failed: ' . $e->getMessage(), __METHOD__);
+                $fileResponse = $this->storeOnLocalDisk($type, $mediaFile, $mediaFileName, $fileType);
+            }
 
-                $imagePath = $fileLocation['folder'] . "/" . $mediaFileName;
-                $this->ensureUploadDir($fileLocation['folder']);
-                $fileUrl = $fileLocation['folderLocation'] . "/" . $mediaFileName;
-                if (!$mediaFile->saveAs($imagePath, false)) {
-                    throw new \RuntimeException('Could not save uploaded file.');
-                }
-                $fileResponse = ['file' => $mediaFileName, 'fileUrl' => $fileUrl,'fileType'=>$fileType];
-
+            if (empty($fileResponse['file'])) {
+                throw new \RuntimeException('Upload could not be saved to disk.');
             }
 
         }
@@ -233,7 +261,7 @@ class FileUpload extends Component
          
         if($iscontentModerationGateway){
             try {
-                $moderationResult = Yii::$app->contentModeration->validteContent($fileUrl);
+                $moderationResult = Yii::$app->contentModeration->validteContent($fileResponse['fileUrl'] ?? '');
                 if (is_array($moderationResult) && count($moderationResult) >= 2) {
                     list($isProhabited, $moderationReferenceId) = $moderationResult;
                 }
@@ -402,8 +430,8 @@ class FileUpload extends Component
 
         }
          else { // local storage
-            $folderPath['folder'] = Yii::getAlias('@frontend') . "/" . 'web/uploads/' . $folder;
-            $folderPath['folderLocation'] = Yii::$app->params['siteUrl'] . Yii::$app->urlManagerFrontend->baseUrl . '/uploads/' . $folder;
+            $folderPath['folder'] = $this->localDiskRoot() . '/' . $folder;
+            $folderPath['folderLocation'] = $this->publicUrlForFolder($folder);
         }
         return $folderPath;
     }

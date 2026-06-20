@@ -93,7 +93,12 @@ return [
             $response->headers->set('Access-Control-Allow-Credentials', 'false');
 
 
-                if ($response->data !== null && $response->statusCode != 401 && $response->statusCode != 404 && $response->statusCode != 405 && $response->statusCode != 500  ) {
+                if ($response->data !== null && $response->statusCode != 401 && $response->statusCode != 404 && $response->statusCode != 405) {
+                $hasApiEnvelope = is_array($response->data)
+                    && (isset($response->data['statusCode']) || isset($response->data['message']) || isset($response->data['errors']));
+                if ($response->statusCode == 500 && !$hasApiEnvelope) {
+                    return;
+                }
                 //if ($response->data !== null && $response->statusCode != 401 && $response->statusCode != 404 && $response->statusCode != 405   ) {
                     $message= isset($response->data['message'])? $response->data['message']:'';
                     $response->statusCode=  $statusCode=isset($response->data['statusCode'])?$response->data['statusCode']:$response->statusCode;
