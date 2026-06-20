@@ -14,14 +14,22 @@ function cleanUrl(value) {
   return String(value || '').replace(/\/$/, '');
 }
 
+const rootDomain = cleanUrl(
+  process.env.DREAMLAND_ROOT_DOMAIN
+  || defaults.rootDomain
+  || 'dreamland.app'
+).replace(/^https?:\/\//, '');
+
 const apiUrl = cleanUrl(
   process.env.DREAMLAND_API_URL
   || process.env.VITE_DREAMLAND_API_URL
   || defaults.api
+  || `https://api.${rootDomain}/v1`
 );
 const uploadsUrl = cleanUrl(process.env.DREAMLAND_UPLOADS_URL || defaults.uploads);
 const pwaUrl = cleanUrl(
   process.env.DREAMLAND_PWA_URL
+  || `https://${rootDomain}`
   || (process.env.VERCEL_PROJECT_PRODUCTION_URL
     ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
     : '')
@@ -30,6 +38,7 @@ const pwaUrl = cleanUrl(
 );
 
 const payload = {
+  rootDomain,
   api: apiUrl || null,
   uploads: uploadsUrl || null,
   pwa: pwaUrl || null,

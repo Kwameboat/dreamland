@@ -277,10 +277,15 @@ Or nginx routing `/admin` → `backend/web`.
 
 Click **Deploy**. Vercel generates `web/env-config.js` at build time; the PWA reads `window.__DL_ENV__.api`.
 
-### Custom domain (optional)
+### Custom domain (main domain — recommended)
 
-1. Vercel → Project → **Domains** → add `app.yourdomain.com`
-2. Update `SITE_URL` and Paystack callback URLs on the API
+1. Vercel or cPanel → add your **apex domain** (e.g. `dreamland.app` or `yourdomain.com`) — not `app.` subdomain
+2. Set hosting env:
+   - `DREAMLAND_ROOT_DOMAIN=dreamland.app`
+   - `DREAMLAND_PWA_URL=https://dreamland.app`
+   - `DREAMLAND_API_URL=https://api.dreamland.app/v1` (API stays on subdomain)
+3. Update API env: `SITE_URL=https://api.dreamland.app`, `DREAMLAND_PWA_URL=https://dreamland.app`
+4. Paystack callbacks use the main domain: `https://dreamland.app/wallet/callback`
 
 ---
 

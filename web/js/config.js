@@ -5,9 +5,24 @@ const { hostname, port, protocol } = window.location;
 const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
 const isDevServer = isLocalHost || port === '3000';
 
-/** Last-resort production API when env-config.js was built without Vercel env vars. */
+/** Last-resort production API when env-config.js was built without env vars. */
 const PRODUCTION_API = 'https://dreamland-t1ck.onrender.com/v1';
 const PRODUCTION_UPLOADS = 'https://dreamland-t1ck.onrender.com/frontend/web/uploads/image';
+const DEFAULT_ROOT_DOMAIN = window.__DL_ENV__?.rootDomain || 'dreamland.app';
+
+function rootDomainFromHost(host) {
+  if (!host || host === 'localhost' || host === '127.0.0.1') return host;
+  const parts = String(host).split('.').filter(Boolean);
+  if (parts.length <= 2) return host;
+  return parts.slice(-2).join('.');
+}
+
+function inferredApiBase(host) {
+  const root = rootDomainFromHost(host);
+  if (!root || root === 'localhost' || root === '127.0.0.1') return null;
+  if (host.startsWith('api.') || host.startsWith('admin.')) return null;
+  return `https://api.${root}/v1`;
+}
 
 function resolveApiBase() {
   if (window.__DL_API__) return window.__DL_API__.replace(/\/$/, '');
@@ -27,13 +42,18 @@ function resolveApiBase() {
     return `${protocol}//${apiHost}:8080/v1`;
   }
 
-  if (hostname.endsWith('.vercel.app') || hostname === 'dreamland-plum.vercel.app') {
+  const inferred = inferredApiBase(hostname);
+  if (inferred) {
+    return inferred;
+  }
+
+  if (hostname.endsWith('.vercel.app')) {
     console.warn('[Dreamland] Using built-in production API URL.');
     return PRODUCTION_API;
   }
 
-  console.error('[Dreamland] Missing DREAMLAND_API_URL. Set it in Vercel project settings.');
-  return PRODUCTION_API;
+  console.error('[Dreamland] Missing DREAMLAND_API_URL. Set it in hosting env or use api.yourdomain.com.');
+  return `https://api.${DEFAULT_ROOT_DOMAIN}/v1`;
 }
 
 export const API_BASE = resolveApiBase();
