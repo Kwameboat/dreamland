@@ -9,6 +9,7 @@ use api\modules\v1\models\ProfileCategoryType;
 use api\modules\v1\models\User;
 use common\models\DreamlandSetting;
 use common\helpers\DreamlandUploadLimits;
+use common\helpers\DreamlandWasabiStorage;
 use Yii;
 use yii\filters\auth\CompositeAuth;
 use yii\filters\auth\HttpBearerAuth;
@@ -54,7 +55,11 @@ class DreamlandMetaController extends Controller
             'ai_capabilities' => $this->aiCapabilities(),
             'dev_mode' => (bool) (Yii::$app->params['dreamlandDevMode'] ?? false),
             'api_base' => rtrim((string) (Yii::$app->params['siteUrl'] ?? 'http://localhost:8080'), '/') . '/v1',
-            'uploads_base' => rtrim((string) (Yii::$app->params['siteUrl'] ?? 'http://localhost:8080'), '/') . '/frontend/web/uploads/image',
+            'uploads_base' => DreamlandWasabiStorage::uploadsBaseForApi(),
+            'storage_system' => DreamlandWasabiStorage::isConfigured() ? 'wasabi' : 'local',
+            'wasabi_public_url' => DreamlandWasabiStorage::isConfigured()
+                ? DreamlandWasabiStorage::publicFolderUrl((string) (Yii::$app->params['pathUploadImageFolder'] ?? 'image'))
+                : null,
         ];
     }
 

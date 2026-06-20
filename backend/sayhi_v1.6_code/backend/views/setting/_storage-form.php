@@ -37,7 +37,7 @@ use yii\widgets\ActiveForm;
                 <?php  echo  $form->field($model, 'wasabi_secret_key')->textInput(['maxlength' => true]) ?>
                 <?php  echo  $form->field($model, 'wasabi_region')->textInput(['maxlength' => true]) ?>
                 <?php  echo  $form->field($model, 'wasabi_bucket')->textInput(['maxlength' => true]) ?>
-                <?php  echo  $form->field($model, 'wasabi_access_url')->textInput(['maxlength' => true])->hint('Enter endpoit URL (eg. https://s3.[bucket_region].wasabisys.com)') ?>
+                <?php echo $form->field($model, 'wasabi_access_url')->textInput(['maxlength' => true])->hint('S3 endpoint, e.g. https://s3.us-east-1.wasabisys.com (region must match your bucket). Public files: https://s3.REGION.wasabisys.com/BUCKET_NAME/folder/file.jpg') ?>
             </div>
         </div>
     </div>

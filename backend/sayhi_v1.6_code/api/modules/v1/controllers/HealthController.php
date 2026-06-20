@@ -2,6 +2,7 @@
 
 namespace api\modules\v1\controllers;
 
+use common\helpers\DreamlandWasabiStorage;
 use Yii;
 use yii\rest\Controller;
 
@@ -41,6 +42,7 @@ class HealthController extends Controller
         $liveOk = Yii::$app->has('dreamlandLive') ? Yii::$app->dreamlandLive->isHealthy() : false;
         $modOk = Yii::$app->has('dreamlandModeration') ? Yii::$app->dreamlandModeration->isHealthy() : false;
         $uploadsWritable = Yii::$app->has('fileUpload') ? Yii::$app->fileUpload->isLocalDiskWritable() : false;
+        $wasabi = DreamlandWasabiStorage::testConnection();
         $aiOk = Yii::$app->has('dreamlandAi') ? Yii::$app->dreamlandAi->isEnabled() : false;
         $health = $modOk && Yii::$app->has('dreamlandModeration')
             ? Yii::$app->dreamlandModeration->getHealth()
@@ -53,6 +55,8 @@ class HealthController extends Controller
             'checks' => [
                 'database' => $dbOk,
                 'uploads_writable' => $uploadsWritable,
+                'wasabi_storage' => $wasabi['ok'] ?? false,
+                'wasabi_message' => $wasabi['message'] ?? '',
                 'safety_queue_depth' => $queueDepth,
                 'live_server' => $liveOk,
                 'moderation_agent' => $modOk,
@@ -77,7 +81,7 @@ class HealthController extends Controller
             'pwa' => $pwaUrl,
             'api' => $apiBase . '/v1',
             'admin' => $adminUrl,
-            'uploads' => $apiBase . '/frontend/web/uploads/image',
+            'uploads' => DreamlandWasabiStorage::uploadsBaseForApi(),
             'live_signaling' => (string) ($params['dreamlandLiveSignalingUrl'] ?? 'http://localhost:4443'),
             'live_ok' => $liveOk,
             'moderation_agent' => (string) ($params['dreamlandModerationAgentUrl'] ?? 'http://localhost:4444'),

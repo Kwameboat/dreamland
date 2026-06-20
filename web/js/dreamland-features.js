@@ -24,6 +24,10 @@ export function createDreamlandFeatures(ctx) {
       maxReelDurationSeconds = Number(res.data?.max_reel_duration_seconds) || 60;
       maxReelUploadMb = Number(res.data?.max_reel_upload_mb) || 128;
       maxLiveDurationSeconds = Number(res.data?.max_live_duration_seconds) || 3600;
+      const uploadsBase = res.data?.uploads_base || res.raw?.data?.uploads_base;
+      if (uploadsBase) {
+        localStorage.setItem('dreamland_uploads', uploadsBase);
+      }
       if (vapidPublicKey) {
         localStorage.setItem('dreamland_vapid', vapidPublicKey);
       }

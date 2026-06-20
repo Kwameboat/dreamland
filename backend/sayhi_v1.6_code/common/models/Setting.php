@@ -5,6 +5,7 @@ use yii\helpers\ArrayHelper;
 use yii\web\ForbiddenHttpException;
 use yii\helpers\Url;
 use yii\base\ErrorException;
+use common\helpers\DreamlandWasabiStorage;
 
 /**
  * This is the model class for table "countryy".
@@ -63,7 +64,7 @@ class Setting extends \yii\db\ActiveRecord
             }"],
 
             [['wasabi_access_key','wasabi_secret_key','wasabi_region','wasabi_bucket','wasabi_access_url'], 'required', 'on' => 'storageSetting', 'when' => function($model) {
-                return $model->storage_system == Setting::STORAGE_SYSTEM_S3; 
+                return $model->storage_system == Setting::STORAGE_SYSTEM_WASABI; 
             }, 'whenClient' => "function(attribute, value) {
                 return $('#storage_system_id').val() == '4'; // Client-side condition
             }"],
@@ -249,6 +250,7 @@ public function getSettingData()
             throw new \RuntimeException('Unable to initialize settings row.');
         }
     }
+    DreamlandWasabiStorage::applyEnvToSetting($setting);
     return $setting;
 }
     

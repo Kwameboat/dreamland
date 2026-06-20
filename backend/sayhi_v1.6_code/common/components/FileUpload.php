@@ -5,6 +5,7 @@ use Yii;
 use yii\base\Component;
 use common\models\Setting;
 use common\models\User;
+use common\helpers\DreamlandWasabiStorage;
 
 use AzureOss\FlysystemAzureBlobStorage\AzureBlobStorageAdapter;
 use AzureOss\Storage\Blob\BlobServiceClient;
@@ -78,8 +79,12 @@ class FileUpload extends Component
 
     private function effectiveStorageSystem(): int
     {
-        if (getenv('DREAMLAND_FORCE_LOCAL_UPLOADS') === '1') {
+        if (getenv('DREAMLAND_FORCE_LOCAL_UPLOADS') === '1' && !DreamlandWasabiStorage::isEnvEnabled()) {
             return self::STORAGE_SYSTEM_LOCAL;
+        }
+
+        if (DreamlandWasabiStorage::isConfigured($this->settingData)) {
+            return self::STORAGE_SYSTEM_WASABI;
         }
 
         $storage = (int) ($this->settingData->storage_system ?? self::STORAGE_SYSTEM_LOCAL);
@@ -220,36 +225,16 @@ class FileUpload extends Component
             } else if ($storageSystem == FileUpload::STORAGE_SYSTEM_WASABI) {
 
                 $fileLocation = $this->getUploadedLocation($type);
-               // print_r($fileLocation);
-                $wasabiKey = $this->settingData->wasabi_access_key;
-                $wasabiSecret = $this->settingData->wasabi_secret_key;
-                $region = $this->settingData->wasabi_region;
-                $bucket = $this->settingData->wasabi_bucket;
-                $wasabiAccessUrl = $this->settingData->wasabi_access_url;
-                
+                DreamlandWasabiStorage::putLocalFile(
+                    (string) $fileLocation['folder'],
+                    $mediaFileName,
+                    $imagePath,
+                    (string) ($mediaFile->type ?: 'application/octet-stream'),
+                    $this->settingData
+                );
 
-                $s3Client = new S3Client([
-                    'version' => 'latest',
-                    'region'  => $region,
-                    'endpoint' => $wasabiAccessUrl,
-                    'credentials' => [
-                        'key'    => $wasabiKey,
-                        'secret' => $wasabiSecret,
-                    ]
-                   
-                ]);
-                $keyObject = './' . $fileLocation['folder'] . '/' . $mediaFileName;
-                $result = $s3Client->putObject([
-                    'Bucket' => $bucket,
-                    'Key'    => $keyObject,
-                    'SourceFile' => $imagePath,
-                    'ACL'    => 'public-read', // Change based on your needs
-                ]);
-                
-
-              
-                $fileUrl = $fileLocation['folderLocation'] . "/" . $mediaFileName;
-                $fileResponse = ['file' => $mediaFileName, 'fileUrl' => $fileUrl,'fileType'=>$fileType];
+                $fileUrl = $fileLocation['folderLocation'] . '/' . $mediaFileName;
+                $fileResponse = ['file' => $mediaFileName, 'fileUrl' => $fileUrl, 'fileType' => $fileType];
               
             } else if ($storageSystem == FileUpload::STORAGE_SYSTEM_AZURE) {
                 $fileLocation = $this->getUploadedLocation($type);
@@ -277,6 +262,9 @@ class FileUpload extends Component
                 $fileResponse = $this->storeOnLocalDisk($type, $mediaFile, $mediaFileName, $fileType);
             }
             } catch (\Throwable $e) {
+                if (DreamlandWasabiStorage::isEnvEnabled()) {
+                    throw new \RuntimeException('Wasabi upload failed: ' . $e->getMessage(), 0, $e);
+                }
                 Yii::warning('Primary upload storage failed: ' . $e->getMessage(), __METHOD__);
                 $fileResponse = $this->storeOnLocalDisk($type, $mediaFile, $mediaFileName, $fileType);
             }
@@ -458,8 +446,8 @@ class FileUpload extends Component
 
         } else if ($storageSystem == FileUpload::STORAGE_SYSTEM_WASABI) {
 
-            $folderPath['folder'] = $folder;   
-            $folderPath['folderLocation'] = $this->settingData->wasabi_access_url . '/' .$this->settingData->wasabi_bucket.'/'. $folder;
+            $folderPath['folder'] = $folder;
+            $folderPath['folderLocation'] = DreamlandWasabiStorage::publicFolderUrl($folder, $this->settingData);
         } else if ($storageSystem == FileUpload::STORAGE_SYSTEM_AZURE) {
             $accountName = $this->settingData->azure_account_name;
             $container = $this->settingData->azure_container;
@@ -508,6 +496,12 @@ class FileUpload extends Component
        
         } else if ($storageSystem == FileUpload::STORAGE_SYSTEM_AZURE) {
        
+        } else if ($storageSystem == FileUpload::STORAGE_SYSTEM_WASABI) {
+            try {
+                DreamlandWasabiStorage::deleteObject((string) $fileLocation['folder'], $fileName, $this->settingData);
+            } catch (\Throwable $e) {
+                Yii::warning('Wasabi delete failed: ' . $e->getMessage(), __METHOD__);
+            }
         } else { // local storage
 
             $filename =  $fileLocation['folder'] . "/" . $fileName;

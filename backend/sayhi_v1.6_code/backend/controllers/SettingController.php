@@ -395,28 +395,49 @@ class SettingController extends Controller
             
             $modelUser = new User();
             $modelUser->checkPageAccess();
-            if($model->storage_system== $model::STORAGE_SYSTEM_S3){
-                $model->azure_account_name=null;
-                $model->azure_account_key=null;
-                $model->azure_container=null;
-            }else if($model->storage_system== $model::STORAGE_SYSTEM_AZURE){
-                $model->aws_access_key_id=null;
-                $model->aws_secret_key=null;
-                $model->aws_region=null;
-                $model->aws_bucket=null;
-                $model->aws_access_url=null;
-            }else{
-
-                $model->aws_access_key_id=null;
-                $model->aws_secret_key=null;
-                $model->aws_region=null;
-                $model->aws_bucket=null;
-                $model->aws_access_url=null;
-
-                $model->azure_account_name=null;
-                $model->azure_account_key=null;
-                $model->azure_container=null;
-                
+            if ($model->storage_system == $model::STORAGE_SYSTEM_S3) {
+                $model->azure_account_name = null;
+                $model->azure_account_key = null;
+                $model->azure_container = null;
+                $model->wasabi_access_key = null;
+                $model->wasabi_secret_key = null;
+                $model->wasabi_region = null;
+                $model->wasabi_bucket = null;
+                $model->wasabi_access_url = null;
+            } elseif ($model->storage_system == $model::STORAGE_SYSTEM_AZURE) {
+                $model->aws_access_key_id = null;
+                $model->aws_secret_key = null;
+                $model->aws_region = null;
+                $model->aws_bucket = null;
+                $model->aws_access_url = null;
+                $model->wasabi_access_key = null;
+                $model->wasabi_secret_key = null;
+                $model->wasabi_region = null;
+                $model->wasabi_bucket = null;
+                $model->wasabi_access_url = null;
+            } elseif ($model->storage_system == $model::STORAGE_SYSTEM_WASABI) {
+                $model->aws_access_key_id = null;
+                $model->aws_secret_key = null;
+                $model->aws_region = null;
+                $model->aws_bucket = null;
+                $model->aws_access_url = null;
+                $model->azure_account_name = null;
+                $model->azure_account_key = null;
+                $model->azure_container = null;
+            } else {
+                $model->aws_access_key_id = null;
+                $model->aws_secret_key = null;
+                $model->aws_region = null;
+                $model->aws_bucket = null;
+                $model->aws_access_url = null;
+                $model->azure_account_name = null;
+                $model->azure_account_key = null;
+                $model->azure_container = null;
+                $model->wasabi_access_key = null;
+                $model->wasabi_secret_key = null;
+                $model->wasabi_region = null;
+                $model->wasabi_bucket = null;
+                $model->wasabi_access_url = null;
             }
 
             if($model->save()){
