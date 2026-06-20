@@ -60,9 +60,20 @@ class FileUpload extends Component
     function __construct()
     {
         $modelSetting = new Setting();
-        $settingResult = $modelSetting->find()->one();
-        $this->settingData = $settingResult;
-       
+        $this->settingData = $modelSetting->getSettingData();
+        if (!$this->settingData) {
+            throw new \RuntimeException('Application settings row is missing.');
+        }
+    }
+
+    private function ensureUploadDir(string $dir): void
+    {
+        if (is_dir($dir)) {
+            return;
+        }
+        if (!@mkdir($dir, 0775, true) && !is_dir($dir)) {
+            throw new \RuntimeException('Upload folder is not writable: ' . $dir);
+        }
     }
 
     /**
@@ -81,7 +92,7 @@ class FileUpload extends Component
         $folderPath;
         $files = [];
 
-        $storageSystem = $this->settingData->storage_system;
+        $storageSystem = (int) ($this->settingData->storage_system ?? self::STORAGE_SYSTEM_LOCAL);
               
 
         if ($isMultiple) { // multiple files
@@ -198,8 +209,11 @@ class FileUpload extends Component
                 $fileLocation = $this->getUploadedLocation($type);
 
                 $imagePath = $fileLocation['folder'] . "/" . $mediaFileName;
+                $this->ensureUploadDir($fileLocation['folder']);
                 $fileUrl = $fileLocation['folderLocation'] . "/" . $mediaFileName;
-                $mediaFile->saveAs($imagePath, false);
+                if (!$mediaFile->saveAs($imagePath, false)) {
+                    throw new \RuntimeException('Could not save uploaded file.');
+                }
                 $fileResponse = ['file' => $mediaFileName, 'fileUrl' => $fileUrl,'fileType'=>$fileType];
 
             }
@@ -208,7 +222,7 @@ class FileUpload extends Component
         $isProhabited=false;
         $moderationReferenceId='';
         
-        $iscontentModerationGateway = (int)$this->settingData->content_moderation_gateway;
+        $iscontentModerationGateway = (int)($this->settingData->content_moderation_gateway ?? 0);
 
        if(@Yii::$app->user->identity->role){
             if(Yii::$app->user->identity->role==User::ROLE_ADMIN || Yii::$app->user->identity->role==User::ROLE_SUBADMIN){
@@ -218,7 +232,14 @@ class FileUpload extends Component
 
          
         if($iscontentModerationGateway){
-            list($isProhabited, $moderationReferenceId) = Yii::$app->contentModeration->validteContent($fileUrl);
+            try {
+                $moderationResult = Yii::$app->contentModeration->validteContent($fileUrl);
+                if (is_array($moderationResult) && count($moderationResult) >= 2) {
+                    list($isProhabited, $moderationReferenceId) = $moderationResult;
+                }
+            } catch (\Throwable $e) {
+                Yii::warning('Content moderation skipped: ' . $e->getMessage(), __METHOD__);
+            }
             if($isProhabited){
                 $fileResponse['file']='';
                 $fileResponse['fileUrl']='';
@@ -361,7 +382,7 @@ class FileUpload extends Component
 
     public function getFolderLocation($folder)
     {
-         $storageSystem = $this->settingData->storage_system;
+         $storageSystem = (int) ($this->settingData->storage_system ?? self::STORAGE_SYSTEM_LOCAL);
         $folderPath = [];
         if ($storageSystem == FileUpload::STORAGE_SYSTEM_AWS_S3) {
 
@@ -390,7 +411,7 @@ class FileUpload extends Component
     public function deleteFile($type, $fileName)
     {
         $fileLocation = $this->getUploadedLocation($type);
-        $storageSystem = $this->settingData->storage_system;
+        $storageSystem = (int) ($this->settingData->storage_system ?? self::STORAGE_SYSTEM_LOCAL);
        
         if ($storageSystem == FileUpload::STORAGE_SYSTEM_AWS_S3) {
             $filename =  $fileLocation['folder'] . "/" . $fileName;

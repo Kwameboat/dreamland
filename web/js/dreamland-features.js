@@ -8,6 +8,9 @@ export function createDreamlandFeatures(ctx) {
 
   let previewSeconds = 3;
   let vapidPublicKey = '';
+  let maxReelDurationSeconds = 60;
+  let maxReelUploadMb = 128;
+  let maxLiveDurationSeconds = 3600;
   let categories = [];
   let watchTimer = null;
   let watchAccum = 0;
@@ -18,12 +21,26 @@ export function createDreamlandFeatures(ctx) {
       const res = await api(API_ROUTES.settings);
       previewSeconds = Number(res.data?.preview_seconds) || 3;
       vapidPublicKey = res.data?.vapid_public_key || localStorage.getItem('dreamland_vapid') || '';
+      maxReelDurationSeconds = Number(res.data?.max_reel_duration_seconds) || 60;
+      maxReelUploadMb = Number(res.data?.max_reel_upload_mb) || 128;
+      maxLiveDurationSeconds = Number(res.data?.max_live_duration_seconds) || 3600;
       if (vapidPublicKey) {
         localStorage.setItem('dreamland_vapid', vapidPublicKey);
       }
+      localStorage.setItem('dreamland_upload_limits', JSON.stringify({
+        maxReelDurationSeconds,
+        maxReelUploadMb,
+        maxLiveDurationSeconds,
+      }));
     } catch {
       previewSeconds = 3;
       vapidPublicKey = localStorage.getItem('dreamland_vapid') || '';
+      try {
+        const cached = JSON.parse(localStorage.getItem('dreamland_upload_limits') || '{}');
+        maxReelDurationSeconds = Number(cached.maxReelDurationSeconds) || 60;
+        maxReelUploadMb = Number(cached.maxReelUploadMb) || 128;
+        maxLiveDurationSeconds = Number(cached.maxLiveDurationSeconds) || 3600;
+      } catch { /* defaults */ }
     }
     return previewSeconds;
   }
@@ -40,6 +57,22 @@ export function createDreamlandFeatures(ctx) {
 
   function getPreviewSeconds() {
     return previewSeconds;
+  }
+
+  function getMaxReelDurationSeconds() {
+    return maxReelDurationSeconds;
+  }
+
+  function getMaxReelUploadMb() {
+    return maxReelUploadMb;
+  }
+
+  function getMaxReelUploadBytes() {
+    return maxReelUploadMb * 1024 * 1024;
+  }
+
+  function getMaxLiveDurationSeconds() {
+    return maxLiveDurationSeconds;
   }
 
   function renderGenreFilter(container, onChange) {
@@ -295,6 +328,11 @@ export function createDreamlandFeatures(ctx) {
   return {
     init,
     getPreviewSeconds,
+    getMaxReelDurationSeconds,
+    getMaxReelUploadMb,
+    getMaxReelUploadBytes,
+    getMaxLiveDurationSeconds,
+    loadSettings,
     renderGenreFilter,
     followCreator,
     loadStreakPanel,

@@ -11,6 +11,33 @@ class DreamlandSetting extends ActiveRecord
         return 'dreamland_settings';
     }
 
+    public function rules()
+    {
+        return [
+            [[
+                'platform_commission_percent',
+                'preview_seconds',
+                'streak_freeze_cost',
+                'streak_watch_threshold_seconds',
+                'streak_game_score_threshold',
+                'max_reel_duration_seconds',
+                'max_reel_upload_mb',
+                'max_live_duration_seconds',
+            ], 'integer'],
+            [['paystack_public_key', 'paystack_secret_key', 'vapid_public_key'], 'string'],
+            [['vapid_private_key'], 'string'],
+        ];
+    }
+
+    public function attributeLabels()
+    {
+        return [
+            'max_reel_duration_seconds' => 'Max reel duration (seconds)',
+            'max_reel_upload_mb' => 'Max reel upload size (MB)',
+            'max_live_duration_seconds' => 'Max live duration (seconds)',
+        ];
+    }
+
     public static function getSettings()
     {
         $settings = static::findOne(1);

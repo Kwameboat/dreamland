@@ -990,12 +990,20 @@ class UserController extends ActiveController
         }
         if ($model->save(false)) {
             if ($model->language_id) {
-                $modelUserLanguage = new UserLanguage();
-                $modelUserLanguage->updateUserLanguage($id, $model->language_id);
+                try {
+                    $modelUserLanguage = new UserLanguage();
+                    $modelUserLanguage->updateUserLanguage($id, $model->language_id);
+                } catch (\Throwable $e) {
+                    Yii::warning('Profile language update skipped: ' . $e->getMessage(), __METHOD__);
+                }
             }
             if ($model->interest_id) {
-                $modelUserInterest = new UserInterest();
-                $modelUserInterest->updateUserInterest($id, $model->interest_id);
+                try {
+                    $modelUserInterest = new UserInterest();
+                    $modelUserInterest->updateUserInterest($id, $model->interest_id);
+                } catch (\Throwable $e) {
+                    Yii::warning('Profile interest update skipped: ' . $e->getMessage(), __METHOD__);
+                }
             }
           
 
@@ -1003,6 +1011,11 @@ class UserController extends ActiveController
             return $response;
 
         }
+
+        return [
+            'statusCode' => 422,
+            'message' => 'Could not save profile.',
+        ];
 
     }
 
@@ -1442,14 +1455,16 @@ class UserController extends ActiveController
      */
     public function actionUpdateProfileImage()
     {
-        $id = Yii::$app->user->identity->id;
-        $model = $this->findModel($id);
+        try {
+            $id = Yii::$app->user->identity->id;
+            $model = $this->findModel($id);
 
-        $preImage = $model->image;
-        $model->scenario = 'updateProfileImage';
+            $model->scenario = 'updateProfileImage';
 
+            if (!Yii::$app->request->isPost) {
+                return ['statusCode' => 405, 'message' => 'Method not allowed.'];
+            }
 
-        if (Yii::$app->request->isPost) {
             $model->load(Yii::$app->getRequest()->getBodyParams(), '');
             $model->imageFile = UploadedFile::getInstanceByName('imageFile');
             if (!$model->validate()) {
@@ -1458,32 +1473,35 @@ class UserController extends ActiveController
                 return $response;
             }
 
-            if ($model->imageFile) {
-
-                
-                $type = Yii::$app->fileUpload::TYPE_USER;
-                $files = Yii::$app->fileUpload->uploadFile($model->imageFile, $type, false);
-
-                $model->image = $files[0]['file'];
-
-
-                //  $s3->commands()->delete('./'.Yii::$app->params['pathUploadUserFolder'].'/'.$preImage)->execute(); /// delete previous
-                //$promise = $s3->commands()->upload('./video-thumb/'.$imageName, $imagePath)->async()->execute();
+            if (!$model->imageFile) {
+                return ['statusCode' => 422, 'message' => 'imageFile is required.'];
             }
 
-
-
-            if ($model->save()) {
-
-                $response['message'] = 'Profile image updated successfully';
-                return $response;
-
+            $type = Yii::$app->fileUpload::TYPE_USER;
+            $files = Yii::$app->fileUpload->uploadFile($model->imageFile, $type, false);
+            if (empty($files[0]['file'])) {
+                return [
+                    'statusCode' => 422,
+                    'message' => !empty($files[0]['isProhabited'])
+                        ? 'Photo was blocked by content moderation.'
+                        : 'Could not save profile photo — storage may be misconfigured.',
+                ];
             }
 
+            $model->image = $files[0]['file'];
 
+            if ($model->save(false)) {
+                return ['message' => 'Profile image updated successfully'];
+            }
+
+            return ['statusCode' => 422, 'message' => 'Could not update profile image.'];
+        } catch (\Throwable $e) {
+            Yii::error($e->getMessage(), __METHOD__);
+            return [
+                'statusCode' => 500,
+                'message' => 'Could not upload profile photo. ' . $e->getMessage(),
+            ];
         }
-
-
     }
 
     /**
@@ -1894,13 +1912,15 @@ class UserController extends ActiveController
      */
     public function actionUpdateProfileCoverImage()
     {
-        $id = Yii::$app->user->identity->id;
-        $model = $this->findModel($id);
+        try {
+            $id = Yii::$app->user->identity->id;
+            $model = $this->findModel($id);
+            $model->scenario = 'updateProfileCoverImage';
 
-        $model->scenario = 'updateProfileCoverImage';
+            if (!Yii::$app->request->isPost) {
+                return ['statusCode' => 405, 'message' => 'Method not allowed.'];
+            }
 
-
-        if (Yii::$app->request->isPost) {
             $model->load(Yii::$app->getRequest()->getBodyParams(), '');
             $model->imageFile = UploadedFile::getInstanceByName('imageFile');
             if (!$model->validate()) {
@@ -1909,28 +1929,35 @@ class UserController extends ActiveController
                 return $response;
             }
 
-            if ($model->imageFile) {
-
-              
-                $type = Yii::$app->fileUpload::TYPE_USER;
-                $files =Yii::$app->fileUpload->uploadFile($model->imageFile, $type, false);
-                $model->cover_image = $files[0]['file'];
-
+            if (!$model->imageFile) {
+                return ['statusCode' => 422, 'message' => 'imageFile is required.'];
             }
 
-
-
-            if ($model->save()) {
-
-                $response['message'] = 'Profile cover image updated successfully';
-                return $response;
-
+            $type = Yii::$app->fileUpload::TYPE_USER;
+            $files = Yii::$app->fileUpload->uploadFile($model->imageFile, $type, false);
+            if (empty($files[0]['file'])) {
+                return [
+                    'statusCode' => 422,
+                    'message' => !empty($files[0]['isProhabited'])
+                        ? 'Cover photo was blocked by content moderation.'
+                        : 'Could not save cover photo — storage may be misconfigured.',
+                ];
             }
 
+            $model->cover_image = $files[0]['file'];
 
+            if ($model->save(false)) {
+                return ['message' => 'Profile cover image updated successfully'];
+            }
+
+            return ['statusCode' => 422, 'message' => 'Could not update cover image.'];
+        } catch (\Throwable $e) {
+            Yii::error($e->getMessage(), __METHOD__);
+            return [
+                'statusCode' => 500,
+                'message' => 'Could not upload cover photo. ' . $e->getMessage(),
+            ];
         }
-
-
     }
 
     // Login With Phone Number

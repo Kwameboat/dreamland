@@ -16,37 +16,40 @@ class ContentModeration extends Component
   public function validteContent($fileUrl)
   {
     $type = '';
-    //$fileUrl = 'https://doyjvy7js9gq7.cloudfront.net/image/17115565979763_20240327_162317_c2fe2ec473.png';
-    //$fileUrl = 'https://doyjvy7js9gq7.cloudfront.net/job-application/17151042918060_20240507_175131_6a7a2cdb3d.jpg';
-
-    //$fileUrl = 'https://doyjvy7js9gq7.cloudfront.net/job-application/17151049166566_20240507_180156_75eeb1a6a7.mp4';  //full vidio adult
-    //$fileUrl = 'https://doyjvy7js9gq7.cloudfront.net/job-application/17153372494062_20240510_103409_96b1c65d29.mp4';// video non adult
-
-    
-
-
-    $headers = get_headers($fileUrl, 1);
-    $mimeType = $headers["Content-Type"];
-    if (strpos($mimeType, 'image') !== false) { //image
-      $type = 'IMAGE';
-    }
-    // Check if the file is a video
-    elseif (strpos($mimeType, 'video') !== false) { //vidoe
-      $type = 'VIDEO';
-    }
-
-
-    $dataFile = [];
-
-    $dataFile['fileUrl'] = $fileUrl;
-    $dataFile['type'] = $type;
 
     $modelSetting = new Setting();
+    $settingResult = $modelSetting->getSettingData();
+    if (!$settingResult) {
+      return [false, ''];
+    }
 
-    $settingResult = $modelSetting->find()->one();
-    $contentModerationGateway = (int) $settingResult->content_moderation_gateway;
-    
-    //$contentModerationGateway = 2; //sightengine =1, amazone rekognition=2
+    $contentModerationGateway = (int) ($settingResult->content_moderation_gateway ?? 0);
+    if ($contentModerationGateway < 1) {
+      return [false, ''];
+    }
+
+    try {
+      $headers = @get_headers($fileUrl, 1);
+      if (!$headers) {
+        return [false, ''];
+      }
+      $mimeType = is_array($headers['Content-Type'] ?? null)
+        ? ($headers['Content-Type'][0] ?? '')
+        : ($headers['Content-Type'] ?? '');
+      if (strpos($mimeType, 'image') !== false) {
+        $type = 'IMAGE';
+      } elseif (strpos($mimeType, 'video') !== false) {
+        $type = 'VIDEO';
+      } else {
+        return [false, ''];
+      }
+    } catch (\Throwable $e) {
+      return [false, ''];
+    }
+
+    $dataFile = [];
+    $dataFile['fileUrl'] = $fileUrl;
+    $dataFile['type'] = $type;
 
     if ($contentModerationGateway == 1) {
       $dataFile['sightengineApiUser'] = $settingResult->sightengine_api_user;
@@ -114,6 +117,7 @@ class ContentModeration extends Component
       }
     }
 
+    return [false, ''];
   }
 
  

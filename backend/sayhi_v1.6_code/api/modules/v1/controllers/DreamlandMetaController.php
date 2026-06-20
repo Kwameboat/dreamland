@@ -8,6 +8,7 @@ use api\modules\v1\models\PostSearch;
 use api\modules\v1\models\ProfileCategoryType;
 use api\modules\v1\models\User;
 use common\models\DreamlandSetting;
+use common\helpers\DreamlandUploadLimits;
 use Yii;
 use yii\filters\auth\CompositeAuth;
 use yii\filters\auth\HttpBearerAuth;
@@ -30,6 +31,7 @@ class DreamlandMetaController extends Controller
     public function actionSettings()
     {
         $s = DreamlandSetting::getSettings();
+        $uploadLimits = DreamlandUploadLimits::forApi();
         return [
             'preview_seconds' => (int) ($s->preview_seconds ?? 3),
             'streak_freeze_cost' => (int) ($s->streak_freeze_cost ?? 5),
@@ -37,6 +39,10 @@ class DreamlandMetaController extends Controller
             'platform_commission_percent' => (int) ($s->platform_commission_percent ?? 20),
             'vapid_public_key' => (string) ($s->vapid_public_key ?? ''),
             'push_enabled' => !empty($s->vapid_public_key),
+            'max_reel_duration_seconds' => $uploadLimits['max_reel_duration_seconds'],
+            'max_reel_upload_mb' => $uploadLimits['max_reel_upload_mb'],
+            'max_reel_upload_bytes' => $uploadLimits['max_reel_upload_bytes'],
+            'max_live_duration_seconds' => $uploadLimits['max_live_duration_seconds'],
             'live_signaling_url' => (string) (Yii::$app->params['dreamlandLiveSignalingUrl'] ?? 'http://localhost:4443'),
             'live_enabled' => Yii::$app->has('dreamlandLive') ? Yii::$app->dreamlandLive->isHealthy() : false,
             'moderation_agent_url' => (string) (Yii::$app->params['dreamlandModerationAgentUrl'] ?? 'http://localhost:4444'),

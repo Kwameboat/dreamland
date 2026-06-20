@@ -8,6 +8,7 @@ use api\modules\v1\models\User;
 use api\modules\v1\models\UserLiveHistory;
 use common\components\DreamlandContentReview;
 use common\helpers\DreamlandCreatorApproval;
+use common\helpers\DreamlandUploadLimits;
 use common\models\PurchasedLive;
 use common\models\PurchasedVideo;
 use Yii;
@@ -213,6 +214,11 @@ class CreatorController extends ActiveController
             ];
         }
 
+        $limitError = DreamlandUploadLimits::validateVideoFile($videoFile);
+        if ($limitError !== null) {
+            return $limitError;
+        }
+
         $title = trim((string) Yii::$app->request->post('title', 'New Dreamland reel'));
         $description = trim((string) Yii::$app->request->post('description', ''));
         $isPaid = (int) Yii::$app->request->post('is_paid', 0) === 1;
@@ -232,7 +238,10 @@ class CreatorController extends ActiveController
             false
         );
         if (empty($uploaded[0]['file'])) {
-            return ['statusCode' => 422, 'message' => 'Video upload failed.'];
+            $msg = !empty($uploaded[0]['isProhabited'])
+                ? 'Video was blocked by content moderation.'
+                : 'Video upload failed — check API storage permissions.';
+            return ['statusCode' => 422, 'message' => $msg];
         }
 
         $post = new Post();

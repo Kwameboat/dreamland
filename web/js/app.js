@@ -269,7 +269,19 @@ const state = {
   studioDraft: null,
 };
 
-const MAX_UPLOAD_BYTES = 80 * 1024 * 1024;
+const MAX_UPLOAD_BYTES_DEFAULT = 128 * 1024 * 1024;
+
+function maxUploadBytes() {
+  return dlFeatures?.getMaxReelUploadBytes?.() || MAX_UPLOAD_BYTES_DEFAULT;
+}
+
+function maxReelDurationSeconds() {
+  return dlFeatures?.getMaxReelDurationSeconds?.() || 60;
+}
+
+function maxLiveDurationSeconds() {
+  return dlFeatures?.getMaxLiveDurationSeconds?.() || 3600;
+}
 
 const STUDIO_EDIT_FILTERS = {
   none: { label: 'Original', css: 'none' },
@@ -313,6 +325,7 @@ let recordFacingMode = 'user';
 let recordCaptureOpen = false;
 let liveBroadcastOpen = false;
 let liveBroadcastActive = false;
+let liveMaxTimer = null;
 let liveFacingMode = 'user';
 let recordTimerInterval = null;
 let recordElapsedSec = 0;
@@ -1256,8 +1269,9 @@ function bindCreatorStudioEvents() {
       if (nameEl) nameEl.textContent = 'Choose video file';
       return;
     }
-    if (file.size > MAX_UPLOAD_BYTES) {
-      showToast('Video must be under 80MB for localhost uploads');
+    if (file.size > maxUploadBytes()) {
+      const mb = dlFeatures?.getMaxReelUploadMb?.() || 128;
+      showToast(`Video must be under ${mb} MB`);
       e.target.value = '';
       if (nameEl) nameEl.textContent = 'Choose video file';
       return;
@@ -1512,7 +1526,7 @@ function startRecordTimer() {
   recordTimerInterval = setInterval(() => {
     recordElapsedSec += 1;
     if (timerEl) timerEl.textContent = formatRecordTimer(recordElapsedSec);
-    if (recordElapsedSec >= 60) stopRecordCaptureRecording();
+    if (recordElapsedSec >= maxReelDurationSeconds()) stopRecordCaptureRecording();
   }, 1000);
 }
 
@@ -1783,6 +1797,13 @@ async function startLiveSession() {
     liveBroadcastActive = true;
     setLiveBroadcastUiStage(true);
     updateLiveBroadcastViewerCount(1);
+    if (liveMaxTimer) clearTimeout(liveMaxTimer);
+    const liveLimitSec = maxLiveDurationSeconds();
+    liveMaxTimer = window.setTimeout(async () => {
+      if (!liveBroadcastActive) return;
+      showToast(`Live limit reached (${Math.round(liveLimitSec / 60)} min)`);
+      await endLiveSession();
+    }, liveLimitSec * 1000);
     showToast(res.message || 'You are live');
     state.creatorDashboard = null;
     await loadCreatorDashboard(true);
@@ -1797,6 +1818,10 @@ async function startLiveSession() {
 }
 
 async function endLiveSession() {
+  if (liveMaxTimer) {
+    clearTimeout(liveMaxTimer);
+    liveMaxTimer = null;
+  }
   const endBtn = document.getElementById('live-broadcast-end');
   if (endBtn) {
     endBtn.disabled = true;
@@ -1986,8 +2011,9 @@ async function ensureStudioDraftBlob(draft) {
 function openStudioEditBench(blob, filename, source = 'file', seed = {}) {
   if (!requireApprovedCreator('upload reels')) return;
   if (!blob) return;
-  if (blob.size > MAX_UPLOAD_BYTES) {
-    showToast('Video must be under 80MB for localhost uploads');
+  if (blob.size > maxUploadBytes()) {
+    const mb = dlFeatures?.getMaxReelUploadMb?.() || 128;
+    showToast(`Video must be under ${mb} MB`);
     return;
   }
   closeStudioEditBench();
@@ -2055,6 +2081,10 @@ function updateStudioEditPreview() {
     video.load();
     video.onloadedmetadata = () => {
       draft.duration = video.duration || 0;
+      const maxDur = maxReelDurationSeconds();
+      if (draft.duration > maxDur + 0.5) {
+        showToast(`Clip is ${Math.ceil(draft.duration)}s — max is ${maxDur}s. Trim before publishing.`);
+      }
       draft.trimEnd = draft.duration;
       if (startInput) {
         startInput.max = String(draft.duration || 100);
@@ -2635,8 +2665,9 @@ async function uploadReelBlob(blob, filename, title, description, isPaid, catego
   if (blob.size < 1024) {
     throw new Error('Video file is empty — record or choose a clip again');
   }
-  if (blob.size > MAX_UPLOAD_BYTES) {
-    throw new Error('Video must be under 80MB for localhost uploads');
+  if (blob.size > maxUploadBytes()) {
+    const mb = dlFeatures?.getMaxReelUploadMb?.() || 128;
+    throw new Error(`Video must be under ${mb} MB`);
   }
 
   const uploadFile = toStudioUploadFile(blob, filename);

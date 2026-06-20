@@ -18,8 +18,10 @@ use yii\widgets\ActiveForm;
         </div>
         <div class="panel-body">
             
-            <?= $form->field($model, 'maximum_video_duration_allowed')->textInput(['maxlength' => true]) ?>
-            <?= $form->field($model, 'free_live_tv_duration_to_view')->textInput(['maxlength' => true]) ?>
+            <?= $form->field($model, 'maximum_video_duration_allowed')->textInput(['maxlength' => true])
+                ->hint('Legacy: max reel length in seconds (Dreamland Settings overrides when set).') ?>
+            <?= $form->field($model, 'free_live_tv_duration_to_view')->textInput(['maxlength' => true])
+                ->hint('Legacy: max live length in seconds.') ?>
             <?= $form->field($model, 'latest_app_download_link')->textInput(['maxlength' => true]) ?>
             <?= $form->field($model, 'disclaimer_url')->textInput(['maxlength' => true]) ?>
             <?= $form->field($model, 'privacy_policy_url')->textInput(['maxlength' => true]) ?>
