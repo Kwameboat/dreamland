@@ -67,8 +67,24 @@ fi
 echo "OK: connected to $DB_NAME"
 
 DB_DIR="$DREAMLAND/doc/db"
-if [ ! -d "$DB_DIR" ]; then
-  echo "Missing $DB_DIR — re-upload dreamland package."
+if [ ! -d "$DB_DIR" ] || [ ! -f "$DB_DIR/sayhi_v1_6.sql" ]; then
+  echo "SQL files missing — downloading from GitHub..."
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if [ -f "$SCRIPT_DIR/download-db-sql.sh" ]; then
+    bash "$SCRIPT_DIR/download-db-sql.sh"
+  elif [ -f "$DREAMLAND/deploy/cpanel/download-db-sql.sh" ]; then
+    bash "$DREAMLAND/deploy/cpanel/download-db-sql.sh"
+  elif [ -f "$DREAMLAND/download-db-sql.sh" ]; then
+    bash "$DREAMLAND/download-db-sql.sh"
+  else
+    curl -fsSL -o /tmp/download-db-sql.sh \
+      https://raw.githubusercontent.com/Kwameboat/dreamland/main/deploy/cpanel/download-db-sql.sh
+    bash /tmp/download-db-sql.sh
+  fi
+fi
+
+if [ ! -f "$DB_DIR/sayhi_v1_6.sql" ]; then
+  echo "Missing $DB_DIR/sayhi_v1_6.sql — run: bash deploy/cpanel/download-db-sql.sh"
   exit 1
 fi
 
