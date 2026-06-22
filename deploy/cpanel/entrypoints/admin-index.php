@@ -30,7 +30,7 @@ require $yiiRoot . '/vendor/autoload.php';
 require $yiiRoot . '/vendor/yiisoft/yii2/Yii.php';
 require $yiiRoot . '/common/config/bootstrap.php';
 
-Yii::setAlias('@webroot', __DIR__);
+Yii::setAlias('@webroot', $yiiRoot . '/backend/web');
 Yii::setAlias('@web', '/admin');
 
 $config = yii\helpers\ArrayHelper::merge(
