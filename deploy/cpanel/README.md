@@ -46,7 +46,16 @@ npm run deploy:cpanel
 node scripts/deploy-cpanel-ftp.js
 ```
 
-## 3. Configure `.env`
+## 3. Database — cPanel MySQL (not Supabase)
+
+Namecheap shared hosting **blocks outbound connections to Supabase**. Use local MySQL:
+
+1. cPanel → **MySQL Databases**
+2. Create database: `dreamland`
+3. Create user + password → add user to database with **ALL PRIVILEGES**
+4. Note the full prefixed names (e.g. `dreaxdjo_dreamland`, `dreaxdjo_dluser`)
+
+## 4. Configure `.env`
 
 Edit `/home/dreaxdjo/dreamland/.env`:
 
@@ -56,15 +65,38 @@ Edit `/home/dreaxdjo/dreamland/.env`:
 | `SITE_URL` | `https://dreamlandgh.app` |
 | `DREAMLAND_STORAGE` | `wasabi` |
 | `WASABI_*` | Your Wasabi keys |
-| `DB_*` | Supabase or cPanel MySQL |
+| `DB_DRIVER` | `mysql` |
+| `DB_HOST` | `localhost` |
+| `DB_NAME` | `dreaxdjo_dreamland` (your cPanel DB name) |
+| `DB_USER` | `dreaxdjo_dluser` (your cPanel DB user) |
+| `DB_PASSWORD` | Your MySQL password |
 | `COOKIE_VALIDATION_KEY` | Random 64-char hex |
+
+Remove or comment out any `DB_HOST=...supabase...` lines.
 
 Generate cookie key:
 ```bash
 php -r "echo bin2hex(random_bytes(32));"
 ```
 
-## 4. Install PHP dependencies (required once)
+## 5. Import MySQL schema + seed data
+
+cPanel → **Terminal**:
+
+```bash
+cd ~/dreamland
+bash deploy/cpanel/setup-mysql.sh
+php scripts/setup-cpanel-mysql.php
+```
+
+If `deploy/cpanel/setup-mysql.sh` is missing, download it:
+
+```bash
+curl -sO https://raw.githubusercontent.com/Kwameboat/dreamland/main/deploy/cpanel/setup-mysql.sh
+bash setup-mysql.sh
+```
+
+## 6. Install PHP dependencies (required once)
 
 cPanel → **Terminal** (or SSH):
 
@@ -73,9 +105,15 @@ cd ~/dreamland
 composer install --no-dev --optimize-autoloader
 ```
 
-If `composer` is not found, use cPanel → **PHP Composer** → select `~/dreamland` → Install.
+If `composer` is not found:
 
-## 5. PHP version
+```bash
+cd ~/dreamland
+curl -sS https://getcomposer.org/installer | php
+php composer.phar install --no-dev --optimize-autoloader
+```
+
+## 7. PHP version
 
 cPanel → **Select PHP Version** → set **8.2** for:
 - `public_html/admin`
@@ -87,7 +125,7 @@ cPanel → **Select PHP Version** → set **8.2** for:
 2. Add public-read bucket policy (see `DreamlandWasabiStorage::PUBLIC_READ_POLICY_TEMPLATE`)
 3. Put keys in `dreamland/.env` OR Admin → Settings → Storage → Wasabi
 
-## 7. Verify
+## 8. Verify
 
 | URL | Expected |
 |-----|----------|
@@ -97,7 +135,7 @@ cPanel → **Select PHP Version** → set **8.2** for:
 
 Default admin: `admin` / `demo123` (change after first login)
 
-## 8. Security
+## 9. Security
 
 - Change cPanel password after setup
 - Change admin password
