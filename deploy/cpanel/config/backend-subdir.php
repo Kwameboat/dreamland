@@ -9,6 +9,7 @@ return [
             'cookieValidationKey' => getenv('COOKIE_VALIDATION_KEY') ?: 'dreamland-cpanel-set-cookie-key',
         ],
         'assetManager' => [
+            'basePath' => '@webroot/assets',
             'baseUrl' => '/admin/assets',
             'linkAssets' => false,
             'appendTimestamp' => true,

@@ -8,7 +8,16 @@ defined('YII_ENV') or define('YII_ENV', getenv('YII_ENV') ?: 'prod');
 $yiiRoot = dirname(__DIR__, 2) . '/dreamland';
 if (!is_dir($yiiRoot)) {
     http_response_code(500);
-    echo 'Dreamland API not found. Upload the dreamland/ folder next to public_html.';
+    header('Content-Type: text/plain; charset=utf-8');
+    echo "Dreamland API not found at: {$yiiRoot}\n";
+    exit;
+}
+
+if (!is_file($yiiRoot . '/vendor/autoload.php')) {
+    http_response_code(500);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo "Composer vendor/ is missing in {$yiiRoot}\n";
+    echo "Run: cd ~/dreamland && composer install --no-dev --optimize-autoloader\n";
     exit;
 }
 
