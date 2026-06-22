@@ -23,17 +23,28 @@ Creates `dist/dreamland-cpanel.zip`.
 
 ## 2. Upload
 
-**Option A — cPanel File Manager**
+**Option A — cPanel File Manager (easiest)**
 1. Log in: https://server360.web-hosting.com/cpanel
 2. File Manager → `/home/dreaxdjo/`
-3. Upload `dreamland-cpanel.zip` → Extract
-4. Ensure `dreamland/` sits next to `public_html/` (not inside it)
-5. Copy everything from extracted `public_html/` into your live `public_html/`
+3. Upload `dist/dreamland-cpanel.zip`
+4. Open **Terminal** in cPanel and run:
+   ```bash
+   cd ~
+   bash dreamland/deploy/cpanel/remote-install.sh
+   ```
+   (Or upload `deploy/cpanel/remote-install.sh` first, then `bash remote-install.sh`)
 
-**Option B — FTP script**
-1. Copy `deploy/cpanel/ftp-credentials.example.json` → `ftp-credentials.local.json`
-2. Fill username/password (never commit this file)
-3. `.\scripts\deploy-cpanel-ftp.ps1`
+**Option B — SSH from your PC (port 21098, not 22)**
+```powershell
+$env:CPANEL_SSH_PASSWORD = 'your-current-cpanel-password'
+$env:CPANEL_SSH_PORT = '21098'
+npm run deploy:cpanel
+```
+
+**Option C — FTP script** (if FTP works)
+```powershell
+node scripts/deploy-cpanel-ftp.js
+```
 
 ## 3. Configure `.env`
 
