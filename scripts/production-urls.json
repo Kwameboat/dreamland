@@ -1,7 +1,7 @@
 {
-  "rootDomain": "dreamland.app",
-  "api": "https://dreamland-t1ck.onrender.com/v1",
-  "uploads": "https://dreamland-t1ck.onrender.com/frontend/web/uploads/image",
-  "pwa": "https://dreamland.app",
-  "admin": "https://dreamland-admin-450i.onrender.com"
+  "rootDomain": "dreamlandgh.app",
+  "api": "https://dreamlandgh.app/api/v1",
+  "uploads": "https://s3.us-east-1.wasabisys.com/dreamland-media/image",
+  "pwa": "https://dreamlandgh.app",
+  "admin": "https://dreamlandgh.app/admin"
 }

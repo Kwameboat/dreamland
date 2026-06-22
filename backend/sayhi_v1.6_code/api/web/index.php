@@ -2,6 +2,7 @@
 defined('YII_DEBUG') or define('YII_DEBUG', filter_var(getenv('YII_DEBUG') ?: '0', FILTER_VALIDATE_BOOLEAN));
 defined('YII_ENV') or define('YII_ENV', getenv('YII_ENV') ?: 'prod');
 
+require __DIR__ . '/../../common/config/load-dotenv.php';
 require __DIR__ . '/../../common/config/render-https.php';
 
 // Browsers preflight OPTIONS before cross-origin JSON POSTs (PWA on Vercel → API on Render).

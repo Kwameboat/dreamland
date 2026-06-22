@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "icons": "node scripts/generate-pwa-icons.js",
-    "build:web": "node scripts/generate-pwa-icons.js && node scripts/generate-vercel-env.js && node scripts/bump-pwa-build.js"
+    "build:web": "node scripts/generate-pwa-icons.js && node scripts/generate-vercel-env.js && node scripts/bump-pwa-build.js",
+    "build:cpanel": "node scripts/build-cpanel-package.js"
   },
   "devDependencies": {
     "sharp": "^0.33.5"

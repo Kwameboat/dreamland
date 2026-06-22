@@ -34,6 +34,7 @@ Thumbs.db
 .vercel/
 dist/
 build/
+deploy/cpanel/ftp-credentials.local.json
 
 # Mobile / Flutter (separate app — not part of web deploy)
 mobile/

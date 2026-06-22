@@ -7,10 +7,10 @@
 return array_merge(
     require __DIR__ . '/params-local.messages.php',
     [
-        'siteUrl' => getenv('SITE_URL') ?: getenv('RENDER_EXTERNAL_URL') ?: 'https://api.dreamland.app',
-        'dreamlandPwaUrl' => getenv('DREAMLAND_PWA_URL') ?: getenv('PWA_URL') ?: 'https://dreamland.app',
-        'dreamlandAdminUrl' => getenv('DREAMLAND_ADMIN_URL') ?: getenv('ADMIN_URL') ?: 'https://dreamland-admin-450i.onrender.com',
-        'dreamlandPaystackCallbackUrl' => getenv('DREAMLAND_PAYSTACK_CALLBACK') ?: ((getenv('DREAMLAND_PWA_URL') ?: getenv('PWA_URL') ?: 'https://dreamland.app') . '/wallet/callback'),
+        'siteUrl' => getenv('SITE_URL') ?: getenv('RENDER_EXTERNAL_URL') ?: 'https://dreamlandgh.app',
+        'dreamlandPwaUrl' => getenv('DREAMLAND_PWA_URL') ?: getenv('PWA_URL') ?: 'https://dreamlandgh.app',
+        'dreamlandAdminUrl' => getenv('DREAMLAND_ADMIN_URL') ?: getenv('ADMIN_URL') ?: 'https://dreamlandgh.app/admin',
+        'dreamlandPaystackCallbackUrl' => getenv('DREAMLAND_PAYSTACK_CALLBACK') ?: ((getenv('DREAMLAND_PWA_URL') ?: getenv('PWA_URL') ?: 'https://dreamlandgh.app') . '/wallet/callback'),
         'dreamlandDevMode' => filter_var(getenv('DREAMLAND_DEV_MODE') ?: '0', FILTER_VALIDATE_BOOLEAN),
         'db' => [
             'driver' => getenv('DB_DRIVER') ?: 'pgsql',
