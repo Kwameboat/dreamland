@@ -24,6 +24,7 @@ fetch "$TMP/VideoPrediction.php" "$BASE/common/models/VideoPrediction.php"
 fetch "$TMP/index.php" "$BASE/backend/views/dreamland-appraisal/index.php"
 fetch "$TMP/dreamland_gamification_mysql.sql" "$BASE/doc/db/dreamland_gamification_mysql.sql"
 fetch "$TMP/apply-dreamland-gamification-migration.php" "$BASE/scripts/apply-dreamland-gamification-migration.php"
+fetch "$TMP/repair-appraisal-post.php" "$BASE/scripts/repair-appraisal-post.php"
 
 install() {
   cp -f "$1" "$2"
@@ -40,6 +41,7 @@ install "$TMP/index.php" "$DL/backend/views/dreamland-appraisal/index.php"
 mkdir -p "$DL/doc/db"
 install "$TMP/dreamland_gamification_mysql.sql" "$DL/doc/db/dreamland_gamification_mysql.sql"
 install "$TMP/apply-dreamland-gamification-migration.php" "$DL/scripts/apply-dreamland-gamification-migration.php"
+install "$TMP/repair-appraisal-post.php" "$DL/scripts/repair-appraisal-post.php"
 
 echo ""
 echo "--- Gamification tables (group watch pot / predictions) ---"
@@ -51,4 +53,5 @@ rm -rf "$DL/api/runtime/cache/"* 2>/dev/null || true
 
 echo ""
 echo "Done. Retry approving the reel in Appraisal Workspace."
+echo "Emergency CLI: php scripts/repair-appraisal-post.php 1 50"
 echo "https://dreamlandgh.app/admin/index.php?r=dreamland-appraisal/index"

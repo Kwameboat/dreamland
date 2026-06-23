@@ -23,43 +23,35 @@ class DreamlandAppraisalService extends Component
             throw new \InvalidArgumentException('Assign a valid credit price before approving paid content.');
         }
 
-        $transaction = Yii::$app->db->beginTransaction();
-        try {
-            if ($isPaid) {
-                $post->price_credits = $priceCredits;
-                self::ensureGamificationTables();
-                self::upsertWatchPot((int) $post->id, $priceCredits);
-                self::upsertPrediction((int) $post->id);
-            }
+        if ($isPaid) {
+            $post->price_credits = $priceCredits;
+            self::ensureGamificationTables();
+            self::setupGamification((int) $post->id, $priceCredits);
+        }
 
-            $post->appraisal_status = 'active';
-            $post->status = Post::STATUS_ACTIVE;
-            if (!$post->save(false)) {
-                throw new \RuntimeException('Could not save video appraisal.');
-            }
-
-            $transaction->commit();
-        } catch (\Throwable $e) {
-            $transaction->rollBack();
-            throw $e;
+        $post->appraisal_status = 'active';
+        $post->status = Post::STATUS_ACTIVE;
+        if (!$post->save(false)) {
+            throw new \RuntimeException('Could not save video appraisal.');
         }
     }
 
     public static function ensureGamificationTables(): void
     {
-        $schema = Yii::$app->db->schema->getTableSchema('group_watch_pots', true);
-        if ($schema !== null) {
+        if (self::gamificationSchemaReady()) {
             return;
         }
 
-        $sqlFile = Yii::getAlias('@common/../doc/db/dreamland_gamification_mysql.sql');
+        $sqlFile = dirname(__DIR__, 2) . '/doc/db/dreamland_gamification_mysql.sql';
         if (!is_file($sqlFile)) {
-            throw new \RuntimeException('Gamification tables are missing and migration SQL was not found.');
+            Yii::warning('Gamification SQL missing at ' . $sqlFile, __METHOD__);
+            return;
         }
 
         $sql = file_get_contents($sqlFile);
         if ($sql === false || trim($sql) === '') {
-            throw new \RuntimeException('Gamification migration SQL is empty.');
+            Yii::warning('Gamification SQL file is empty.', __METHOD__);
+            return;
         }
 
         foreach (array_filter(array_map('trim', preg_split('/;\s*\n/', $sql))) as $statement) {
@@ -71,12 +63,46 @@ class DreamlandAppraisalService extends Component
             } catch (\Throwable $e) {
                 if (stripos($e->getMessage(), 'already exists') === false
                     && stripos($e->getMessage(), 'Duplicate') === false) {
-                    throw $e;
+                    Yii::warning($e->getMessage(), __METHOD__);
                 }
             }
         }
 
         Yii::$app->db->schema->refresh();
+    }
+
+    private static function gamificationSchemaReady(): bool
+    {
+        $db = Yii::$app->db;
+        $pot = $db->schema->getTableSchema('group_watch_pots', true);
+        $prediction = $db->schema->getTableSchema('video_predictions', true);
+
+        return $pot !== null
+            && $prediction !== null
+            && isset($pot->columns['status'], $pot->columns['video_id'])
+            && isset($prediction->columns['status'], $prediction->columns['outcome']);
+    }
+
+    /**
+     * Best-effort gamification rows; publishing must not depend on these tables.
+     */
+    private static function setupGamification(int $videoId, int $priceCredits): void
+    {
+        if (!self::gamificationSchemaReady()) {
+            return;
+        }
+
+        try {
+            self::upsertWatchPot($videoId, $priceCredits);
+        } catch (\Throwable $e) {
+            Yii::warning('Watch pot setup skipped for video ' . $videoId . ': ' . $e->getMessage(), __METHOD__);
+        }
+
+        try {
+            self::upsertPrediction($videoId);
+        } catch (\Throwable $e) {
+            Yii::warning('Prediction setup skipped for video ' . $videoId . ': ' . $e->getMessage(), __METHOD__);
+        }
     }
 
     private static function upsertWatchPot(int $videoId, int $priceCredits): void
@@ -102,7 +128,7 @@ class DreamlandAppraisalService extends Component
     {
         $prediction = VideoPrediction::find()
             ->where(['video_id' => $videoId, 'status' => VideoPrediction::STATUS_OPEN])
-            ->orderBy(['created_at' => SORT_DESC])
+            ->orderBy(['id' => SORT_DESC])
             ->one();
         if (!$prediction) {
             $prediction = new VideoPrediction();

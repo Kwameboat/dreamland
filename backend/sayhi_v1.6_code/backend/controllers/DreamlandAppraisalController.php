@@ -34,41 +34,38 @@ class DreamlandAppraisalController extends Controller
 
     public function actionEvaluate($id)
     {
-        $post = Post::findOne($id);
-        if (!$post) {
-            throw new NotFoundHttpException('Video not found.');
-        }
-
-        $status = Yii::$app->request->post('status');
-        $priceCredits = (int) Yii::$app->request->post('price_credits', 0);
-
-        if ($status === 'active') {
-            if ($priceCredits <= 0 && (int) $post->is_paid === 1) {
-                Yii::$app->session->setFlash('error', 'Assign a valid credit price before approving.');
-                return $this->redirect(['index']);
+        try {
+            $post = Post::findOne($id);
+            if (!$post) {
+                throw new NotFoundHttpException('Video not found.');
             }
-            try {
+
+            $status = Yii::$app->request->post('status');
+            $priceCredits = (int) Yii::$app->request->post('price_credits', 0);
+
+            if ($status === 'active') {
+                if ($priceCredits <= 0 && (int) $post->is_paid === 1) {
+                    Yii::$app->session->setFlash('error', 'Assign a valid credit price before approving.');
+                    return $this->redirect(['index']);
+                }
                 DreamlandAppraisalService::approvePost($post, $priceCredits);
-            } catch (\Throwable $e) {
-                Yii::error($e->getMessage(), __METHOD__);
-                Yii::$app->session->setFlash('error', 'Could not approve video: ' . $e->getMessage());
-                return $this->redirect(['index']);
-            }
-        } else {
-            $reason = trim((string) Yii::$app->request->post('rejection_reason', ''));
-            if ($reason === '') {
-                Yii::$app->session->setFlash('error', 'A rejection reason is required.');
-                return $this->redirect(['index']);
-            }
-            try {
+            } else {
+                $reason = trim((string) Yii::$app->request->post('rejection_reason', ''));
+                if ($reason === '') {
+                    Yii::$app->session->setFlash('error', 'A rejection reason is required.');
+                    return $this->redirect(['index']);
+                }
                 DreamlandContentReview::rejectPost($post, $reason, (int) Yii::$app->user->id);
-            } catch (\InvalidArgumentException $e) {
-                Yii::$app->session->setFlash('error', $e->getMessage());
-                return $this->redirect(['index']);
             }
-        }
 
-        Yii::$app->session->setFlash('success', 'Appraisal updated.');
-        return $this->redirect(['index']);
+            Yii::$app->session->setFlash('success', 'Appraisal updated.');
+            return $this->redirect(['index']);
+        } catch (NotFoundHttpException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            Yii::error($e->getMessage(), __METHOD__);
+            Yii::$app->session->setFlash('error', 'Could not update appraisal: ' . $e->getMessage());
+            return $this->redirect(['index']);
+        }
     }
 }
