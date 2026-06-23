@@ -827,32 +827,41 @@ function playReelVideo(video) {
   video.playsInline = true;
   video.setAttribute('playsinline', '');
   video.setAttribute('webkit-playsinline', '');
-  // Browsers require muted autoplay; unmute happens via sound toggle or tap (user gesture).
-  video.muted = true;
+
+  const wantSound = !(dlSocial?.isMuted?.() ?? false);
+  const canPlaySound = wantSound && (dlSocial?.isAudioUnlocked?.() ?? false);
+  video.muted = !canPlaySound;
+  if (canPlaySound) {
+    video.removeAttribute('muted');
+    video.volume = 1;
+  } else {
+    video.setAttribute('muted', '');
+  }
+
   const attempt = () => {
-    video.play()
-      .then(() => {
-        if (!dlSocial?.isMuted?.()) {
-          video.muted = false;
-          video.volume = 1;
-        }
-      })
-      .catch((err) => {
-        console.warn('Reel play blocked:', err?.message || err, video.currentSrc || video.src);
-      });
+    video.play().catch((err) => {
+      console.warn('Reel play blocked:', err?.message || err, video.currentSrc || video.src);
+    });
   };
+
   if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
     attempt();
     return;
   }
+
   video.addEventListener('loadeddata', attempt, { once: true });
   video.addEventListener('canplay', attempt, { once: true });
   video.addEventListener('error', () => {
     console.warn('Reel video failed to load:', video.currentSrc || video.src);
   }, { once: true });
-  try {
-    video.load();
-  } catch {
+
+  if (video.readyState < HTMLMediaElement.HAVE_METADATA && video.src) {
+    try {
+      video.load();
+    } catch {
+      attempt();
+    }
+  } else {
     attempt();
   }
 }
@@ -3246,7 +3255,8 @@ function renderFeed() {
 
     return `
       <article class="reel ${locked ? 'reel--locked reel--previewing' : ''}" data-id="${post.id}">
-        ${src ? `<video class="reel-video" src="${escapeHtml(src)}" muted playsinline preload="auto" ${locked ? `data-preview="${previewSec}"` : 'loop'}></video>` : '<div class="reel-video" style="background:#111"></div>'}
+        ${src ? `<video class="reel-video" src="${escapeHtml(src)}" playsinline preload="auto" ${locked ? `data-preview="${previewSec}"` : 'loop'}></video>` : '<div class="reel-video" style="background:#111"></div>'}
+        <button type="button" class="reel-sound-hint" hidden aria-label="Tap for sound">Tap for sound</button>
         <div class="reel-vignette" aria-hidden="true"></div>
         <div class="reel-gradient"></div>
         ${dream.is_paid && locked ? `
@@ -3426,7 +3436,7 @@ function setupReelPlayback() {
         }
         playReelVideo(video);
         dlSocial?.applySoundToActive?.(els.feedList);
-        if (!dlSocial?.isMuted?.()) {
+        if (!dlSocial?.isMuted?.() && dlSocial?.isAudioUnlocked?.()) {
           dlSocial?.resumeActiveReelAudio?.(els.feedList);
         }
         dlSocial?.recordView?.(reel.dataset.id);

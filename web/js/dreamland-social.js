@@ -9,11 +9,46 @@ export function createDreamlandSocial(ctx) {
   const LIKED_KEY = 'dl_liked_posts';
   const HIDDEN_KEY = 'dl_hidden_creators';
   const MUTE_KEY = 'dl_feed_muted';
+  const AUDIO_UNLOCK_KEY = 'dl_audio_unlocked';
 
   let likedIds = new Set(JSON.parse(localStorage.getItem(LIKED_KEY) || '[]'));
   let hiddenCreators = new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]'));
-  let feedMuted = localStorage.getItem(MUTE_KEY) !== '0';
+  let feedMuted = localStorage.getItem(MUTE_KEY) === '1';
+  let audioUnlocked = sessionStorage.getItem(AUDIO_UNLOCK_KEY) === '1';
   const watchTrackers = new Map();
+
+  function setVideoMuted(video, muted) {
+    if (!video || video.tagName !== 'VIDEO') return;
+    video.muted = muted;
+    if (muted) {
+      video.setAttribute('muted', '');
+    } else {
+      video.removeAttribute('muted');
+      video.volume = 1;
+    }
+  }
+
+  function syncSoundHints(container) {
+    const showHint = !feedMuted && !audioUnlocked;
+    container?.querySelectorAll('.reel').forEach((reel) => {
+      const hint = reel.querySelector('.reel-sound-hint');
+      if (!hint) return;
+      hint.hidden = !(showHint && reel.classList.contains('reel--active'));
+    });
+  }
+
+  function unlockAudio(container) {
+    audioUnlocked = true;
+    sessionStorage.setItem(AUDIO_UNLOCK_KEY, '1');
+    if (!feedMuted) {
+      resumeActiveReelAudio(container);
+    }
+    syncSoundHints(container);
+  }
+
+  function isAudioUnlocked() {
+    return audioUnlocked;
+  }
 
   function persistLiked() {
     localStorage.setItem(LIKED_KEY, JSON.stringify([...likedIds]));
@@ -50,23 +85,20 @@ export function createDreamlandSocial(ctx) {
       if (video.tagName !== 'VIDEO') return;
       const reel = video.closest('.reel');
       const active = reel?.classList.contains('reel--active');
-      const shouldMute = feedMuted || !active;
-      video.muted = shouldMute;
-      if (!shouldMute) {
-        video.volume = 1;
-      }
+      const shouldMute = feedMuted || !active || !audioUnlocked;
+      setVideoMuted(video, shouldMute);
     });
+    syncSoundHints(container);
   }
 
   /** Unmute and resume the visible reel (call from a click/tap so audio is allowed). */
   function resumeActiveReelAudio(container) {
-    applySoundToActive(container);
     const video = container?.querySelector('.reel--active .reel-video');
     if (video?.tagName !== 'VIDEO' || feedMuted) {
       return Promise.resolve();
     }
-    video.muted = false;
-    video.volume = 1;
+    setVideoMuted(video, false);
+    syncSoundHints(container);
     return video.play().catch(() => {});
   }
 
@@ -75,7 +107,7 @@ export function createDreamlandSocial(ctx) {
     showToast(feedMuted ? 'Sound off' : 'Sound on');
     const feed = document.getElementById('feed-list');
     if (!feedMuted) {
-      resumeActiveReelAudio(feed);
+      unlockAudio(feed);
     } else {
       applySoundToActive(feed);
     }
@@ -293,16 +325,23 @@ export function createDreamlandSocial(ctx) {
 
       let lastTap = 0;
       const video = reel.querySelector('.reel-video');
+      const feedRoot = reel.closest('#feed-list') || reel.parentElement;
+      reel.querySelector('.reel-sound-hint')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (feedMuted) setMuted(false);
+        unlockAudio(feedRoot);
+        showToast('Sound on');
+      });
       video?.addEventListener('click', (e) => {
         const now = Date.now();
         if (now - lastTap < 320) {
           e.preventDefault();
           showHeartBurst(reel, e.clientX, e.clientY);
           if (!isLiked(postId)) toggleLike(postId, likeBtn, likeCount);
-        } else if (feedMuted && reel.classList.contains('reel--active')) {
-          setMuted(false);
+        } else if (reel.classList.contains('reel--active') && (feedMuted || !audioUnlocked || video.muted)) {
+          if (feedMuted) setMuted(false);
+          unlockAudio(feedRoot);
           showToast('Sound on');
-          resumeActiveReelAudio(reel.closest('#feed-list') || reel.parentElement);
         }
         lastTap = now;
       });
@@ -326,6 +365,8 @@ export function createDreamlandSocial(ctx) {
     isLiked,
     isHiddenCreator,
     isMuted,
+    isAudioUnlocked,
+    unlockAudio,
     toggleSound,
     syncLikedIds,
     bindReelInteractions,
