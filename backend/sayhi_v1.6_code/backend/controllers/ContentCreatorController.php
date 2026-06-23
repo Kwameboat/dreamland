@@ -228,6 +228,12 @@ class ContentCreatorController extends Controller
 
     public function actionDelete($id)
     {
+        $id = (int) $id;
+        if ($this->isCreatorAlreadyDeleted($id)) {
+            Yii::$app->session->setFlash('success', 'Creator account was already deleted.');
+            return $this->redirect(['index']);
+        }
+
         $model = $this->findCreator($id);
         (new User())->checkPageAccess();
 
@@ -293,11 +299,38 @@ class ContentCreatorController extends Controller
 
     protected function findCreator($id): User
     {
-        $model = DreamlandAudience::creatorQuery()->andWhere(['id' => (int) $id])->one();
-        if (!$model) {
-            throw new NotFoundHttpException('Creator not found.');
+        $id = (int) $id;
+        $model = DreamlandAudience::creatorQuery()->andWhere(['id' => $id])->one();
+        if ($model) {
+            return $model;
         }
-        return $model;
+
+        $user = User::find()
+            ->where(['id' => $id])
+            ->andWhere(['<>', 'status', User::STATUS_DELETED])
+            ->one();
+        if ($user) {
+            throw new NotFoundHttpException('This account is no longer a content creator (demoted or role changed).');
+        }
+
+        throw new NotFoundHttpException('Creator not found.');
+    }
+
+    protected function isCreatorAlreadyDeleted(int $id): bool
+    {
+        $query = User::find()->where(['id' => $id, 'status' => User::STATUS_DELETED]);
+        $schema = Yii::$app->db->schema->getTableSchema(User::tableName(), true);
+        if ($schema && isset($schema->columns['dreamland_account_type'])) {
+            $query->andWhere([
+                'or',
+                ['role' => User::ROLE_AGENT],
+                ['dreamland_account_type' => 'creator'],
+            ]);
+        } else {
+            $query->andWhere(['role' => User::ROLE_AGENT]);
+        }
+
+        return $query->exists();
     }
 
     protected function findCreatorForm($id): CreatorForm

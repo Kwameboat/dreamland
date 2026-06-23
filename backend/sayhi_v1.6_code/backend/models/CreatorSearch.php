@@ -80,7 +80,8 @@ class CreatorSearch extends User
                 if (DreamlandCreatorApproval::hasCreatorStatusColumn()) {
                     $query->andWhere(['user.dreamland_creator_status' => DreamlandCreatorApproval::STATUS_PENDING]);
                 } else {
-                    $query->andWhere(['user.status' => User::STATUS_PENDING]);
+                    $query->andWhere(['user.role' => User::ROLE_AGENT]);
+                    $query->andWhere(['user.status' => User::STATUS_ACTIVE]);
                 }
                 break;
         }
