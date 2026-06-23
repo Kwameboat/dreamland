@@ -10,11 +10,25 @@ ADMIN="$HOME_DIR/public_html/admin"
 API="$HOME_DIR/public_html/api"
 
 echo "=== Dreamland live fix (admin + API) ==="
+GITHUB="${DREAMLAND_GITHUB_RAW:-https://raw.githubusercontent.com/Kwameboat/dreamland/main}"
 
 if [ ! -d "$DL/vendor" ]; then
   echo "Missing $DL/vendor — run composer install first."
   exit 1
 fi
+
+echo ""
+echo "--- Pull latest fixes from GitHub ---"
+mkdir -p "$DL/deploy/cpanel" "$DL/api/modules/v1/controllers" "$DL/backend/views/layouts" "$DL/common/helpers"
+curl -fsSL -o "$DL/backend/views/layouts/main-login.php" "$GITHUB/backend/sayhi_v1.6_code/backend/views/layouts/main-login.php" && echo "OK: main-login.php"
+curl -fsSL -o "$DL/backend/views/layouts/content.php" "$GITHUB/backend/sayhi_v1.6_code/backend/views/layouts/content.php" && echo "OK: content.php"
+curl -fsSL -o "$DL/backend/views/layouts/purchase-code.php" "$GITHUB/backend/sayhi_v1.6_code/backend/views/layouts/purchase-code.php" && echo "OK: purchase-code.php"
+curl -fsSL -o "$DL/api/modules/v1/controllers/HealthController.php" "$GITHUB/backend/sayhi_v1.6_code/api/modules/v1/controllers/HealthController.php" && echo "OK: HealthController.php"
+curl -fsSL -o "$DL/common/helpers/DreamlandWasabiStorage.php" "$GITHUB/backend/sayhi_v1.6_code/common/helpers/DreamlandWasabiStorage.php" && echo "OK: DreamlandWasabiStorage.php"
+curl -fsSL -o "$DL/deploy/cpanel/config/backend-subdir.php" "$GITHUB/deploy/cpanel/config/backend-subdir.php" && echo "OK: backend-subdir.php"
+curl -fsSL -o "$ADMIN/index.php" "$GITHUB/deploy/cpanel/entrypoints/admin-index.php" && echo "OK: admin/index.php"
+curl -fsSL -o "$API/index.php" "$GITHUB/deploy/cpanel/entrypoints/api-index.php" && echo "OK: api/index.php"
+curl -fsSL -o "$API/boot-test.php" "$GITHUB/deploy/cpanel/entrypoints/api-boot-test.php" && echo "OK: api/boot-test.php"
 
 echo ""
 echo "--- Permissions ---"
