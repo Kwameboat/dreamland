@@ -1,5 +1,6 @@
 <?php
 
+use common\helpers\DreamlandMediaUrl;
 use yii\helpers\Html;
 use common\models\PostGallary;
 
@@ -12,7 +13,7 @@ $this->params['breadcrumbs'][] = ['label' => 'Audio', 'url' => ['index']];
 $this->params['breadcrumbs'][] = $this->title;
 
 $gallery = $postResult->postReelGallary ?? null;
-$videoUrl = $gallery ? (string) $gallery->filenameUrl : '';
+$videoUrl = DreamlandMediaUrl::resolvePostVideoUrl($postResult) ?: ($gallery ? (string) $gallery->filenameUrl : '');
 $audioUrl = isset($model) ? (string) ($model->audioUrl ?? '') : '';
 $hasAudioTrack = $audioUrl !== '';
 ?>

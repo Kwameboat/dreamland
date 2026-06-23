@@ -12,7 +12,7 @@ $this->params['breadcrumbs'][] = $this->title;
 <div class="dreamland-appraisal-index box box-primary">
     <div class="box-header with-border">
         <h3 class="box-title">Dreamland Appraisal Workspace</h3>
-        <p class="text-muted">Review premium uploads, set credit price, approve or reject.</p>
+        <p class="text-muted">Review moderated reels. Free content can be approved directly to the PWA feed. Premium content requires a credit price.</p>
     </div>
     <?php if (Yii::$app->session->hasFlash('success')): ?>
         <div class="alert alert-success"><?= Html::encode(Yii::$app->session->getFlash('success')) ?></div>
@@ -32,14 +32,46 @@ $this->params['breadcrumbs'][] = $this->title;
                     },
                 ],
                 'user_id',
+                [
+                    'label' => 'Premium',
+                    'value' => function ($model) {
+                        return (int) $model->is_paid === 1 ? 'Yes' : 'No';
+                    },
+                ],
                 'created_at:datetime',
+                [
+                    'format' => 'raw',
+                    'label' => 'Preview',
+                    'value' => function ($model) {
+                        return Html::a('Preview', ['preview', 'id' => $model->id], [
+                            'class' => 'btn btn-default btn-sm',
+                            'target' => '_blank',
+                            'rel' => 'noopener',
+                        ]);
+                    },
+                ],
                 [
                     'format' => 'raw',
                     'label' => 'Evaluate',
                     'value' => function ($model) {
+                        $isPaid = (int) $model->is_paid === 1;
+                        $creditField = $isPaid
+                            ? Html::input('number', 'price_credits', '', [
+                                'class' => 'form-control',
+                                'placeholder' => 'Credits',
+                                'min' => 1,
+                                'required' => true,
+                                'style' => 'width:100px;margin-right:8px;',
+                            ])
+                            : Html::tag('span', 'Free reel', ['class' => 'text-muted', 'style' => 'margin-right:8px;display:inline-block;min-width:100px;']);
+
                         return Html::beginForm(['evaluate', 'id' => $model->id], 'post', ['class' => 'form-inline dl-appraisal-form'])
-                            . Html::input('number', 'price_credits', '', ['class' => 'form-control', 'placeholder' => 'Credits', 'min' => 1, 'style' => 'width:100px;margin-right:8px;'])
-                            . Html::submitButton('Approve', ['class' => 'btn btn-success btn-sm', 'name' => 'status', 'value' => 'active'])
+                            . $creditField
+                            . Html::submitButton($isPaid ? 'Approve premium' : 'Approve to feed', [
+                                'class' => 'btn btn-success btn-sm',
+                                'name' => 'status',
+                                'value' => 'active',
+                            ])
                             . '<div style="margin-top:8px;width:100%;">'
                             . Html::textarea('rejection_reason', '', [
                                 'class' => 'form-control input-sm',

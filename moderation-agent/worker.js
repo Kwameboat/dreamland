@@ -68,17 +68,12 @@ async function agentModerate(payload, blacklist, mediaUrl) {
 async function finalizePost(pool, videoId, decision) {
   const conn = await pool.getConnection();
   try {
-    const [[post]] = await conn.query('SELECT is_paid FROM post WHERE id = ?', [videoId]);
     if (decision === 'block') {
       await conn.query("UPDATE post SET appraisal_status='rejected', status=9 WHERE id=?", [videoId]);
       return 'rejected';
     }
-    if (decision === 'review' || (post && Number(post.is_paid) === 1)) {
-      await conn.query("UPDATE post SET appraisal_status='pending_review', status=9 WHERE id=?", [videoId]);
-      return 'pending_review';
-    }
-    await conn.query("UPDATE post SET appraisal_status='active', status=10 WHERE id=?", [videoId]);
-    return 'active';
+    await conn.query("UPDATE post SET appraisal_status='pending_review', status=9 WHERE id=?", [videoId]);
+    return 'pending_review';
   } finally {
     conn.release();
   }
@@ -91,14 +86,13 @@ async function processJob(pool, job) {
   const result = await agentModerate(payload, blacklist, job.media_url);
 
   const decision = result.decision || (result.passed ? 'allow' : 'block');
-  const passed = decision === 'allow';
-  const resultStatus = await finalizePost(pool, job.video_id, passed ? 'allow' : decision);
+  const resultStatus = await finalizePost(pool, job.video_id, decision === 'allow' ? 'allow' : decision);
 
   await pool.query(
     "UPDATE safety_scan_queue SET status='completed', result_status=?, processed_at=NOW(), failure_reason=? WHERE id=?",
     [
       resultStatus,
-      passed && decision === 'allow' ? null : JSON.stringify({
+      decision === 'allow' ? null : JSON.stringify({
         agent: result.agent,
         decision,
         score: result.score,

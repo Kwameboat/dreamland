@@ -248,8 +248,9 @@ class Post extends \yii\db\ActiveRecord
 
         public function getPostReelGallary()
     {
-        return $this->hasOne(PostGallary::className(), ['post_id'=>'id']);
-        
+        return $this->hasOne(PostGallary::className(), ['post_id' => 'id'])
+            ->andWhere(['media_type' => PostGallary::MEDIA_TYPE_VIDEO])
+            ->orderBy(['is_default' => SORT_DESC, 'id' => SORT_ASC]);
     }
 
     public function getTotalReelsCount()

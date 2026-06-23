@@ -27,6 +27,8 @@ class DreamlandAppraisalService extends Component
             $post->price_credits = $priceCredits;
             self::ensureGamificationTables();
             self::setupGamification((int) $post->id, $priceCredits);
+        } else {
+            $post->price_credits = null;
         }
 
         $post->appraisal_status = 'active';

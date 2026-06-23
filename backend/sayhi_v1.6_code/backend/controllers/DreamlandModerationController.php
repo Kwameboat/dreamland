@@ -142,13 +142,8 @@ class DreamlandModerationController extends Controller
 
         $decision = Yii::$app->request->post('decision');
         if ($decision === 'approve') {
-            if ((int) $post->is_paid === 1) {
-                $post->appraisal_status = 'pending_review';
-                $post->status = Post::STATUS_BLOCKED;
-            } else {
-                $post->appraisal_status = 'active';
-                $post->status = Post::STATUS_ACTIVE;
-            }
+            $post->appraisal_status = 'pending_review';
+            $post->status = Post::STATUS_BLOCKED;
             if (DreamlandContentReview::hasRejectionColumns()) {
                 $post->rejection_reason = null;
                 $post->rejected_at = null;
@@ -157,7 +152,7 @@ class DreamlandModerationController extends Controller
                 $post->appeal_message = null;
                 $post->appeal_submitted_at = null;
             }
-            Yii::$app->session->setFlash('success', 'Content approved by admin override.');
+            Yii::$app->session->setFlash('success', 'Content cleared moderation — sent to appraisal workspace.');
         } elseif ($decision === 'reject') {
             $reason = trim((string) Yii::$app->request->post('rejection_reason', ''));
             if ($reason === '') {

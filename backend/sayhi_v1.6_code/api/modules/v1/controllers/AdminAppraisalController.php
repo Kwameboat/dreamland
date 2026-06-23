@@ -82,11 +82,12 @@ class AdminAppraisalController extends ActiveController
         }
 
         if ($status === 'active') {
-            if ($priceCredits === null || $priceCredits <= 0) {
-                return ['statusCode' => 422, 'message' => 'price_credits is required when approving paid content.'];
+            $isPaid = (int) $post->is_paid === 1;
+            if ($isPaid && ($priceCredits === null || $priceCredits <= 0)) {
+                return ['statusCode' => 422, 'message' => 'price_credits is required when approving premium content.'];
             }
             try {
-                DreamlandAppraisalService::approvePost($post, $priceCredits);
+                DreamlandAppraisalService::approvePost($post, (int) ($priceCredits ?? 0));
             } catch (\InvalidArgumentException $e) {
                 return ['statusCode' => 422, 'message' => $e->getMessage()];
             } catch (\Throwable $e) {

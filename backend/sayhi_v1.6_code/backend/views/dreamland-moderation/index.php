@@ -105,11 +105,11 @@ if ($testResult) {
                     'approve' => function ($url, $model) {
                         return Html::beginForm(['decide', 'id' => $model->id], 'post', ['style' => 'display:inline'])
                             . Html::hiddenInput('decision', 'approve')
-                            . Html::submitButton('Approve', ['class' => 'btn btn-success btn-xs'])
+                            . Html::submitButton('To appraisal', ['class' => 'btn btn-success btn-xs'])
                             . Html::endForm();
                     },
                     'preview' => function ($url, $model) {
-                        return Html::a('Preview', ['/audio/reel-view', 'id' => $model->id], [
+                        return Html::a('Preview', ['/dreamland-appraisal/preview', 'id' => $model->id], [
                             'class' => 'btn btn-default btn-xs',
                             'target' => '_blank',
                             'rel' => 'noopener',

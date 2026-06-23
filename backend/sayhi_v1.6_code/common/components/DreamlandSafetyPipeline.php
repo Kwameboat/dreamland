@@ -5,6 +5,7 @@ namespace common\components;
 use common\models\LocalBlacklistKeyword;
 use common\models\Post;
 use common\models\SafetyScanQueue;
+use common\helpers\DreamlandMediaUrl;
 use Yii;
 use yii\base\Component;
 
@@ -105,30 +106,20 @@ class DreamlandSafetyPipeline extends Component
     public function finalizeScan($post, $passed, $reason = null, $decision = null)
     {
         $post = $this->normalizePost($post);
-        if ($decision === 'review' || (!$passed && $decision !== 'block')) {
-            if ((int) $post->is_paid === 1 || $decision === 'review') {
-                $post->appraisal_status = 'pending_review';
-                $post->status = 9;
-                $post->save(false);
-                return 'pending_review';
-            }
-        }
 
         if (!$passed || $decision === 'block') {
             $post->appraisal_status = 'rejected';
-            $post->status = 9;
+            $post->status = Post::STATUS_BLOCKED;
             $post->save(false);
             return 'rejected';
         }
 
-        if ((int) $post->is_paid === 1) {
-            $post->appraisal_status = 'pending_review';
-        } else {
-            $post->appraisal_status = 'active';
-            $post->status = 10;
-        }
+        // Passed safety + AI moderation → human appraisal before PWA feed.
+        $post->appraisal_status = 'pending_review';
+        $post->status = Post::STATUS_BLOCKED;
         $post->save(false);
-        return $post->appraisal_status;
+
+        return 'pending_review';
     }
 
     /**
@@ -177,11 +168,14 @@ class DreamlandSafetyPipeline extends Component
         try {
             $post = $this->normalizePost((int) $job->video_id);
             $text = $this->extractTextFromJob($job);
+
+            // Step 1: Pre-configured moderation (Ghana lexicons + local blacklist).
             $scan = $this->runLocalTextScan($text);
             $passed = (bool) ($scan['passed'] ?? true);
             $decision = $scan['decision'] ?? ($passed ? 'allow' : 'block');
 
-            if (Yii::$app->has('dreamlandModeration') && Yii::$app->dreamlandModeration->isHealthy()) {
+            // Step 2: AI multimodal moderation agent (when online).
+            if ($passed && $decision !== 'block' && Yii::$app->has('dreamlandModeration')) {
                 $mediaUrl = $job->media_url ?: $this->resolveMediaUrl($post);
                 $agentResult = Yii::$app->dreamlandModeration->moderateContent([
                     'text' => $text,
@@ -189,10 +183,20 @@ class DreamlandSafetyPipeline extends Component
                 ]);
                 if (is_array($agentResult)) {
                     $decision = $agentResult['decision'] ?? $decision;
-                    $passed = ($decision === 'allow') && ($agentResult['ok'] ?? true);
+                    $agentOk = $agentResult['ok'] ?? true;
+                    if ($decision === 'block' || !$agentOk) {
+                        $passed = false;
+                    } elseif ($decision === 'review') {
+                        $passed = true;
+                    } else {
+                        $passed = ($decision === 'allow');
+                    }
+                } elseif (!Yii::$app->dreamlandModeration->isHealthy()) {
+                    $decision = 'review';
                 }
             }
 
+            // Step 3: Appraisal workstation or rejection.
             $resultStatus = $this->finalizeScan($post, $passed, null, $decision);
 
             $job->status = SafetyScanQueue::STATUS_COMPLETED;
@@ -261,24 +265,6 @@ class DreamlandSafetyPipeline extends Component
 
     private function resolveMediaUrl(Post $post): ?string
     {
-        $gallery = \api\modules\v1\models\PostGallary::find()
-            ->where(['post_id' => $post->id])
-            ->orderBy(['is_default' => SORT_DESC, 'id' => SORT_ASC])
-            ->one();
-        if (!$gallery || empty($gallery->filename)) {
-            return null;
-        }
-
-        if (Yii::$app->has('fileUpload')) {
-            return Yii::$app->fileUpload->getFileUrl(
-                Yii::$app->fileUpload::TYPE_POST,
-                $gallery->filename
-            );
-        }
-
-        $folder = Yii::$app->params['pathUploadImageFolder'] ?? 'image';
-
-        return Yii::$app->params['siteUrl'] . Yii::$app->urlManagerFrontend->baseUrl
-            . '/uploads/' . $folder . '/' . $gallery->filename;
+        return DreamlandMediaUrl::resolvePostVideoUrl($post);
     }
 }

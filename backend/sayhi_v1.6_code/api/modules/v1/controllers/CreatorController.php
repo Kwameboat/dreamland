@@ -308,8 +308,8 @@ class CreatorController extends ActiveController
         }
 
         $publishMessage = $isPaid
-            ? 'Premium reel uploaded — safety scan then admin review.'
-            : 'Reel uploaded — safety scan in progress.';
+            ? 'Premium reel uploaded — entering safety queue, then appraisal.'
+            : 'Reel uploaded — entering safety queue, then appraisal.';
 
         if (Yii::$app->has('dreamlandSafety')) {
             Yii::$app->dreamlandSafety->enqueueVideoScan($post, [
@@ -320,10 +320,14 @@ class CreatorController extends ActiveController
 
             $resultStatus = Yii::$app->dreamlandSafety->processPostScan((int) $post->id);
             $post->refresh();
-            if ($resultStatus === 'active') {
-                $publishMessage = 'Reel is live in the feed.';
-            } elseif ($resultStatus === 'pending_review') {
-                $publishMessage = 'Premium reel uploaded — awaiting admin appraisal.';
+            if ($resultStatus === 'pending_review') {
+                $publishMessage = $isPaid
+                    ? 'Premium reel passed safety review — awaiting appraisal and credit assignment.'
+                    : 'Reel passed safety review — awaiting appraisal before it goes live.';
+            } elseif ($resultStatus === 'rejected') {
+                $publishMessage = 'Reel was rejected during safety or AI moderation.';
+            } elseif ($resultStatus === 'active') {
+                $publishMessage = 'Reel approved and live in the feed.';
             }
         }
 

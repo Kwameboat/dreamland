@@ -27,9 +27,21 @@ class DreamlandAppraisalController extends Controller
 
     public function actionIndex()
     {
-        $query = Post::find()->where(['appraisal_status' => 'pending_review'])->orderBy(['created_at' => SORT_ASC]);
+        $query = Post::find()
+            ->where(['appraisal_status' => 'pending_review'])
+            ->orderBy(['created_at' => SORT_ASC]);
         $dataProvider = new ActiveDataProvider(['query' => $query, 'pagination' => ['pageSize' => 20]]);
         return $this->render('index', ['dataProvider' => $dataProvider]);
+    }
+
+    public function actionPreview($id)
+    {
+        $post = Post::findOne((int) $id);
+        if (!$post) {
+            throw new NotFoundHttpException('Video not found.');
+        }
+
+        return $this->render('preview', ['post' => $post]);
     }
 
     public function actionEvaluate($id)
@@ -44,8 +56,9 @@ class DreamlandAppraisalController extends Controller
             $priceCredits = (int) Yii::$app->request->post('price_credits', 0);
 
             if ($status === 'active') {
-                if ($priceCredits <= 0 && (int) $post->is_paid === 1) {
-                    Yii::$app->session->setFlash('error', 'Assign a valid credit price before approving.');
+                $isPaid = (int) $post->is_paid === 1;
+                if ($isPaid && $priceCredits <= 0) {
+                    Yii::$app->session->setFlash('error', 'Assign a valid credit price before approving premium content.');
                     return $this->redirect(['index']);
                 }
                 DreamlandAppraisalService::approvePost($post, $priceCredits);
