@@ -81,7 +81,7 @@ export function createDreamlandSocial(ctx) {
   }
 
   function applySoundToActive(container) {
-    container?.querySelectorAll('.reel-video').forEach((video) => {
+    container?.querySelectorAll('.reel-video-main, .reel-video:not(.reel-video-backdrop)').forEach((video) => {
       if (video.tagName !== 'VIDEO') return;
       const reel = video.closest('.reel');
       const active = reel?.classList.contains('reel--active');
@@ -93,7 +93,7 @@ export function createDreamlandSocial(ctx) {
 
   /** Unmute and resume the visible reel (call from a click/tap so audio is allowed). */
   function resumeActiveReelAudio(container) {
-    const video = container?.querySelector('.reel--active .reel-video');
+    const video = container?.querySelector('.reel--active .reel-video-main, .reel--active .reel-video:not(.reel-video-backdrop)');
     if (video?.tagName !== 'VIDEO' || feedMuted) {
       return Promise.resolve();
     }

@@ -822,6 +822,123 @@ function mediaUrl(post) {
   return direct || candidates[0] || '';
 }
 
+function getReelMainVideo(reel) {
+  return reel?.querySelector('.reel-video-main') || reel?.querySelector('.reel-video:not(.reel-video-backdrop)');
+}
+
+function reelAspectFromPost(post) {
+  const gallery = reelGallery(post);
+  const w = Number(gallery?.width);
+  const h = Number(gallery?.height);
+  if (w > 0 && h > 0) return w / h;
+  return null;
+}
+
+function classifyReelAspect(aspect) {
+  if (!aspect || !Number.isFinite(aspect)) return null;
+  if (aspect >= 1.15) return 'landscape';
+  if (aspect <= 0.85) return 'portrait';
+  return 'square';
+}
+
+function setReelOrientation(reel, orientation) {
+  if (!reel) return;
+  reel.classList.remove('reel--landscape', 'reel--portrait', 'reel--square');
+  if (orientation) reel.classList.add(`reel--${orientation}`);
+}
+
+function removeReelVideoBackdrop(reel) {
+  reel?.querySelector('.reel-video-backdrop')?.remove();
+}
+
+function syncReelVideoBackdrop(main) {
+  const reel = main?.closest('.reel');
+  const backdrop = reel?.querySelector('.reel-video-backdrop');
+  if (!backdrop || backdrop.tagName !== 'VIDEO') return;
+  const src = main.currentSrc || main.src;
+  if (src && backdrop.currentSrc !== src && backdrop.src !== src) {
+    backdrop.src = src;
+  }
+  backdrop.muted = true;
+  backdrop.setAttribute('muted', '');
+  if (main.paused) backdrop.pause();
+  else backdrop.play().catch(() => {});
+  if (Math.abs(backdrop.currentTime - main.currentTime) > 0.3) {
+    try {
+      backdrop.currentTime = main.currentTime;
+    } catch {
+      /* seek while loading */
+    }
+  }
+}
+
+function ensureReelVideoBackdrop(main) {
+  const media = main?.closest('.reel-media');
+  const reel = main?.closest('.reel');
+  if (!media || !reel) return null;
+  let backdrop = reel.querySelector('.reel-video-backdrop');
+  if (!backdrop) {
+    backdrop = document.createElement('video');
+    backdrop.className = 'reel-video-backdrop';
+    backdrop.setAttribute('playsinline', '');
+    backdrop.setAttribute('webkit-playsinline', '');
+    backdrop.setAttribute('muted', '');
+    backdrop.setAttribute('preload', 'auto');
+    backdrop.setAttribute('aria-hidden', 'true');
+    backdrop.tabIndex = -1;
+    backdrop.loop = main.loop;
+    backdrop.muted = true;
+    media.insertBefore(backdrop, main);
+  }
+  syncReelVideoBackdrop(main);
+  return backdrop;
+}
+
+function applyReelVideoFit(video) {
+  const reel = video?.closest('.reel');
+  if (!reel || video.tagName !== 'VIDEO') return;
+
+  const aspect = video.videoWidth > 0 && video.videoHeight > 0
+    ? video.videoWidth / video.videoHeight
+    : null;
+  const orientation = classifyReelAspect(aspect);
+  if (orientation) setReelOrientation(reel, orientation);
+
+  if (orientation === 'landscape') {
+    ensureReelVideoBackdrop(video);
+  } else {
+    removeReelVideoBackdrop(reel);
+  }
+}
+
+function wireReelVideoFit(video) {
+  if (!video || video.tagName !== 'VIDEO' || video.dataset.fitBound === '1') return;
+  video.dataset.fitBound = '1';
+
+  const onMeta = () => applyReelVideoFit(video);
+  video.addEventListener('loadedmetadata', onMeta);
+  video.addEventListener('loadeddata', onMeta);
+
+  let lastSync = 0;
+  const onSync = () => syncReelVideoBackdrop(video);
+  video.addEventListener('play', onSync);
+  video.addEventListener('pause', onSync);
+  video.addEventListener('seeked', onSync);
+  video.addEventListener('timeupdate', () => {
+    const now = Date.now();
+    if (now - lastSync < 400) return;
+    lastSync = now;
+    if (video.closest('.reel')?.classList.contains('reel--landscape')) onSync();
+  });
+
+  if (video.readyState >= HTMLMediaElement.HAVE_METADATA) onMeta();
+}
+
+function hintReelOrientationFromPost(post, reel) {
+  const orientation = classifyReelAspect(reelAspectFromPost(post));
+  if (orientation) setReelOrientation(reel, orientation);
+}
+
 function playReelVideo(video) {
   if (!video || video.tagName !== 'VIDEO') return;
   video.playsInline = true;
@@ -839,7 +956,9 @@ function playReelVideo(video) {
   }
 
   const attempt = () => {
-    video.play().catch((err) => {
+    video.play().then(() => {
+      syncReelVideoBackdrop(video);
+    }).catch((err) => {
       console.warn('Reel play blocked:', err?.message || err, video.currentSrc || video.src);
     });
   };
@@ -889,6 +1008,7 @@ function bindReelVideoFallback(video, post) {
   }
   let index = 0;
   video.addEventListener('error', () => {
+    const reel = video.closest('.reel');
     index += 1;
     if (index >= candidates.length) {
       console.warn('Reel video exhausted URL fallbacks for post', post?.id, candidates);
@@ -896,7 +1016,12 @@ function bindReelVideoFallback(video, post) {
       return;
     }
     console.warn('Reel video retrying URL:', candidates[index]);
+    reel?.querySelector('.reel-video-backdrop')?.remove();
+    reel?.classList.remove('reel--landscape', 'reel--portrait', 'reel--square');
+    video.removeAttribute('data-fit-bound');
+    delete video.dataset.fitBound;
     video.src = candidates[index];
+    wireReelVideoFit(video);
     playReelVideo(video);
   });
 }
@@ -3255,7 +3380,7 @@ function renderFeed() {
 
     return `
       <article class="reel ${locked ? 'reel--locked reel--previewing' : ''}" data-id="${post.id}">
-        ${src ? `<video class="reel-video" src="${escapeHtml(src)}" playsinline preload="auto" ${locked ? `data-preview="${previewSec}"` : 'loop'}></video>` : '<div class="reel-video" style="background:#111"></div>'}
+        ${src ? `<div class="reel-media"><video class="reel-video reel-video-main" src="${escapeHtml(src)}" playsinline preload="auto" ${locked ? `data-preview="${previewSec}"` : 'loop'}></video></div>` : '<div class="reel-media"><div class="reel-video reel-video-main reel-video--empty" style="background:#111"></div></div>'}
         <button type="button" class="reel-sound-hint" hidden aria-label="Tap for sound">Tap for sound</button>
         <div class="reel-vignette" aria-hidden="true"></div>
         <div class="reel-gradient"></div>
@@ -3345,6 +3470,13 @@ function renderFeed() {
   }
 
   attachReelGamificationCards();
+  state.feed.forEach((post) => {
+    const reel = els.feedList.querySelector(`.reel[data-id="${post.id}"]`);
+    if (!reel) return;
+    hintReelOrientationFromPost(post, reel);
+    const video = getReelMainVideo(reel);
+    if (video?.tagName === 'VIDEO') wireReelVideoFit(video);
+  });
   setupReelPlayback();
   scrollToReelFromUrl();
 }
@@ -3418,7 +3550,7 @@ function setupReelPlayback() {
   reelObserver = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
       const reel = entry.target;
-      const video = reel.querySelector('.reel-video');
+      const video = getReelMainVideo(reel);
       if (!video || video.tagName !== 'VIDEO') return;
       const post = state.feed.find((item) => String(item.id) === String(reel.dataset.id));
 
@@ -3463,7 +3595,7 @@ function setupReelPlayback() {
   els.feedList.querySelectorAll('.reel').forEach((reel) => reelObserver.observe(reel));
 
   const firstReel = els.feedList.querySelector('.reel');
-  const first = firstReel?.querySelector('.reel-video');
+  const first = getReelMainVideo(firstReel);
   if (first?.tagName === 'VIDEO') {
     const post = state.feed.find((item) => String(item.id) === String(firstReel.dataset.id));
     if (post) bindReelVideoFallback(first, post);

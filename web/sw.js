@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dreamland-build-178230';
+const CACHE_NAME = 'dreamland-build-178231';
 
 const CORE_ASSETS = [
   '/',
