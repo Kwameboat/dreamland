@@ -279,8 +279,25 @@ function maxReelDurationSeconds() {
   return dlFeatures?.getMaxReelDurationSeconds?.() || 60;
 }
 
+function formatReelDurationLimit() {
+  const sec = maxReelDurationSeconds();
+  if (sec < 60) return `${sec}s`;
+  const mins = Math.round(sec / 60);
+  return mins === 1 ? '1 minute' : `${mins} minutes`;
+}
+
+function getDraftClipDuration(draft) {
+  if (!draft) return 0;
+  const duration = draft.duration || 0;
+  const start = draft.trimStart || 0;
+  const end = draft.trimEnd ?? duration;
+  const clip = Math.max(0, end - start);
+  const speed = draft.speed || 1;
+  return clip / speed;
+}
+
 function maxLiveDurationSeconds() {
-  return dlFeatures?.getMaxLiveDurationSeconds?.() || 3600;
+  return dlFeatures?.getMaxLiveDurationSeconds?.() || 0;
 }
 
 const STUDIO_EDIT_FILTERS = {
@@ -531,7 +548,7 @@ async function apiUpload(path, formData, options = {}) {
   const file = formData.get('videoFile') || formData.get('imageFile');
   const fileSize = file?.size || 0;
   const timeoutMs = options.timeoutMs
-    ?? Math.min(900000, Math.max(120000, 120000 + Math.floor(fileSize / 1024)));
+    ?? Math.min(1800000, Math.max(300000, 300000 + Math.floor(fileSize / 1024)));
 
   const parseUploadResponse = (res, text) => {
     let json = {};
@@ -1012,7 +1029,7 @@ function renderCreatorDashboard(data) {
         <section id="studio-panel-upload" class="studio-panel studio-panel--active glass-card" role="tabpanel">
           <div class="studio-panel-head">
             <h3>Upload reel</h3>
-            <p class="muted">Publish polished clips from your gallery.</p>
+            <p class="muted">Publish polished clips from your gallery. Max length: <strong>${escapeHtml(formatReelDurationLimit())}</strong> · max ${dlFeatures?.getMaxReelUploadMb?.() || 128} MB.</p>
           </div>
           <label class="studio-field">
             <span>Title</span>
@@ -1055,7 +1072,7 @@ function renderCreatorDashboard(data) {
           <div class="studio-panel-head">
             <span class="studio-premium-badge">Premium bench</span>
             <h3>Edit bench</h3>
-            <p class="muted">Mix audio, apply filters, trim, caption — then publish.</p>
+            <p class="muted">Mix audio, apply filters, trim, caption — then publish. Max length: <strong>${escapeHtml(formatReelDurationLimit())}</strong>.</p>
           </div>
           <div class="studio-edit-preview">
             <video id="studio-edit-video" class="studio-edit-video" playsinline loop></video>
@@ -1827,11 +1844,13 @@ async function startLiveSession() {
     updateLiveBroadcastViewerCount(1);
     if (liveMaxTimer) clearTimeout(liveMaxTimer);
     const liveLimitSec = maxLiveDurationSeconds();
-    liveMaxTimer = window.setTimeout(async () => {
-      if (!liveBroadcastActive) return;
-      showToast(`Live limit reached (${Math.round(liveLimitSec / 60)} min)`);
-      await endLiveSession();
-    }, liveLimitSec * 1000);
+    if (liveLimitSec > 0) {
+      liveMaxTimer = window.setTimeout(async () => {
+        if (!liveBroadcastActive) return;
+        showToast(`Live limit reached (${Math.round(liveLimitSec / 60)} min)`);
+        await endLiveSession();
+      }, liveLimitSec * 1000);
+    }
     showToast(res.message || 'You are live');
     state.creatorDashboard = null;
     await loadCreatorDashboard(true);
@@ -2111,7 +2130,7 @@ function updateStudioEditPreview() {
       draft.duration = video.duration || 0;
       const maxDur = maxReelDurationSeconds();
       if (draft.duration > maxDur + 0.5) {
-        showToast(`Clip is ${Math.ceil(draft.duration)}s — max is ${maxDur}s. Trim before publishing.`);
+        showToast(`Clip is ${Math.ceil(draft.duration)}s — max is ${formatReelDurationLimit()}. Trim before publishing.`);
       }
       draft.trimEnd = draft.duration;
       if (startInput) {
@@ -2653,6 +2672,14 @@ async function publishStudioDraft() {
   if (draft.musicFilename) descriptionParts.push(`Sound: ${draft.musicFilename}`);
   const description = descriptionParts.filter(Boolean).join('\n\n');
 
+  const clipSec = getDraftClipDuration(draft);
+  const maxSec = maxReelDurationSeconds();
+  if (clipSec > maxSec + 0.5) {
+    showToast(`Clip is ${Math.ceil(clipSec)}s — max is ${formatReelDurationLimit()}. Trim before publishing.`);
+    setStudioEditStatus(`Too long — trim to ${formatReelDurationLimit()} or less.`, true);
+    return;
+  }
+
   const needsExport = studioDraftNeedsExport(draft);
   studioPublishInFlight = true;
   setUploadBusy(true, needsExport ? 'Rendering…' : 'Uploading…');
@@ -2670,6 +2697,7 @@ async function publishStudioDraft() {
     setStudioEditStatus(`Uploading ${sizeMb} MB…`);
     await uploadReelBlob(blob, uploadName, title, description, isPaid, categoryId, {
       skipBusy: true,
+      durationSeconds: clipSec,
       onProgress: (pct) => setStudioEditStatus(`Uploading… ${pct}%`),
     });
     closeStudioEditBench();
@@ -2711,6 +2739,9 @@ async function uploadReelBlob(blob, filename, title, description, isPaid, catego
   form.append('description', description);
   form.append('is_paid', isPaid ? '1' : '0');
   form.append('profile_category_id', categoryId || '');
+  if (options.durationSeconds > 0) {
+    form.append('duration_seconds', String(Math.round(options.durationSeconds * 10) / 10));
+  }
 
   if (!options.skipBusy) setUploadBusy(true, 'Uploading…');
   if (options.onProgress) setStudioEditStatus('Uploading… 0%');

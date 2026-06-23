@@ -158,7 +158,9 @@ class FileUpload extends Component
 
     public function uploadFile($mediaFile, $type, $isMultiple = false, $data = [])
     {
-        
+        if ($mediaFile && strpos((string) ($mediaFile->type ?? ''), 'video') === 0) {
+            @set_time_limit(600);
+        }
 
         $folderPath;
         $files = [];

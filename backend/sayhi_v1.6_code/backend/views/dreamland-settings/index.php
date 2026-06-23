@@ -3,6 +3,7 @@ use yii\helpers\Html;
 use yii\widgets\ActiveForm;
 /** @var common\models\DreamlandSetting $model */
 $this->title = 'Dreamland Settings';
+$model->max_reel_duration_minutes = $model->max_reel_duration_minutes ?: max(1, (int) round(((int) $model->max_reel_duration_seconds) / 60));
 ?>
 <div class="dreamland-admin">
     <h1><?= Html::encode($this->title) ?></h1>
@@ -13,14 +14,15 @@ $this->title = 'Dreamland Settings';
     <?= $form->field($model, 'streak_watch_threshold_seconds')->input('number', ['min' => 60]) ?>
     <?= $form->field($model, 'streak_game_score_threshold')->input('number', ['min' => 1]) ?>
     <div class="panel panel-default">
-        <div class="panel-heading"><h4>Video &amp; live limits</h4></div>
+        <div class="panel-heading"><h4>Creator upload limits</h4></div>
         <div class="panel-body">
-            <?= $form->field($model, 'max_reel_duration_seconds')->input('number', ['min' => 5, 'max' => 600])
-                ->hint('Max reel clip length in seconds (applies to uploads and in-app recording).') ?>
+            <?= $form->field($model, 'max_reel_duration_minutes')->input('number', ['min' => 1, 'max' => 10])
+                ->hint('Maximum length for uploaded or recorded reels (e.g. 1 = only clips up to 1 minute). Applies to Studio uploads and in-app recording — not live broadcasts.') ?>
             <?= $form->field($model, 'max_reel_upload_mb')->input('number', ['min' => 1, 'max' => 512])
-                ->hint('Max reel file size in megabytes.') ?>
-            <?= $form->field($model, 'max_live_duration_seconds')->input('number', ['min' => 60, 'max' => 86400])
-                ->hint('Max live broadcast length in seconds — PWA auto-ends when reached.') ?>
+                ->hint('Maximum reel file size in megabytes.') ?>
+            <p class="help-block text-muted" style="margin-top:8px;">
+                <strong>Live broadcasts</strong> are not time-limited. Creators start and end live manually in the PWA.
+            </p>
         </div>
     </div>
     <?= $form->field($model, 'paystack_public_key')->textInput() ?>

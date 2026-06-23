@@ -191,6 +191,9 @@ class CreatorController extends ActiveController
      */
     public function actionUploadReel()
     {
+        @set_time_limit(600);
+        @ini_set('max_execution_time', '600');
+
         $deny = $this->requireApprovedCreator();
         if ($deny) {
             return $deny;
@@ -217,6 +220,12 @@ class CreatorController extends ActiveController
         $limitError = DreamlandUploadLimits::validateVideoFile($videoFile, ['skipDurationProbe' => true]);
         if ($limitError !== null) {
             return $limitError;
+        }
+
+        $clientDuration = (float) Yii::$app->request->post('duration_seconds', 0);
+        $durationError = DreamlandUploadLimits::validateClientDuration($clientDuration);
+        if ($durationError !== null) {
+            return $durationError;
         }
 
         $title = trim((string) Yii::$app->request->post('title', 'New Dreamland reel'));

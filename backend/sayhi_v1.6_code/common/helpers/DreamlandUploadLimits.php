@@ -13,7 +13,7 @@ class DreamlandUploadLimits
 {
     public const DEFAULT_REEL_DURATION = 60;
     public const DEFAULT_REEL_UPLOAD_MB = 128;
-    public const DEFAULT_LIVE_DURATION = 3600;
+    public const DEFAULT_LIVE_DURATION = 0;
 
     /** @return array{max_reel_duration_seconds:int,max_reel_upload_mb:int,max_live_duration_seconds:int} */
     public static function getLimits(): array
@@ -42,6 +42,8 @@ class DreamlandUploadLimits
                 $v = (int) $dreamland->getAttribute('max_live_duration_seconds');
                 if ($v > 0) {
                     $limits['max_live_duration_seconds'] = min(86400, $v);
+                } else {
+                    $limits['max_live_duration_seconds'] = 0;
                 }
             }
         } catch (\Throwable $e) {
@@ -65,9 +67,7 @@ class DreamlandUploadLimits
             }
             if (!empty($legacy->free_live_tv_duration_to_view)) {
                 $v = (int) $legacy->free_live_tv_duration_to_view;
-                if ($v > 0 && $limits['max_live_duration_seconds'] === self::DEFAULT_LIVE_DURATION) {
-                    $limits['max_live_duration_seconds'] = min(86400, $v);
-                }
+                // Do not apply legacy TV limits to Dreamland live — creators end broadcasts manually.
             }
         } catch (\Throwable $e) {
             // ignore
@@ -108,6 +108,25 @@ class DreamlandUploadLimits
             }
         }
 
+        return null;
+    }
+
+    /** @return array{statusCode:int,message:string}|null */
+    public static function validateClientDuration(float $seconds): ?array
+    {
+        if ($seconds <= 0) {
+            return null;
+        }
+        $limits = self::getLimits();
+        $max = $limits['max_reel_duration_seconds'];
+        if ($seconds > $max + 0.5) {
+            $mins = max(1, (int) round($max / 60));
+            return [
+                'statusCode' => 422,
+                'message' => 'Video is ' . (int) ceil($seconds) . 's — max allowed is '
+                    . $max . 's (' . $mins . ' min). Trim your clip in Studio before publishing.',
+            ];
+        }
         return null;
     }
 

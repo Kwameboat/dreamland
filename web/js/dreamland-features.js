@@ -10,7 +10,7 @@ export function createDreamlandFeatures(ctx) {
   let vapidPublicKey = '';
   let maxReelDurationSeconds = 60;
   let maxReelUploadMb = 128;
-  let maxLiveDurationSeconds = 3600;
+  let maxLiveDurationSeconds = 0;
   let categories = [];
   let watchTimer = null;
   let watchAccum = 0;
@@ -43,7 +43,7 @@ export function createDreamlandFeatures(ctx) {
         const cached = JSON.parse(localStorage.getItem('dreamland_upload_limits') || '{}');
         maxReelDurationSeconds = Number(cached.maxReelDurationSeconds) || 60;
         maxReelUploadMb = Number(cached.maxReelUploadMb) || 128;
-        maxLiveDurationSeconds = Number(cached.maxLiveDurationSeconds) || 3600;
+        maxLiveDurationSeconds = Number(cached.maxLiveDurationSeconds) || 0;
       } catch { /* defaults */ }
     }
     return previewSeconds;
