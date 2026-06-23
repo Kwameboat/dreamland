@@ -531,7 +531,48 @@ async function apiUpload(path, formData, options = {}) {
   const file = formData.get('videoFile') || formData.get('imageFile');
   const fileSize = file?.size || 0;
   const timeoutMs = options.timeoutMs
-    ?? Math.min(600000, Math.max(90000, 90000 + Math.floor(fileSize / 2048)));
+    ?? Math.min(900000, Math.max(120000, 120000 + Math.floor(fileSize / 1024)));
+
+  const parseUploadResponse = (res, text) => {
+    let json = {};
+    if (text) {
+      try { json = JSON.parse(text); } catch { throw new Error(`Invalid JSON from API (${res.status})`); }
+    }
+    const payload = unwrapPayload(json, res.status);
+    if (res.ok && payload.ok) return payload;
+    const message = apiErrorMessage(payload) || res.statusText || 'Upload failed';
+    const error = new Error(message);
+    error.status = payload.status || res.status;
+    if (error.status === 401) clearSession();
+    throw error;
+  };
+
+  if (typeof XMLHttpRequest !== 'undefined') {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      if (state.token) xhr.setRequestHeader('Authorization', `Bearer ${state.token}`);
+      xhr.timeout = timeoutMs;
+      xhr.upload.onprogress = (ev) => {
+        if (!ev.lengthComputable || typeof options.onProgress !== 'function') return;
+        options.onProgress(Math.min(99, Math.round((ev.loaded / ev.total) * 100)));
+      };
+      xhr.onload = () => {
+        try {
+          resolve(parseUploadResponse(
+            { ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, statusText: xhr.statusText },
+            xhr.responseText,
+          ));
+        } catch (err) {
+          reject(err);
+        }
+      };
+      xhr.onerror = () => reject(new Error('Upload failed — check your connection'));
+      xhr.ontimeout = () => reject(new Error('Upload timed out — try a shorter clip or stronger Wi‑Fi'));
+      xhr.onabort = () => reject(new Error('Upload cancelled'));
+      xhr.send(formData);
+    });
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -540,7 +581,7 @@ async function apiUpload(path, formData, options = {}) {
     res = await fetch(url, { method: 'POST', headers, body: formData, signal: controller.signal });
   } catch (err) {
     if (err.name === 'AbortError') {
-      throw new Error('Upload timed out — try a smaller clip or confirm the API is running on port 8080');
+      throw new Error('Upload timed out — try a shorter clip or stronger Wi‑Fi');
     }
     throw new Error(`Upload failed: ${err.message}`);
   } finally {
@@ -548,17 +589,7 @@ async function apiUpload(path, formData, options = {}) {
   }
 
   const text = await res.text();
-  let json = {};
-  if (text) {
-    try { json = JSON.parse(text); } catch { throw new Error(`Invalid JSON from API (${res.status})`); }
-  }
-  const payload = unwrapPayload(json, res.status);
-  if (res.ok && payload.ok) return payload;
-  const message = apiErrorMessage(payload) || res.statusText || 'Upload failed';
-  const error = new Error(message);
-  error.status = payload.status || res.status;
-  if (error.status === 401) clearSession();
-  throw error;
+  return parseUploadResponse(res, text);
 }
 
 function setApiStatus(online, label) {
@@ -2625,16 +2656,22 @@ async function publishStudioDraft() {
   const needsExport = studioDraftNeedsExport(draft);
   studioPublishInFlight = true;
   setUploadBusy(true, needsExport ? 'Rendering…' : 'Uploading…');
-  setStudioEditStatus(needsExport ? 'Rendering premium edit…' : 'Preparing clip…');
+  setStudioEditStatus(needsExport ? 'Rendering premium edit…' : 'Starting upload…');
 
   try {
     let blob = await ensureStudioDraftBlob(draft);
     if (needsExport) {
+      setStudioEditStatus('Rendering your edit (this can take a minute)…');
       blob = await exportStudioDraftBlob({ ...draft, blob });
       draft.blob = blob;
     }
     const uploadName = normalizeStudioFilename(draft.filename, blob.type || 'video/webm');
-    await uploadReelBlob(blob, uploadName, title, description, isPaid, categoryId, { skipBusy: true });
+    const sizeMb = (blob.size / (1024 * 1024)).toFixed(1);
+    setStudioEditStatus(`Uploading ${sizeMb} MB…`);
+    await uploadReelBlob(blob, uploadName, title, description, isPaid, categoryId, {
+      skipBusy: true,
+      onProgress: (pct) => setStudioEditStatus(`Uploading… ${pct}%`),
+    });
     closeStudioEditBench();
     activateStudioPanel('upload');
     if (state.creatorDashboard) renderCreatorDashboard(state.creatorDashboard);
@@ -2676,15 +2713,18 @@ async function uploadReelBlob(blob, filename, title, description, isPaid, catego
   form.append('profile_category_id', categoryId || '');
 
   if (!options.skipBusy) setUploadBusy(true, 'Uploading…');
+  if (options.onProgress) setStudioEditStatus('Uploading… 0%');
 
   try {
-    const res = await apiUpload(API_ROUTES.creatorUploadReel, form);
+    const res = await apiUpload(API_ROUTES.creatorUploadReel, form, {
+      onProgress: options.onProgress,
+    });
     const msg = res.message || res.data?.message || 'Reel uploaded';
     showToast(msg);
     setStudioEditStatus('');
     state.creatorDashboard = null;
-    await loadCreatorDashboard(true);
-    await loadFeed(true);
+    void loadCreatorDashboard(true);
+    void loadFeed(true);
     if (Number(res.data?.status) !== 10) {
       window.setTimeout(() => loadFeed(true), 5000);
     }

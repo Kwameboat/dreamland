@@ -277,7 +277,10 @@ class FileUpload extends Component
         $isProhabited=false;
         $moderationReferenceId='';
         
-        $iscontentModerationGateway = (int)($this->settingData->content_moderation_gateway ?? 0);
+        $skipContentModeration = !empty($data['skipContentModeration']);
+        $iscontentModerationGateway = $skipContentModeration
+            ? 0
+            : (int)($this->settingData->content_moderation_gateway ?? 0);
 
        if(@Yii::$app->user->identity->role){
             if(Yii::$app->user->identity->role==User::ROLE_ADMIN || Yii::$app->user->identity->role==User::ROLE_SUBADMIN){

@@ -214,7 +214,7 @@ class CreatorController extends ActiveController
             ];
         }
 
-        $limitError = DreamlandUploadLimits::validateVideoFile($videoFile);
+        $limitError = DreamlandUploadLimits::validateVideoFile($videoFile, ['skipDurationProbe' => true]);
         if ($limitError !== null) {
             return $limitError;
         }
@@ -232,10 +232,12 @@ class CreatorController extends ActiveController
             $title = 'New Dreamland reel';
         }
 
+        // Skip legacy Sightengine/Rekognition sync scan — Dreamland safety queue handles moderation async.
         $uploaded = Yii::$app->fileUpload->uploadFile(
             $videoFile,
             Yii::$app->fileUpload::TYPE_POST,
-            false
+            false,
+            ['skipContentModeration' => true]
         );
         if (empty($uploaded[0]['file'])) {
             $msg = !empty($uploaded[0]['isProhabited'])

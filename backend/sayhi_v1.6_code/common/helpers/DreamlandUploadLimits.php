@@ -82,8 +82,11 @@ class DreamlandUploadLimits
         return $limits['max_reel_upload_mb'] * 1024 * 1024;
     }
 
-    /** @return array{statusCode:int,message:string}|null */
-    public static function validateVideoFile(UploadedFile $file): ?array
+    /**
+     * @param array{skipDurationProbe?:bool} $options
+     * @return array{statusCode:int,message:string}|null
+     */
+    public static function validateVideoFile(UploadedFile $file, array $options = []): ?array
     {
         $limits = self::getLimits();
         $maxBytes = $limits['max_reel_upload_mb'] * 1024 * 1024;
@@ -94,13 +97,15 @@ class DreamlandUploadLimits
             ];
         }
 
-        $duration = self::probeVideoDuration($file->tempName);
-        if ($duration !== null && $duration > $limits['max_reel_duration_seconds']) {
-            return [
-                'statusCode' => 422,
-                'message' => 'Video is ' . (int) ceil($duration) . 's — max allowed is '
-                    . $limits['max_reel_duration_seconds'] . 's.',
-            ];
+        if (empty($options['skipDurationProbe'])) {
+            $duration = self::probeVideoDuration($file->tempName);
+            if ($duration !== null && $duration > $limits['max_reel_duration_seconds']) {
+                return [
+                    'statusCode' => 422,
+                    'message' => 'Video is ' . (int) ceil($duration) . 's — max allowed is '
+                        . $limits['max_reel_duration_seconds'] . 's.',
+                ];
+            }
         }
 
         return null;
