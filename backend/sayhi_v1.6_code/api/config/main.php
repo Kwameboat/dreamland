@@ -988,6 +988,14 @@ return [
                 ],
                 [
                     'class' => 'yii\rest\UrlRule',
+                    'controller' => 'v1/media',
+                    'pluralize' => false,
+                    'extraPatterns' => [
+                        'GET reel' => 'reel',
+                    ],
+                ],
+                [
+                    'class' => 'yii\rest\UrlRule',
                     'controller' => 'v1/dreamland-meta',
                     'pluralize' => false,
                     'extraPatterns' => [

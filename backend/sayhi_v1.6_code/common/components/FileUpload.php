@@ -5,6 +5,7 @@ use Yii;
 use yii\base\Component;
 use common\models\Setting;
 use common\models\User;
+use common\helpers\DreamlandStorageMode;
 use common\helpers\DreamlandWasabiStorage;
 
 use AzureOss\FlysystemAzureBlobStorage\AzureBlobStorageAdapter;
@@ -79,7 +80,7 @@ class FileUpload extends Component
 
     private function effectiveStorageSystem(): int
     {
-        if (getenv('DREAMLAND_FORCE_LOCAL_UPLOADS') === '1' && !DreamlandWasabiStorage::isEnvEnabled()) {
+        if (DreamlandStorageMode::useLocalDisk()) {
             return self::STORAGE_SYSTEM_LOCAL;
         }
 

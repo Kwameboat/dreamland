@@ -38,11 +38,17 @@ class DreamlandMediaUrl
     public static function publicUploadsBase(?string $folder = null): string
     {
         $folder = $folder ?? (Yii::$app->params['pathUploadImageFolder'] ?? 'image');
-        if (DreamlandWasabiStorage::isConfigured()) {
+        if (!DreamlandStorageMode::useLocalDisk() && DreamlandWasabiStorage::isConfigured()) {
             return DreamlandWasabiStorage::publicFolderUrl((string) $folder);
         }
 
         return self::localPublicUploadsBase((string) $folder);
+    }
+
+    public static function mediaApiReelUrl(string $filename): string
+    {
+        $filename = ltrim(basename($filename), '/');
+        return self::siteBase() . self::apiPublicPath() . '/v1/media/reel?name=' . rawurlencode($filename);
     }
 
     /**
@@ -120,6 +126,9 @@ class DreamlandMediaUrl
         }
 
         if (self::localFileExists($filename)) {
+            if (DreamlandStorageMode::useLocalDisk()) {
+                return self::mediaApiReelUrl($filename);
+            }
             return self::localPublicUploadsBase('image') . '/' . $filename;
         }
 
@@ -139,6 +148,10 @@ class DreamlandMediaUrl
 
         if (self::localFileExists($filename)) {
             return true;
+        }
+
+        if (DreamlandStorageMode::useLocalDisk()) {
+            return false;
         }
 
         $folder = (string) (Yii::$app->params['pathUploadImageFolder'] ?? 'image');

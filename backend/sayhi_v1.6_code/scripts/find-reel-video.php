@@ -23,6 +23,7 @@ new yii\web\Application($config);
 
 use api\modules\v1\models\Post;
 use common\helpers\DreamlandMediaUrl;
+use common\helpers\DreamlandStorageMode;
 use common\helpers\DreamlandWasabiStorage;
 
 $postId = isset($argv[1]) ? (int) $argv[1] : 0;
@@ -31,6 +32,8 @@ if ($postId > 0) {
     $query->andWhere(['id' => $postId]);
 }
 $posts = $query->limit($postId > 0 ? 1 : 20)->all();
+
+echo 'Storage mode: ' . DreamlandStorageMode::activeLabel() . "\n\n";
 
 if (!$posts) {
     echo "No reel posts found.\n";

@@ -24,6 +24,12 @@ if (!is_file($yiiRoot . '/vendor/autoload.php')) {
 require $yiiRoot . '/common/config/load-dotenv.php';
 require $yiiRoot . '/common/config/render-https.php';
 
+putenv('DREAMLAND_YII_ROOT=' . $yiiRoot);
+require $yiiRoot . '/api/web/serve-uploads.php';
+if (dreamland_try_serve_upload($yiiRoot)) {
+    exit;
+}
+
 if (strtoupper($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     header('Access-Control-Allow-Origin: *');
     header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');

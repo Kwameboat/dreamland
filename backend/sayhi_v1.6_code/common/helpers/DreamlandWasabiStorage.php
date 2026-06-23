@@ -128,6 +128,12 @@ JSON;
     /** Base URL the PWA uses when building media paths (image folder). */
     public static function uploadsBaseForApi(?Setting $setting = null): string
     {
+        if (DreamlandStorageMode::useLocalDisk()) {
+            return \common\helpers\DreamlandMediaUrl::localPublicUploadsBase(
+                (string) (Yii::$app->params['pathUploadImageFolder'] ?? 'image')
+            );
+        }
+
         if (!self::isConfigured($setting)) {
             return \common\helpers\DreamlandMediaUrl::localPublicUploadsBase(
                 (string) (Yii::$app->params['pathUploadImageFolder'] ?? 'image')

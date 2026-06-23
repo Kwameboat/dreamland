@@ -480,6 +480,7 @@ function reelMediaCandidates(post) {
   if (gallery?.filenameUrl) candidates.push(gallery.filenameUrl);
   if (gallery?.fileUrl) candidates.push(gallery.fileUrl);
   expanded.forEach((name) => {
+    candidates.push(`${API_BASE}/media/reel?name=${encodeURIComponent(name)}`);
     candidates.push(`${apiUploadsBase()}/${name}`);
     candidates.push(`${UPLOADS_BASE}/${name}`);
     if (window.__DL_ENV__?.uploads) {

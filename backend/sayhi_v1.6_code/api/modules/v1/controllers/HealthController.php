@@ -2,6 +2,7 @@
 
 namespace api\modules\v1\controllers;
 
+use common\helpers\DreamlandStorageMode;
 use common\helpers\DreamlandWasabiStorage;
 use Yii;
 use yii\rest\Controller;
@@ -94,6 +95,7 @@ class HealthController extends Controller
                 'checks' => [
                     'database' => $dbOk,
                     'uploads_writable' => $uploadsWritable,
+                    'storage_mode' => DreamlandStorageMode::activeLabel(),
                     'wasabi_storage' => $wasabi['ok'] ?? false,
                     'wasabi_message' => $wasabi['message'] ?? '',
                     'safety_queue_depth' => $queueDepth,

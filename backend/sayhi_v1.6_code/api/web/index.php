@@ -16,7 +16,7 @@ if (strtoupper($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
 }
 
 require __DIR__ . '/serve-uploads.php';
-if (dreamland_try_serve_upload()) {
+if (dreamland_try_serve_upload(dirname(__DIR__, 2))) {
     exit;
 }
 
