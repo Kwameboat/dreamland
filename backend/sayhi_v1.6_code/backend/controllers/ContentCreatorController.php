@@ -108,29 +108,37 @@ class ContentCreatorController extends Controller
     {
         $model = $this->findCreator($id);
 
-        $reelsProvider = new ActiveDataProvider([
-            'query' => Post::find()
-                ->where(['user_id' => $model->id, 'type' => Post::TYPE_REEL])
-                ->andWhere(['<>', 'status', Post::STATUS_DELETED])
-                ->orderBy(['id' => SORT_DESC]),
-            'pagination' => ['pageSize' => 8],
-        ]);
+        try {
+            $reelsProvider = new ActiveDataProvider([
+                'query' => Post::find()
+                    ->where(['user_id' => $model->id, 'type' => Post::TYPE_REEL])
+                    ->andWhere(['<>', 'status', Post::STATUS_DELETED])
+                    ->orderBy(['id' => SORT_DESC]),
+                'pagination' => ['pageSize' => 8],
+            ]);
 
-        $liveProvider = new ActiveDataProvider([
-            'query' => UserLiveHistory::find()
-                ->where(['user_id' => $model->id])
-                ->orderBy(['id' => SORT_DESC]),
-            'pagination' => ['pageSize' => 8],
-        ]);
+            $liveProvider = new ActiveDataProvider([
+                'query' => UserLiveHistory::find()
+                    ->where(['user_id' => $model->id])
+                    ->orderBy(['id' => SORT_DESC]),
+                'pagination' => ['pageSize' => 8],
+            ]);
 
-        $stats = [
-            'reels' => (int) Post::find()
-                ->where(['user_id' => $model->id, 'type' => Post::TYPE_REEL])
-                ->andWhere(['<>', 'status', Post::STATUS_DELETED])
-                ->count(),
-            'live' => (int) UserLiveHistory::find()->where(['user_id' => $model->id])->count(),
-            'credits' => (int) $model->available_coin,
-        ];
+            $stats = [
+                'reels' => (int) Post::find()
+                    ->where(['user_id' => $model->id, 'type' => Post::TYPE_REEL])
+                    ->andWhere(['<>', 'status', Post::STATUS_DELETED])
+                    ->count(),
+                'live' => (int) UserLiveHistory::find()->where(['user_id' => $model->id])->count(),
+                'credits' => (int) $model->available_coin,
+            ];
+        } catch (\Throwable $e) {
+            Yii::error($e->getMessage(), __METHOD__);
+            $reelsProvider = new ActiveDataProvider(['query' => Post::find()->where('0=1')]);
+            $liveProvider = new ActiveDataProvider(['query' => UserLiveHistory::find()->where('0=1')]);
+            $stats = ['reels' => 0, 'live' => 0, 'credits' => (int) $model->available_coin];
+            Yii::$app->session->setFlash('warning', 'Some creator stats could not be loaded.');
+        }
 
         return $this->render('view', [
             'model' => $model,
@@ -311,7 +319,11 @@ class ContentCreatorController extends Controller
             ->one();
 
         if ($user && DreamlandCreatorApproval::looksLikeCreator($user)) {
-            DreamlandCreatorApproval::syncCreatorRecord($user);
+            try {
+                DreamlandCreatorApproval::syncCreatorRecord($user);
+            } catch (\Throwable $e) {
+                Yii::warning($e->getMessage(), __METHOD__);
+            }
             $model = DreamlandAudience::creatorQuery()->andWhere(['id' => $id])->one();
             if ($model) {
                 return $model;

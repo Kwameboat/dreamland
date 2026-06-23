@@ -113,10 +113,14 @@ $isApproved = DreamlandCreatorApproval::isApproved($model);
                 <p><strong>Name:</strong> <?= Html::encode($model->name) ?></p>
                 <p><strong>Username:</strong> <?= Html::encode($model->username) ?></p>
                 <p><strong>Email:</strong> <?= Html::encode($model->email) ?></p>
-                <p><strong>Account type:</strong> <?= Html::encode($model->dreamland_account_type ?: 'creator') ?></p>
+                <p><strong>Account type:</strong> <?= Html::encode(
+                    $model->hasAttribute('dreamland_account_type') && $model->dreamland_account_type
+                        ? $model->dreamland_account_type
+                        : 'creator'
+                ) ?></p>
                 <p><strong>PWA creator status:</strong> <?= Html::encode(DreamlandCreatorApproval::label($creatorStatus)) ?></p>
-                <p><strong>Account status:</strong> <?= Html::encode($model->getStatus()) ?></p>
-                <p><strong>Role:</strong> <?= Html::encode($model->getRole()) ?></p>
+                <p><strong>Account status:</strong> <?= Html::encode($model->getStatus() ?: 'Unknown') ?></p>
+                <p><strong>Role:</strong> <?= Html::encode($model->getRole() ?: 'Creator') ?></p>
                 <p><strong>Verified:</strong> <?= Html::encode($model->getIsVerifiedString()) ?></p>
                 <p><strong>Joined:</strong> <?= Yii::$app->formatter->asDatetime($model->created_at) ?></p>
             </div>
@@ -139,7 +143,19 @@ $isApproved = DreamlandCreatorApproval::isApproved($model);
                                 return (string) $row->status;
                             },
                         ],
-                        'created_at:datetime',
+                        'created_at' => [
+                            'format' => 'raw',
+                            'value' => static function ($row) {
+                                if (empty($row->created_at)) {
+                                    return '—';
+                                }
+                                try {
+                                    return Yii::$app->formatter->asDatetime($row->created_at);
+                                } catch (\Throwable $e) {
+                                    return (string) $row->created_at;
+                                }
+                            },
+                        ],
                     ],
                 ]) ?>
             </div>
@@ -152,8 +168,34 @@ $isApproved = DreamlandCreatorApproval::isApproved($model);
                     'columns' => [
                         'id',
                         'channel_name',
-                        'start_time:datetime',
-                        'end_time:datetime',
+                        'start_time' => [
+                            'label' => 'Start',
+                            'format' => 'raw',
+                            'value' => static function ($row) {
+                                if (empty($row->start_time)) {
+                                    return '—';
+                                }
+                                try {
+                                    return Yii::$app->formatter->asDatetime($row->start_time);
+                                } catch (\Throwable $e) {
+                                    return (string) $row->start_time;
+                                }
+                            },
+                        ],
+                        'end_time' => [
+                            'label' => 'End',
+                            'format' => 'raw',
+                            'value' => static function ($row) {
+                                if (empty($row->end_time)) {
+                                    return '—';
+                                }
+                                try {
+                                    return Yii::$app->formatter->asDatetime($row->end_time);
+                                } catch (\Throwable $e) {
+                                    return (string) $row->end_time;
+                                }
+                            },
+                        ],
                         'total_time',
                     ],
                 ]) ?>
