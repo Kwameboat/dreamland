@@ -22,6 +22,7 @@ fetch "$TMP/CreatorSearch.php" "$BASE/backend/models/CreatorSearch.php"
 fetch "$TMP/DreamlandAudience.php" "$BASE/common/models/DreamlandAudience.php"
 fetch "$TMP/DreamlandCreatorApproval.php" "$BASE/common/helpers/DreamlandCreatorApproval.php"
 fetch "$TMP/sync-pwa-creators.php" "$BASE/scripts/sync-pwa-creators.php"
+fetch "$TMP/check-creator.php" "$BASE/scripts/check-creator.php"
 
 cp -f "$TMP/ContentCreatorController.php" "$DL/backend/controllers/ContentCreatorController.php"
 cp -f "$TMP/view.php" "$DL/backend/views/content-creator/view.php"
@@ -29,12 +30,16 @@ cp -f "$TMP/CreatorSearch.php" "$DL/backend/models/CreatorSearch.php"
 cp -f "$TMP/DreamlandAudience.php" "$DL/common/models/DreamlandAudience.php"
 cp -f "$TMP/DreamlandCreatorApproval.php" "$DL/common/helpers/DreamlandCreatorApproval.php"
 cp -f "$TMP/sync-pwa-creators.php" "$DL/scripts/sync-pwa-creators.php"
+cp -f "$TMP/check-creator.php" "$DL/scripts/check-creator.php"
 echo "OK: admin creator PHP files installed."
 
 cd "$DL"
 php scripts/apply-dreamland-v2-migration.php 2>&1 | tail -2 || true
 php scripts/apply-dreamland-creator-approval-migration.php 2>&1 | tail -3 || true
 php scripts/sync-pwa-creators.php 2>&1 || true
+echo ""
+echo "--- Creators in DB ---"
+php scripts/check-creator.php 2>&1 || php scripts/check-creator.php 2>&1 || true
 
 echo ""
 echo "Done. Open: https://dreamlandgh.app/admin/index.php?r=content-creator/view&id=2"

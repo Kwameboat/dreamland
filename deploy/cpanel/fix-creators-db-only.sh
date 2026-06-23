@@ -18,7 +18,12 @@ function hasCol(PDO $pdo, string $col): bool {
 
 echo "=== User #2 ===\n";
 $row = $pdo->query('SELECT id, username, email, role, status, dreamland_account_type, dreamland_creator_status FROM user WHERE id = 2')->fetch(PDO::FETCH_ASSOC);
-print_r($row ?: ['error' => 'user id=2 not found']);
+if (!$row) {
+    echo "NOT FOUND — id=2 does not exist. The grid row number is not the user id.\n";
+    echo "Run: php scripts/check-creator.php\n\n";
+} else {
+    print_r($row);
+}
 
 $hasType = hasCol($pdo, 'dreamland_account_type');
 $hasStatus = hasCol($pdo, 'dreamland_creator_status');
