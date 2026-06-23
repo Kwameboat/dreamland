@@ -369,6 +369,20 @@ const els = {
 };
 
 const PREVIEW_SECONDS = 3;
+
+function previewSecondsForPost(post) {
+  const dream = post?.dreamland || {};
+  const fromApi = Number(dream.preview_seconds ?? dream.paywall?.preview_loop_seconds);
+  if (fromApi > 0) return fromApi;
+  const fromSettings = Number(dlFeatures?.getPreviewSeconds?.());
+  if (fromSettings > 0) return fromSettings;
+  return PREVIEW_SECONDS;
+}
+
+function isLockedPremiumPost(post) {
+  const dream = post?.dreamland || {};
+  return Boolean(dream.is_paid && !dream.is_unlocked);
+}
 let reelObserver = null;
 let toastTimer = null;
 let authMode = 'signin';
@@ -1137,13 +1151,14 @@ function renderViewerDashboard(data) {
   const stats = data.stats || {};
   els.viewerDashboard.innerHTML = `
     <div class="viewer-hero glass-card">
-      <div class="creator-hero-top">
+      <div class="creator-hero-top viewer-hero__head">
         <div class="profile-avatar-lg">${userAvatarBlock(viewer)}</div>
         <div>
           <p class="eyebrow">Viewer Dashboard</p>
           <h2>${escapeHtml(viewer.name || viewer.username || 'Viewer')}</h2>
           <p class="muted">@${escapeHtml(viewer.username || 'viewer')} · Watch · Play · Earn</p>
         </div>
+        <button type="button" class="btn-ghost dashboard-refresh-btn" id="viewer-refresh-header" aria-label="Refresh dashboard">↻ Refresh</button>
       </div>
       <div class="creator-stats">
         <div class="stat stat-accent"><strong>${formatCount(stats.credits_balance ?? viewer.available_coin ?? 0)}</strong><span>Credits</span></div>
@@ -1156,7 +1171,7 @@ function renderViewerDashboard(data) {
     <div class="viewer-actions">
       <button type="button" class="btn-primary" id="viewer-watch-feed">Continue watching</button>
       <button type="button" class="btn-primary" id="viewer-watch-live">Browse live</button>
-      <button type="button" class="btn-ghost" id="viewer-refresh-dashboard">Update now</button>
+      <button type="button" class="btn-ghost" id="viewer-refresh-dashboard">Refresh dashboard</button>
       <button type="button" class="btn-ghost" id="viewer-open-wallet">Top up wallet</button>
       <button type="button" class="btn-ghost" id="viewer-open-account">Account settings</button>
     </div>
@@ -1168,6 +1183,7 @@ function renderViewerDashboard(data) {
     <div id="viewer-streak-panel"></div>`;
   document.getElementById('viewer-watch-feed')?.addEventListener('click', () => switchView('feed-view'));
   document.getElementById('viewer-refresh-dashboard')?.addEventListener('click', () => loadViewerDashboard(true));
+  document.getElementById('viewer-refresh-header')?.addEventListener('click', () => loadViewerDashboard(true));
   document.getElementById('viewer-watch-live')?.addEventListener('click', () => {
     switchView('feed-view');
     switchFeedMode('live');
@@ -1278,6 +1294,7 @@ function renderCreatorDashboard(data) {
             <h2>${escapeHtml(creator.name || creator.username || 'Creator')}</h2>
             <p class="studio-handle">@${escapeHtml(creator.username || 'creator')}</p>
           </div>
+          <button type="button" class="btn-ghost dashboard-refresh-btn" id="creator-refresh-header" aria-label="Refresh dashboard">↻ Refresh</button>
         </div>
         <div class="studio-stats">
           <div class="studio-stat">
@@ -1521,7 +1538,7 @@ function renderCreatorDashboard(data) {
 
       <div class="studio-quick glass-card">
         <button type="button" class="btn-primary studio-quick-btn" id="creator-watch-feed">Watch feed</button>
-        <button type="button" class="btn-ghost studio-quick-btn" id="creator-refresh">Update now</button>
+        <button type="button" class="btn-ghost studio-quick-btn" id="creator-refresh">Refresh dashboard</button>
         <p class="muted studio-refresh-hint" id="dashboard-refresh-hint">Auto-refresh every 60s</p>
       </div>
 
@@ -1629,6 +1646,7 @@ function bindCreatorStudioEvents() {
   });
   document.getElementById('creator-watch-feed')?.addEventListener('click', () => switchView('feed-view'));
   document.getElementById('creator-refresh')?.addEventListener('click', () => loadCreatorDashboard(true));
+  document.getElementById('creator-refresh-header')?.addEventListener('click', () => loadCreatorDashboard(true));
   document.getElementById('creator-refresh-approval')?.addEventListener('click', async () => {
     await validateSession();
     await loadCreatorDashboard(true);
@@ -3366,7 +3384,7 @@ function renderFeed() {
 
   els.feedList.innerHTML = state.feed.map((post) => {
     const dream = post.dreamland || {};
-    const locked = dream.is_paid && !dream.is_unlocked;
+    const locked = isLockedPremiumPost(post);
     const src = mediaUrl(post);
     const creator = post.user?.username || post.user?.name || 'creator';
     const initial = creator.charAt(0).toUpperCase();
@@ -3376,10 +3394,10 @@ function renderFeed() {
     const descHtml = desc && !looksLikeUploadFilename(desc) ? `<p class="reel-desc">${escapeHtml(desc)}</p>` : '';
     const likes = formatCount(post.total_like);
 
-    const previewSec = dlFeatures?.getPreviewSeconds?.() || PREVIEW_SECONDS;
+    const previewSec = previewSecondsForPost(post);
 
     return `
-      <article class="reel ${locked ? 'reel--locked reel--previewing' : ''}" data-id="${post.id}">
+      <article class="reel ${locked ? 'reel--locked reel--previewing' : ''}" data-id="${post.id}" data-price="${price}" data-preview="${previewSec}">
         ${src ? `<div class="reel-media"><video class="reel-video reel-video-main" src="${escapeHtml(src)}" playsinline preload="auto" ${locked ? `data-preview="${previewSec}"` : 'loop'}></video></div>` : '<div class="reel-media"><div class="reel-video reel-video-main reel-video--empty" style="background:#111"></div></div>'}
         <button type="button" class="reel-sound-hint" hidden aria-label="Tap for sound">Tap for sound</button>
         <div class="reel-vignette" aria-hidden="true"></div>

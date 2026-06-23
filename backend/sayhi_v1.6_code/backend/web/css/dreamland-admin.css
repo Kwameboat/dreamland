@@ -330,11 +330,6 @@ body.dreamland-admin .content-wrapper {
   min-height: calc(100vh - 50px);
 }
 
-body.dreamland-admin .content-header {
-  padding: 20px 24px 4px;
-  background: transparent !important;
-}
-
 body.dreamland-admin .content-header > h1 {
   font-weight: 700;
   font-size: 26px;
@@ -394,6 +389,48 @@ body.dreamland-admin .box-header {
 body.dreamland-admin .box-title {
   color: var(--dl-text);
   font-weight: 600;
+}
+
+body.dreamland-admin .content-header {
+  padding: 18px 24px 12px;
+  background: transparent !important;
+}
+
+body.dreamland-admin .content-header--dashboard .content-header__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+}
+
+body.dreamland-admin .content-header__title {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.dl-dashboard-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.dl-dashboard-toolbar__btn {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.dl-dashboard-toolbar__btn--accent {
+  background: linear-gradient(135deg, #ff0055, #c4004a) !important;
+  border-color: rgba(255, 0, 85, 0.65) !important;
+}
+
+.dl-dashboard-toolbar__btn--accent:hover {
+  background: linear-gradient(135deg, #ff3377, #e00055) !important;
 }
 
 /* ── Dashboard hero ── */

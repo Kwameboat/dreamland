@@ -2603,6 +2603,21 @@ body {
   margin-bottom: 18px;
 }
 
+.creator-hero-top.viewer-hero__head,
+.viewer-hero__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.dashboard-refresh-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
 .studio-avatar-wrap {
   position: relative;
   flex-shrink: 0;
