@@ -353,12 +353,28 @@ export function createDreamlandSocial(ctx) {
     });
   }
 
+  function initFeedAudioUnlock() {
+    if (document.body.dataset.dlAudioBound === '1') return;
+    document.body.dataset.dlAudioBound = '1';
+    const unlockFromGesture = () => {
+      if (feedMuted) return;
+      const feed = document.getElementById('feed-list');
+      if (!feed?.querySelector('.reel--active')) return;
+      unlockAudio(feed);
+    };
+    document.addEventListener('pointerdown', unlockFromGesture, { passive: true });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === ' ' || e.key === 'Enter') unlockFromGesture();
+    });
+  }
+
   function initSoundToggle() {
     const btn = document.getElementById('sound-toggle');
     if (!btn || btn.__dlBound) return;
     btn.__dlBound = true;
     setMuted(feedMuted);
     btn.addEventListener('click', toggleSound);
+    initFeedAudioUnlock();
   }
 
   return {

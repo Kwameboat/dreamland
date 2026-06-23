@@ -276,7 +276,7 @@ export function createDreamlandFeatures(ctx) {
 
     await loadSettings();
     if (!vapidPublicKey) {
-      showToast('Push not configured on server yet');
+      console.warn('[Dreamland] Push not configured on server (missing VAPID key).');
       return false;
     }
 

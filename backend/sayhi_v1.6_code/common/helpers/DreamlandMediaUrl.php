@@ -126,9 +126,6 @@ class DreamlandMediaUrl
         }
 
         if (self::localFileExists($filename)) {
-            if (DreamlandStorageMode::useLocalDisk()) {
-                return self::mediaApiReelUrl($filename);
-            }
             return self::localPublicUploadsBase('image') . '/' . $filename;
         }
 

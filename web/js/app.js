@@ -495,12 +495,14 @@ function reelGallery(post) {
 }
 
 function reelMediaCandidates(post) {
-  if (post?.reel_video_url) {
-    return [post.reel_video_url];
-  }
-
   const gallery = reelGallery(post);
   const filename = gallery?.filename || '';
+  const candidates = [];
+
+  if (gallery?.filenameUrl) candidates.push(gallery.filenameUrl);
+  if (gallery?.fileUrl) candidates.push(gallery.fileUrl);
+  if (post?.reel_video_url) candidates.push(post.reel_video_url);
+
   const textHints = [post?.description, post?.title, post?.image]
     .map((value) => String(value || '').trim())
     .filter((value) => looksLikeUploadFilename(value));
@@ -514,12 +516,9 @@ function reelMediaCandidates(post) {
     }
   });
 
-  const candidates = [];
-  if (gallery?.filenameUrl) candidates.push(gallery.filenameUrl);
-  if (gallery?.fileUrl) candidates.push(gallery.fileUrl);
   expanded.forEach((name) => {
-    candidates.push(`${API_BASE}/media/reel?name=${encodeURIComponent(name)}`);
     candidates.push(`${apiUploadsBase()}/${name}`);
+    candidates.push(`${API_BASE}/media/reel?name=${encodeURIComponent(name)}`);
     candidates.push(`${UPLOADS_BASE}/${name}`);
     if (window.__DL_ENV__?.uploads) {
       candidates.push(`${window.__DL_ENV__.uploads}/${name}`);
@@ -819,7 +818,8 @@ function isGuest() {
 
 function mediaUrl(post) {
   const candidates = reelMediaCandidates(post);
-  return candidates[0] || '';
+  const direct = candidates.find((url) => /\/frontend\/web\/uploads\//i.test(url));
+  return direct || candidates[0] || '';
 }
 
 function playReelVideo(video) {
