@@ -23,6 +23,7 @@ fetch "$TMP/FileUpload.php" "$BASE/common/components/FileUpload.php"
 fetch "$TMP/DreamlandUploadLimits.php" "$BASE/common/helpers/DreamlandUploadLimits.php"
 fetch "$TMP/DreamlandSetting.php" "$BASE/common/models/DreamlandSetting.php"
 fetch "$TMP/dreamland-settings-index.php" "$BASE/backend/views/dreamland-settings/index.php"
+fetch "$TMP/apply-upload-limits.php" "$BASE/scripts/apply-dreamland-upload-limits-migration.php"
 fetch "$TMP/api-user.ini" "$GITHUB/deploy/cpanel/entrypoints/api-user.ini"
 fetch "$TMP/app.js" "$GITHUB/web/js/app.js"
 fetch "$TMP/dreamland-features.js" "$GITHUB/web/js/dreamland-features.js"
@@ -34,6 +35,7 @@ cp -f "$TMP/FileUpload.php" "$DL/common/components/FileUpload.php"
 cp -f "$TMP/DreamlandUploadLimits.php" "$DL/common/helpers/DreamlandUploadLimits.php"
 cp -f "$TMP/DreamlandSetting.php" "$DL/common/models/DreamlandSetting.php"
 cp -f "$TMP/dreamland-settings-index.php" "$DL/backend/views/dreamland-settings/index.php"
+cp -f "$TMP/apply-upload-limits.php" "$DL/scripts/apply-dreamland-upload-limits-migration.php"
 echo "OK: API + admin settings"
 
 mkdir -p "$WEB/js" "$API"
@@ -44,7 +46,13 @@ cp -f "$TMP/build-version.json" "$WEB/build-version.json"
 cp -f "$TMP/api-user.ini" "$API/.user.ini"
 echo "OK: PWA + API PHP upload limits (.user.ini)"
 
+echo ""
+echo "--- DB: dreamland_settings upload limit columns ---"
+cd "$DL"
+php scripts/apply-dreamland-upload-limits-migration.php 2>&1 || true
+
 rm -rf "$DL/api/runtime/cache/"* 2>/dev/null || true
+rm -rf "$DL/backend/runtime/cache/"* 2>/dev/null || true
 
 echo ""
 echo "PHP upload limits for API:"

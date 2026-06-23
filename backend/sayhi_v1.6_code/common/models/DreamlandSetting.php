@@ -36,18 +36,39 @@ class DreamlandSetting extends ActiveRecord
     public function afterFind()
     {
         parent::afterFind();
-        $secs = (int) ($this->max_reel_duration_seconds ?? 60);
+        $this->initMinutesFromSeconds();
+    }
+
+    /** Safe when upload-limit columns are not migrated yet. */
+    public function initMinutesFromSeconds(): void
+    {
+        $secs = 60;
+        if ($this->hasAttribute('max_reel_duration_seconds')) {
+            $secs = (int) $this->getAttribute('max_reel_duration_seconds');
+            if ($secs <= 0) {
+                $secs = 60;
+            }
+        }
         $this->max_reel_duration_minutes = max(1, (int) round($secs / 60));
+    }
+
+    public function hasUploadLimitColumns(): bool
+    {
+        return $this->hasAttribute('max_reel_duration_seconds')
+            && $this->hasAttribute('max_reel_upload_mb');
     }
 
     public function beforeSave($insert)
     {
-        if ($this->max_reel_duration_minutes !== null && $this->max_reel_duration_minutes !== '') {
+        if ($this->hasAttribute('max_reel_duration_seconds')
+            && $this->max_reel_duration_minutes !== null
+            && $this->max_reel_duration_minutes !== '') {
             $mins = max(1, min(10, (int) $this->max_reel_duration_minutes));
-            $this->max_reel_duration_seconds = $mins * 60;
+            $this->setAttribute('max_reel_duration_seconds', $mins * 60);
         }
-        // Live: 0 = no cap — creator ends broadcast manually in the PWA.
-        $this->max_live_duration_seconds = 0;
+        if ($this->hasAttribute('max_live_duration_seconds')) {
+            $this->setAttribute('max_live_duration_seconds', 0);
+        }
         return parent::beforeSave($insert);
     }
 
@@ -69,10 +90,12 @@ class DreamlandSetting extends ActiveRecord
                 $settings = new static(['id' => 1]);
                 $settings->save(false);
             }
+            $settings->initMinutesFromSeconds();
             return $settings;
         } catch (\Throwable $e) {
             \Yii::warning($e->getMessage(), __METHOD__);
             $settings = new static(['id' => 1]);
+            $settings->initMinutesFromSeconds();
             return $settings;
         }
     }
