@@ -270,6 +270,44 @@ const state = {
   studioDraft: null,
 };
 
+let dashboardRefreshTimer = null;
+const DASHBOARD_REFRESH_MS = 60000;
+
+function stopDashboardAutoRefresh() {
+  if (dashboardRefreshTimer) {
+    clearInterval(dashboardRefreshTimer);
+    dashboardRefreshTimer = null;
+  }
+}
+
+function touchDashboardRefreshHint() {
+  const el = document.getElementById('dashboard-refresh-hint');
+  if (!el) return;
+  el.textContent = `Updated ${new Date().toLocaleTimeString()} · auto-refresh every 60s`;
+}
+
+function startDashboardAutoRefresh(viewId) {
+  stopDashboardAutoRefresh();
+  if (!state.token) return;
+
+  if (viewId === 'creator-view' && isCreator()) {
+    dashboardRefreshTimer = setInterval(() => {
+      if (document.hidden) return;
+      if (!document.getElementById('creator-view')?.classList.contains('active')) return;
+      loadCreatorDashboard(true);
+    }, DASHBOARD_REFRESH_MS);
+    return;
+  }
+
+  if (viewId === 'viewer-view' && !isCreator()) {
+    dashboardRefreshTimer = setInterval(() => {
+      if (document.hidden) return;
+      if (!document.getElementById('viewer-view')?.classList.contains('active')) return;
+      loadViewerDashboard(true);
+    }, DASHBOARD_REFRESH_MS);
+  }
+}
+
 const MAX_UPLOAD_BYTES_DEFAULT = 128 * 1024 * 1024;
 
 function maxUploadBytes() {
@@ -984,15 +1022,18 @@ function renderViewerDashboard(data) {
     <div class="viewer-actions">
       <button type="button" class="btn-primary" id="viewer-watch-feed">Continue watching</button>
       <button type="button" class="btn-primary" id="viewer-watch-live">Browse live</button>
+      <button type="button" class="btn-ghost" id="viewer-refresh-dashboard">Update now</button>
       <button type="button" class="btn-ghost" id="viewer-open-wallet">Top up wallet</button>
       <button type="button" class="btn-ghost" id="viewer-open-account">Account settings</button>
     </div>
+    <p class="muted viewer-refresh-hint" id="dashboard-refresh-hint">Auto-refresh every 60s</p>
     <section class="creator-section glass-card">
       <h3>Your activity</h3>
       <p class="muted">Unlock premium reels, spin daily rewards, and climb streak milestones from the Watch and Play tabs.</p>
     </section>
     <div id="viewer-streak-panel"></div>`;
   document.getElementById('viewer-watch-feed')?.addEventListener('click', () => switchView('feed-view'));
+  document.getElementById('viewer-refresh-dashboard')?.addEventListener('click', () => loadViewerDashboard(true));
   document.getElementById('viewer-watch-live')?.addEventListener('click', () => {
     switchView('feed-view');
     switchFeedMode('live');
@@ -1018,6 +1059,7 @@ async function loadViewerDashboard(force = false) {
     }
     renderViewerDashboard(state.viewerDashboard);
     updateWalletBalance();
+    touchDashboardRefreshHint();
   } catch (err) {
     renderViewerDashboard({
       viewer: state.user,
@@ -1345,7 +1387,8 @@ function renderCreatorDashboard(data) {
 
       <div class="studio-quick glass-card">
         <button type="button" class="btn-primary studio-quick-btn" id="creator-watch-feed">Watch feed</button>
-        <button type="button" class="btn-ghost studio-quick-btn" id="creator-refresh">Refresh stats</button>
+        <button type="button" class="btn-ghost studio-quick-btn" id="creator-refresh">Update now</button>
+        <p class="muted studio-refresh-hint" id="dashboard-refresh-hint">Auto-refresh every 60s</p>
       </div>
 
       <section class="studio-library">
@@ -2901,6 +2944,7 @@ async function loadCreatorDashboard(force = false) {
     }
     renderCreatorDashboard(state.creatorDashboard);
     updateWalletBalance();
+    touchDashboardRefreshHint();
   } catch (err) {
     els.creatorDashboard.innerHTML = `
       <div class="creator-empty glass-card">
@@ -3142,8 +3186,15 @@ function switchView(viewId) {
   document.querySelectorAll('.dock-item').forEach((n) => n.classList.toggle('active', n.dataset.view === viewId));
   if (viewId === 'feed-view' && state.feedMode === 'reels') setupReelPlayback();
   if (viewId === 'feed-view' && state.feedMode === 'live') loadLives(true);
-  if (viewId === 'creator-view') loadCreatorDashboard();
-  if (viewId === 'viewer-view') loadViewerDashboard();
+  if (viewId === 'creator-view') {
+    loadCreatorDashboard();
+    startDashboardAutoRefresh('creator-view');
+  } else if (viewId === 'viewer-view') {
+    loadViewerDashboard();
+    startDashboardAutoRefresh('viewer-view');
+  } else {
+    stopDashboardAutoRefresh();
+  }
   if (viewId === 'account-view') dlAccount?.renderAccount();
   if (viewId === 'signup-view') setPageSignupStep('role');
   if (viewId !== 'creator-view') {

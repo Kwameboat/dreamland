@@ -22,6 +22,7 @@ use common\models\Event;
 use common\models\Story;
 use common\models\SupportRequest;
 use common\models\UserLiveHistory;
+use common\components\DreamlandSafetyPipeline;
 use yii\web\ForbiddenHttpException;
 
 
@@ -49,7 +50,7 @@ class SiteController extends Controller
                       //  'ips' => ['::1s','127..1.1', '19.68.1.11'], // Allowed IP addresses
                     ],
                     [
-                        'actions' => ['logout', 'index','verify'],
+                        'actions' => ['logout', 'index', 'verify', 'update-system'],
                         'allow' => true,
                         'roles' => ['@'],
                        // 'ips' => ['::1s', '192.18.1.01'], // Allowed IP addresses
@@ -60,6 +61,7 @@ class SiteController extends Controller
                 'class' => VerbFilter::className(),
                 'actions' => [
                     'logout' => ['post'],
+                    'update-system' => ['post'],
                 ],
             ],
         ];
@@ -85,6 +87,10 @@ class SiteController extends Controller
      */
     public function actionIndex()
     {
+        if (Yii::$app->request->get('refresh')) {
+            $this->clearDashboardCache();
+        }
+
         $auth = Yii::$app->authPermission;
         $cache = Yii::$app->cache;
 
@@ -198,6 +204,81 @@ class SiteController extends Controller
             'support' => $support,
             'liveHistory' => $liveHistory,
         ]);
+    }
+
+    /** POST — clear dashboard cache, process safety queue, refresh platform pipelines. */
+    public function actionUpdateSystem()
+    {
+        $this->clearDashboardCache();
+
+        $processed = 0;
+        $active = 0;
+        $review = 0;
+        try {
+            $pipeline = Yii::$app->has('dreamlandSafety')
+                ? Yii::$app->dreamlandSafety
+                : new DreamlandSafetyPipeline();
+            $results = $pipeline->processQueuedJobs(25);
+            $processed = count($results);
+            $active = count(array_filter($results, static function ($status) {
+                return $status === 'active';
+            }));
+            $review = count(array_filter($results, static function ($status) {
+                return $status === 'pending_review';
+            }));
+        } catch (\Throwable $e) {
+            Yii::warning('Dashboard system update: safety queue failed — ' . $e->getMessage(), __METHOD__);
+            Yii::$app->session->setFlash(
+                'warning',
+                'Dashboard cache cleared, but safety queue processing failed: ' . $e->getMessage()
+            );
+            return $this->redirect(['index', 'refresh' => 1]);
+        }
+
+        Yii::$app->session->setFlash(
+            'success',
+            "System updated. Processed {$processed} safety job(s): {$active} published, {$review} sent to appraisal."
+        );
+
+        return $this->redirect(['index', 'refresh' => 1]);
+    }
+
+    private function clearDashboardCache(): void
+    {
+        $cache = Yii::$app->cache;
+        foreach ($this->dashboardCacheKeys() as $key) {
+            try {
+                $cache->delete('admin_dash:' . $key);
+            } catch (\Throwable $e) {
+                Yii::warning($e->getMessage(), __METHOD__);
+            }
+        }
+    }
+
+    /** @return string[] */
+    private function dashboardCacheKeys(): array
+    {
+        return [
+            'post_count',
+            'user_count',
+            'latest_users',
+            'competition_count',
+            'reel_count',
+            'club_count',
+            'event_count',
+            'coupon_count',
+            'story_count',
+            'graph_posts',
+            'graph_users',
+            'graph_payments',
+            'graph_clubs',
+            'graph_reels',
+            'graph_stories',
+            'latest_posts',
+            'earnings',
+            'support_stats',
+            'live_history_stats',
+        ];
     }
 
     /**

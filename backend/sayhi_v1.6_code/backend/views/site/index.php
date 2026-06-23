@@ -13,17 +13,30 @@ try {
 
 $this->title = 'Dashboard';
 $this->registerJs('document.body.classList.add("dreamland-dashboard");', \yii\web\View::POS_READY);
+$refreshUrl = Url::to(['index', 'refresh' => 1]);
 ?>
 
 <div class="site-index dreamland-dashboard">
+
+  <?php if (Yii::$app->session->hasFlash('success')): ?>
+    <div class="alert alert-success"><?= Html::encode(Yii::$app->session->getFlash('success')) ?></div>
+  <?php endif; ?>
+  <?php if (Yii::$app->session->hasFlash('warning')): ?>
+    <div class="alert alert-warning"><?= Html::encode(Yii::$app->session->getFlash('warning')) ?></div>
+  <?php endif; ?>
 
   <div class="dl-dashboard-hero">
     <img src="<?= Url::to('@web/img/logo.png') ?>" alt="Dreamland" class="dl-dashboard-hero__logo">
     <div>
       <h2 class="dl-dashboard-hero__title">Welcome to <span>Dreamland</span></h2>
       <p class="dl-dashboard-hero__subtitle">Play, Watch, Earn — your command center for creators, viewers, and live content.</p>
+      <p id="dl-dashboard-updated" class="dl-dashboard-updated" aria-live="polite">Auto-refresh every 60 seconds</p>
     </div>
     <div class="dl-dashboard-hero__actions">
+      <?= Html::a('<i class="fa fa-refresh"></i> Refresh dashboard', $refreshUrl, ['class' => 'dl-quick-btn', 'id' => 'dl-dashboard-refresh']) ?>
+      <?= Html::beginForm(['update-system'], 'post', ['class' => 'dl-dashboard-inline-form']) ?>
+        <?= Html::submitButton('<i class="fa fa-cogs"></i> Update system', ['class' => 'dl-quick-btn dl-quick-btn--accent', 'id' => 'dl-dashboard-update-system']) ?>
+      <?= Html::endForm() ?>
       <?= Html::a('<i class="fa fa-bullhorn"></i> Broadcast', ['/broadcast-notification/create'], ['class' => 'dl-quick-btn']) ?>
       <?= Html::a('<i class="fa fa-video"></i> Creators', ['/content-creator'], ['class' => 'dl-quick-btn']) ?>
       <?= Html::a('<i class="fa fa-cog"></i> Settings', ['/dreamland-settings'], ['class' => 'dl-quick-btn']) ?>
@@ -985,6 +998,26 @@ $this->registerJs('document.body.classList.add("dreamland-dashboard");', \yii\we
 
     //Create the line chart
     areaChart.Line(areaChartData, areaChartOptions)
+
+    var REFRESH_MS = 60000;
+    var refreshUrl = <?= json_encode($refreshUrl) ?>;
+    var updatedEl = document.getElementById('dl-dashboard-updated');
+
+    function markDashboardUpdated() {
+      if (!updatedEl) return;
+      updatedEl.textContent = 'Last updated: ' + new Date().toLocaleTimeString() + ' · auto-refresh every 60s';
+    }
+
+    markDashboardUpdated();
+
+    setInterval(function () {
+      if (document.hidden) return;
+      window.location.href = refreshUrl;
+    }, REFRESH_MS);
+
+    document.getElementById('dl-dashboard-refresh')?.addEventListener('click', function (e) {
+      markDashboardUpdated();
+    });
 
   })
 
