@@ -309,6 +309,16 @@ class ContentCreatorController extends Controller
             ->where(['id' => $id])
             ->andWhere(['<>', 'status', User::STATUS_DELETED])
             ->one();
+
+        if ($user && DreamlandCreatorApproval::looksLikeCreator($user)) {
+            DreamlandCreatorApproval::syncCreatorRecord($user);
+            $model = DreamlandAudience::creatorQuery()->andWhere(['id' => $id])->one();
+            if ($model) {
+                return $model;
+            }
+            return $user;
+        }
+
         if ($user) {
             throw new NotFoundHttpException('This account is no longer a content creator (demoted or role changed).');
         }

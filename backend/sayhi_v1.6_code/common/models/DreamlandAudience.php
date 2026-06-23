@@ -3,6 +3,7 @@
 namespace common\models;
 
 use app\models\User;
+use common\helpers\DreamlandCreatorApproval;
 use yii\db\ActiveQuery;
 
 /**
@@ -50,13 +51,27 @@ class DreamlandAudience
 
     public static function creatorQuery(): ActiveQuery
     {
+        $or = [
+            ['role' => User::ROLE_AGENT],
+        ];
+
+        $schema = Yii::$app->db->schema->getTableSchema('user', true);
+        if ($schema && isset($schema->columns['dreamland_account_type'])) {
+            $or[] = ['dreamland_account_type' => 'creator'];
+        }
+        if ($schema && isset($schema->columns['dreamland_creator_status'])) {
+            $or[] = [
+                'dreamland_creator_status' => [
+                    DreamlandCreatorApproval::STATUS_PENDING,
+                    DreamlandCreatorApproval::STATUS_APPROVED,
+                    DreamlandCreatorApproval::STATUS_REJECTED,
+                ],
+            ];
+        }
+
         return User::find()
             ->where(['<>', 'status', User::STATUS_DELETED])
-            ->andWhere([
-                'or',
-                ['dreamland_account_type' => 'creator'],
-                ['role' => User::ROLE_AGENT],
-            ]);
+            ->andWhere(array_merge(['or'], $or));
     }
 
     public static function adminQuery(): ActiveQuery

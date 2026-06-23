@@ -33,6 +33,8 @@ curl -fsSL -o "$TMP/CreatorController.php" "$GITHUB/backend/sayhi_v1.6_code/api/
 curl -fsSL -o "$TMP/ContentCreatorController.php" "$GITHUB/backend/sayhi_v1.6_code/backend/controllers/ContentCreatorController.php"
 curl -fsSL -o "$TMP/CreatorSearch.php" "$GITHUB/backend/sayhi_v1.6_code/backend/models/CreatorSearch.php"
 curl -fsSL -o "$TMP/DreamlandCreatorApproval.php" "$GITHUB/backend/sayhi_v1.6_code/common/helpers/DreamlandCreatorApproval.php"
+curl -fsSL -o "$TMP/DreamlandAudience.php" "$GITHUB/backend/sayhi_v1.6_code/common/models/DreamlandAudience.php"
+curl -fsSL -o "$TMP/sync-pwa-creators.php" "$GITHUB/backend/sayhi_v1.6_code/scripts/sync-pwa-creators.php"
 curl -fsSL -o "$TMP/app.js" "$GITHUB/web/js/app.js"
 curl -fsSL -o "$TMP/index.html" "$GITHUB/web/index.html"
 curl -fsSL -o "$TMP/env-config.js" "$GITHUB/web/env-config.js"
@@ -47,6 +49,8 @@ cp -f "$TMP/CreatorController.php" "$DL/api/modules/v1/controllers/CreatorContro
 cp -f "$TMP/ContentCreatorController.php" "$DL/backend/controllers/ContentCreatorController.php"
 cp -f "$TMP/CreatorSearch.php" "$DL/backend/models/CreatorSearch.php"
 cp -f "$TMP/DreamlandCreatorApproval.php" "$DL/common/helpers/DreamlandCreatorApproval.php"
+cp -f "$TMP/DreamlandAudience.php" "$DL/common/models/DreamlandAudience.php"
+cp -f "$TMP/sync-pwa-creators.php" "$DL/scripts/sync-pwa-creators.php"
 cp -f "$TMP/app.js" "$WEB/js/app.js"
 cp -f "$TMP/index.html" "$WEB/index.html"
 cp -f "$TMP/env-config.js" "$WEB/env-config.js"
@@ -61,6 +65,7 @@ echo "--- Dreamland DB columns (creator approval, idempotent) ---"
 cd "$DL"
 php scripts/apply-dreamland-v2-migration.php 2>&1 | tail -3 || true
 php scripts/apply-dreamland-creator-approval-migration.php 2>&1 | tail -5 || true
+php scripts/sync-pwa-creators.php 2>&1 || true
 
 echo ""
 echo "--- Verify ---"

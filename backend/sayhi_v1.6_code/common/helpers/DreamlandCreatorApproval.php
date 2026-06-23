@@ -131,4 +131,33 @@ class DreamlandCreatorApproval
                 return 'Not set';
         }
     }
+
+    /** True when DB row is (or should be) managed as a content creator in admin. */
+    public static function looksLikeCreator(?ActiveRecord $user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+        if (self::isCreatorIdentity($user)) {
+            return true;
+        }
+        if (!self::hasCreatorStatusColumn()) {
+            return false;
+        }
+        $status = strtolower(trim((string) ($user->getAttribute('dreamland_creator_status') ?? '')));
+        return in_array($status, [self::STATUS_PENDING, self::STATUS_APPROVED, self::STATUS_REJECTED], true);
+    }
+
+    /** Align role + account_type + creator_status for PWA signups with partial data. */
+    public static function syncCreatorRecord(ActiveRecord $user): void
+    {
+        self::applyCreatorIdentity($user);
+        if (self::hasCreatorStatusColumn()) {
+            $status = strtolower(trim((string) ($user->getAttribute('dreamland_creator_status') ?? '')));
+            if (!in_array($status, [self::STATUS_PENDING, self::STATUS_APPROVED, self::STATUS_REJECTED], true)) {
+                $user->setAttribute('dreamland_creator_status', self::STATUS_PENDING);
+            }
+        }
+        $user->save(false);
+    }
 }

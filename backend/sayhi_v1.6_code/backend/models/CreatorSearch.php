@@ -78,7 +78,20 @@ class CreatorSearch extends User
                 break;
             case 'pending':
                 if (DreamlandCreatorApproval::hasCreatorStatusColumn()) {
-                    $query->andWhere(['user.dreamland_creator_status' => DreamlandCreatorApproval::STATUS_PENDING]);
+                    $query->andWhere([
+                        'or',
+                        ['user.dreamland_creator_status' => DreamlandCreatorApproval::STATUS_PENDING],
+                        [
+                            'and',
+                            ['user.role' => User::ROLE_AGENT],
+                            [
+                                'or',
+                                ['user.dreamland_creator_status' => DreamlandCreatorApproval::STATUS_NONE],
+                                ['user.dreamland_creator_status' => ''],
+                                ['user.dreamland_creator_status' => null],
+                            ],
+                        ],
+                    ]);
                 } else {
                     $query->andWhere(['user.role' => User::ROLE_AGENT]);
                     $query->andWhere(['user.status' => User::STATUS_ACTIVE]);
