@@ -3,10 +3,8 @@
 namespace api\modules\v1\controllers;
 
 use api\modules\v1\models\Post;
+use common\components\DreamlandAppraisalService;
 use common\components\DreamlandContentReview;
-use common\components\DreamlandPaywallService;
-use common\models\GroupWatchPot;
-use common\models\VideoPrediction;
 use Yii;
 use yii\filters\auth\CompositeAuth;
 use yii\filters\auth\HttpBearerAuth;
@@ -87,29 +85,15 @@ class AdminAppraisalController extends ActiveController
             if ($priceCredits === null || $priceCredits <= 0) {
                 return ['statusCode' => 422, 'message' => 'price_credits is required when approving paid content.'];
             }
-            $post->price_credits = $priceCredits;
-            $post->appraisal_status = 'active';
-            $post->status = Post::STATUS_ACTIVE;
-
-            $pot = new GroupWatchPot([
-                'video_id' => $post->id,
-                'target_unlocks' => 100,
-                'current_unlocks' => 0,
-                'bonus_pool_credits' => max(50, (int) floor($priceCredits * 0.5)),
-                'expires_at' => date('Y-m-d H:i:s', strtotime('+7 days')),
-                'status' => GroupWatchPot::STATUS_OPEN,
-            ]);
-            $pot->save(false);
-
-            $prediction = new VideoPrediction([
-                'video_id' => $post->id,
-                'target_metric' => '10000 views',
-                'target_value' => 10000,
-                'timer_expires_at' => date('Y-m-d H:i:s', strtotime('+3 days')),
-                'status' => VideoPrediction::STATUS_OPEN,
-                'outcome' => 'pending',
-            ]);
-            $prediction->save(false);
+            try {
+                DreamlandAppraisalService::approvePost($post, $priceCredits);
+            } catch (\InvalidArgumentException $e) {
+                return ['statusCode' => 422, 'message' => $e->getMessage()];
+            } catch (\Throwable $e) {
+                Yii::error($e->getMessage(), __METHOD__);
+                return ['statusCode' => 500, 'message' => 'Could not approve video: ' . $e->getMessage()];
+            }
+            return ['message' => 'Video appraisal updated.', 'video' => $post];
         } else {
             $reason = trim((string) ($body['rejection_reason'] ?? ''));
             if ($reason === '') {
@@ -122,8 +106,5 @@ class AdminAppraisalController extends ActiveController
             }
             return ['message' => 'Video rejected and creator notified.', 'video' => $post];
         }
-
-        $post->save(false);
-        return ['message' => 'Video appraisal updated.', 'video' => $post];
     }
 }

@@ -3,9 +3,8 @@
 namespace backend\controllers;
 
 use api\modules\v1\models\Post;
+use common\components\DreamlandAppraisalService;
 use common\components\DreamlandContentReview;
-use common\models\GroupWatchPot;
-use common\models\VideoPrediction;
 use Yii;
 use yii\data\ActiveDataProvider;
 use yii\filters\AccessControl;
@@ -44,30 +43,17 @@ class DreamlandAppraisalController extends Controller
         $priceCredits = (int) Yii::$app->request->post('price_credits', 0);
 
         if ($status === 'active') {
-            if ($priceCredits <= 0) {
+            if ($priceCredits <= 0 && (int) $post->is_paid === 1) {
                 Yii::$app->session->setFlash('error', 'Assign a valid credit price before approving.');
                 return $this->redirect(['index']);
             }
-            $post->price_credits = $priceCredits;
-            $post->appraisal_status = 'active';
-            $post->status = Post::STATUS_ACTIVE;
-
-            $pot = new GroupWatchPot([
-                'video_id' => $post->id,
-                'target_unlocks' => 100,
-                'bonus_pool_credits' => max(50, (int) floor($priceCredits * 0.5)),
-                'expires_at' => date('Y-m-d H:i:s', strtotime('+7 days')),
-            ]);
-            $pot->save(false);
-
-            $prediction = new VideoPrediction([
-                'video_id' => $post->id,
-                'target_metric' => '10000 views',
-                'target_value' => 10000,
-                'timer_expires_at' => date('Y-m-d H:i:s', strtotime('+3 days')),
-            ]);
-            $prediction->save(false);
-            $post->save(false);
+            try {
+                DreamlandAppraisalService::approvePost($post, $priceCredits);
+            } catch (\Throwable $e) {
+                Yii::error($e->getMessage(), __METHOD__);
+                Yii::$app->session->setFlash('error', 'Could not approve video: ' . $e->getMessage());
+                return $this->redirect(['index']);
+            }
         } else {
             $reason = trim((string) Yii::$app->request->post('rejection_reason', ''));
             if ($reason === '') {

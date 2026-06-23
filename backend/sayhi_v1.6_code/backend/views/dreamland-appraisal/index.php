@@ -14,6 +14,12 @@ $this->params['breadcrumbs'][] = $this->title;
         <h3 class="box-title">Dreamland Appraisal Workspace</h3>
         <p class="text-muted">Review premium uploads, set credit price, approve or reject.</p>
     </div>
+    <?php if (Yii::$app->session->hasFlash('success')): ?>
+        <div class="alert alert-success"><?= Html::encode(Yii::$app->session->getFlash('success')) ?></div>
+    <?php endif; ?>
+    <?php if (Yii::$app->session->hasFlash('error')): ?>
+        <div class="alert alert-danger"><?= Html::encode(Yii::$app->session->getFlash('error')) ?></div>
+    <?php endif; ?>
     <div class="box-body table-responsive">
         <?= GridView::widget([
             'dataProvider' => $dataProvider,

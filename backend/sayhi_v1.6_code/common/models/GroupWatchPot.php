@@ -27,6 +27,12 @@ class GroupWatchPot extends ActiveRecord
 
     public function beforeSave($insert)
     {
+        if ($insert && ($this->status === null || $this->status === '')) {
+            $this->status = self::STATUS_OPEN;
+        }
+        if ($insert && $this->current_unlocks === null) {
+            $this->current_unlocks = 0;
+        }
         if ($insert && empty($this->id)) {
             $this->id = sprintf(
                 '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
