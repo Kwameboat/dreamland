@@ -810,16 +810,33 @@ function playReelVideo(video) {
   }
 }
 
+function showReelVideoError(reel, message) {
+  if (!reel) return;
+  reel.classList.add('reel--video-error');
+  let banner = reel.querySelector('.reel-video-error');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.className = 'reel-video-error';
+    banner.setAttribute('role', 'alert');
+    reel.appendChild(banner);
+  }
+  banner.textContent = message || 'Video unavailable — creator may need to re-upload.';
+}
+
 function bindReelVideoFallback(video, post) {
   if (!video || video.dataset.fallbackBound === '1') return;
   video.dataset.fallbackBound = '1';
   const candidates = reelMediaCandidates(post);
-  if (candidates.length < 1) return;
+  if (candidates.length < 1) {
+    showReelVideoError(video.closest('.reel'), 'No video file linked to this reel.');
+    return;
+  }
   let index = 0;
   video.addEventListener('error', () => {
     index += 1;
     if (index >= candidates.length) {
       console.warn('Reel video exhausted URL fallbacks for post', post?.id, candidates);
+      showReelVideoError(video.closest('.reel'));
       return;
     }
     console.warn('Reel video retrying URL:', candidates[index]);

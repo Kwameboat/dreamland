@@ -234,6 +234,17 @@ class FileUpload extends Component
                     $this->settingData
                 );
 
+                try {
+                    $localDir = $this->localDiskRoot() . '/' . $fileLocation['folder'];
+                    $this->ensureUploadDir($localDir);
+                    $localPath = $localDir . '/' . $mediaFileName;
+                    if (!is_file($localPath)) {
+                        copy($imagePath, $localPath);
+                    }
+                } catch (\Throwable $mirrorErr) {
+                    Yii::warning('Local mirror after Wasabi upload failed: ' . $mirrorErr->getMessage(), __METHOD__);
+                }
+
                 $fileUrl = $fileLocation['folderLocation'] . '/' . $mediaFileName;
                 $fileResponse = ['file' => $mediaFileName, 'fileUrl' => $fileUrl, 'fileType' => $fileType];
               

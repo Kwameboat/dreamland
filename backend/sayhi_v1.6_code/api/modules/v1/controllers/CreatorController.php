@@ -8,6 +8,7 @@ use api\modules\v1\models\User;
 use api\modules\v1\models\UserLiveHistory;
 use common\components\DreamlandContentReview;
 use common\helpers\DreamlandCreatorApproval;
+use common\helpers\DreamlandMediaUrl;
 use common\helpers\DreamlandUploadLimits;
 use common\models\PurchasedLive;
 use common\models\PurchasedVideo;
@@ -253,6 +254,14 @@ class CreatorController extends ActiveController
                 ? 'Video was blocked by content moderation.'
                 : 'Video upload failed — check API storage permissions.';
             return ['statusCode' => 422, 'message' => $msg];
+        }
+
+        $storedFilename = (string) $uploaded[0]['file'];
+        if (!DreamlandMediaUrl::mediaFileReachable($storedFilename)) {
+            return [
+                'statusCode' => 422,
+                'message' => 'Video upload did not persist to storage. Check upload folder permissions and try again.',
+            ];
         }
 
         $post = new Post();

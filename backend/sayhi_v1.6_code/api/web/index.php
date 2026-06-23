@@ -15,6 +15,11 @@ if (strtoupper($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     exit;
 }
 
+require __DIR__ . '/serve-uploads.php';
+if (dreamland_try_serve_upload()) {
+    exit;
+}
+
 require __DIR__ . '/../../vendor/autoload.php';
 require __DIR__ . '/../../vendor/yiisoft/yii2/Yii.php';
 require __DIR__ . '/../../common/config/bootstrap.php';

@@ -119,11 +119,34 @@ class DreamlandMediaUrl
             return '';
         }
 
+        if (self::localFileExists($filename)) {
+            return self::localPublicUploadsBase('image') . '/' . $filename;
+        }
+
         if (Yii::$app->has('fileUpload')) {
             return (string) Yii::$app->fileUpload->getFileUrl(FileUpload::TYPE_POST, $filename);
         }
 
         return self::localPublicUploadsBase('image') . '/' . $filename;
+    }
+
+    public static function mediaFileReachable(string $filename): bool
+    {
+        $filename = ltrim(basename($filename), '/');
+        if ($filename === '') {
+            return false;
+        }
+
+        if (self::localFileExists($filename)) {
+            return true;
+        }
+
+        $folder = (string) (Yii::$app->params['pathUploadImageFolder'] ?? 'image');
+        if (DreamlandWasabiStorage::isConfigured()) {
+            return DreamlandWasabiStorage::objectExists($folder, $filename);
+        }
+
+        return false;
     }
 
     public static function localFileExists(string $filename): bool

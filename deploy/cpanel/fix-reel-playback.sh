@@ -24,10 +24,15 @@ fetch "$TMP/DreamlandWasabiStorage.php" "$BASE/common/helpers/DreamlandWasabiSto
 fetch "$TMP/HealthController.php" "$BASE/api/modules/v1/controllers/HealthController.php"
 fetch "$TMP/Post.php" "$BASE/api/modules/v1/models/Post.php"
 fetch "$TMP/PostSearch.php" "$BASE/api/modules/v1/models/PostSearch.php"
+fetch "$TMP/CreatorController.php" "$BASE/api/modules/v1/controllers/CreatorController.php"
 fetch "$TMP/repair-reel-gallery.php" "$BASE/scripts/repair-reel-gallery.php"
+fetch "$TMP/find-reel-video.php" "$BASE/scripts/find-reel-video.php"
+fetch "$TMP/serve-uploads.php" "$BASE/api/web/serve-uploads.php"
+fetch "$TMP/index.php" "$BASE/api/web/index.php"
 fetch "$TMP/app.js" "$WEB_BASE/js/app.js"
 fetch "$TMP/config.js" "$WEB_BASE/js/config.js"
 fetch "$TMP/index.html" "$WEB_BASE/index.html"
+fetch "$TMP/app.css" "$WEB_BASE/css/app.css"
 
 install() {
   cp -f "$1" "$2"
@@ -41,12 +46,21 @@ install "$TMP/DreamlandWasabiStorage.php" "$DL/common/helpers/DreamlandWasabiSto
 install "$TMP/HealthController.php" "$DL/api/modules/v1/controllers/HealthController.php"
 install "$TMP/Post.php" "$DL/api/modules/v1/models/Post.php"
 install "$TMP/PostSearch.php" "$DL/api/modules/v1/models/PostSearch.php"
+install "$TMP/CreatorController.php" "$DL/api/modules/v1/controllers/CreatorController.php"
 install "$TMP/repair-reel-gallery.php" "$DL/scripts/repair-reel-gallery.php"
+install "$TMP/find-reel-video.php" "$DL/scripts/find-reel-video.php"
+install "$TMP/serve-uploads.php" "$DL/api/web/serve-uploads.php"
+install "$TMP/index.php" "$DL/api/web/index.php"
 install "$TMP/app.js" "$WEB/js/app.js"
 install "$TMP/config.js" "$WEB/js/config.js"
 install "$TMP/index.html" "$WEB/index.html"
+install "$TMP/app.css" "$WEB/css/app.css"
 
 rm -rf "$DL/api/runtime/cache/"* 2>/dev/null || true
+
+echo ""
+echo "--- Locate reel video files ---"
+php scripts/find-reel-video.php 1 2>&1 || true
 
 echo ""
 echo "--- Repair reel gallery rows ---"

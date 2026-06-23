@@ -192,6 +192,25 @@ JSON;
         }
     }
 
+    public static function objectExists(string $folder, string $fileName, ?Setting $setting = null): bool
+    {
+        if (!self::isConfigured($setting)) {
+            return false;
+        }
+
+        try {
+            $setting = $setting ?: self::settingSnapshot();
+            $client = self::createClient($setting);
+            $client->headObject([
+                'Bucket' => (string) $setting->wasabi_bucket,
+                'Key' => self::objectKey($folder, $fileName),
+            ]);
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     public static function deleteObject(string $folder, string $fileName, ?Setting $setting = null): void
     {
         $setting = $setting ?: self::settingSnapshot();
