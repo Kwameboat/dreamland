@@ -22,24 +22,31 @@ if ($driver === 'pgsql') {
     $dsn = "mysql:host={$host};port={$port};dbname={$name};charset={$charset}";
 }
 
+$db = [
+    'class' => 'yii\db\Connection',
+    'dsn' => $dsn,
+    'username' => $user,
+    'password' => $pass,
+    'charset' => $charset,
+    'enableSchemaCache' => true,
+    'schemaCacheDuration' => 3600,
+    'schemaCache' => 'cache',
+];
+
+// Only override schemaMap for PostgreSQL. An empty array for MySQL removes Yii's
+// default mysql schema driver and breaks ActiveRecord (health/API 500 on cPanel).
+if ($driver === 'pgsql') {
+    $db['schemaMap'] = [
+        'pgsql' => [
+            'class' => 'yii\db\pgsql\Schema',
+            'defaultSchema' => 'public',
+        ],
+    ];
+}
+
 return [
     'components' => [
-        'db' => [
-            'class' => 'yii\db\Connection',
-            'dsn' => $dsn,
-            'username' => $user,
-            'password' => $pass,
-            'charset' => $charset,
-            'enableSchemaCache' => true,
-            'schemaCacheDuration' => 3600,
-            'schemaCache' => 'cache',
-            'schemaMap' => $driver === 'pgsql' ? [
-                'pgsql' => [
-                    'class' => 'yii\db\pgsql\Schema',
-                    'defaultSchema' => 'public',
-                ],
-            ] : [],
-        ],
+        'db' => $db,
         'mailer' => [
             'class' => \yii\symfonymailer\Mailer::class,
             'useFileTransport' => !(getenv('SMTP_HOST') ?: ''),

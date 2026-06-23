@@ -82,8 +82,12 @@ JSON;
 
     public static function settingSnapshot(): Setting
     {
-        $model = new Setting();
-        $setting = $model->find()->orderBy(['id' => SORT_DESC])->one();
+        $setting = null;
+        try {
+            $setting = Setting::find()->orderBy(['id' => SORT_DESC])->one();
+        } catch (\Throwable $e) {
+            Yii::warning($e->getMessage(), __METHOD__);
+        }
         if (!$setting) {
             $setting = new Setting();
         }

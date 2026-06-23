@@ -37,7 +37,7 @@ class HealthController extends Controller
                     'status' => 'error',
                     'message' => 'Database unavailable.',
                     'error' => $e->getMessage(),
-                    'services' => $this->serviceMap(false, false, false, false, false, null),
+                    'services' => $this->safeServiceMap(false, false, false, false, false, null),
                 ];
             }
 
@@ -65,7 +65,12 @@ class HealthController extends Controller
                 Yii::warning($e->getMessage(), __METHOD__);
             }
             try {
-                $wasabi = DreamlandWasabiStorage::testConnection();
+                $wasabi = [
+                    'ok' => DreamlandWasabiStorage::isConfigured(),
+                    'message' => DreamlandWasabiStorage::isConfigured()
+                        ? 'Wasabi configured (connection not probed on health check).'
+                        : 'Wasabi is not configured.',
+                ];
             } catch (\Throwable $e) {
                 $wasabi = ['ok' => false, 'message' => $e->getMessage()];
             }
@@ -99,7 +104,7 @@ class HealthController extends Controller
                     'dev_mode' => (bool) (Yii::$app->params['dreamlandDevMode'] ?? false),
                     'timestamp' => time(),
                 ],
-                'services' => $this->serviceMap(true, $liveOk, $modOk, $aiOk, $geminiOk, $health),
+                'services' => $this->safeServiceMap(true, $liveOk, $modOk, $aiOk, $geminiOk, $health),
             ];
         } catch (\Throwable $e) {
             Yii::error($e->getMessage(), __METHOD__);
@@ -108,7 +113,23 @@ class HealthController extends Controller
                 'status' => 'error',
                 'message' => 'Health check failed.',
                 'error' => $e->getMessage(),
-                'services' => $this->serviceMap(false, false, false, false, false, null),
+                'services' => $this->safeServiceMap(false, false, false, false, false, null),
+            ];
+        }
+    }
+
+    private function safeServiceMap(bool $apiOk, bool $liveOk, bool $modOk, bool $aiOk = false, bool $geminiOk = false, ?array $agentHealth = null): array
+    {
+        try {
+            return $this->serviceMap($apiOk, $liveOk, $modOk, $aiOk, $geminiOk, $agentHealth);
+        } catch (\Throwable $e) {
+            Yii::warning($e->getMessage(), __METHOD__);
+            return [
+                'api_ok' => $apiOk,
+                'live_ok' => $liveOk,
+                'moderation_ok' => $modOk,
+                'uploads' => null,
+                'service_map_error' => $e->getMessage(),
             ];
         }
     }
@@ -125,7 +146,7 @@ class HealthController extends Controller
             'pwa' => $pwaUrl,
             'api' => $apiBase . '/v1',
             'admin' => $adminUrl,
-            'uploads' => DreamlandWasabiStorage::uploadsBaseForApi(),
+            'uploads' => $this->safeUploadsBase(),
             'live_signaling' => (string) ($params['dreamlandLiveSignalingUrl'] ?? 'http://localhost:4443'),
             'live_ok' => $liveOk,
             'moderation_agent' => (string) ($params['dreamlandModerationAgentUrl'] ?? 'http://localhost:4444'),
@@ -135,5 +156,15 @@ class HealthController extends Controller
             'gemini_model' => $geminiModel ?: (string) ($params['dreamlandGeminiModel'] ?? 'gemini-2.0-flash'),
             'api_ok' => $apiOk,
         ];
+    }
+
+    private function safeUploadsBase(): string
+    {
+        try {
+            return DreamlandWasabiStorage::uploadsBaseForApi();
+        } catch (\Throwable $e) {
+            $site = rtrim((string) (Yii::$app->params['siteUrl'] ?? 'https://dreamlandgh.app'), '/');
+            return $site . '/frontend/web/uploads/image';
+        }
     }
 }

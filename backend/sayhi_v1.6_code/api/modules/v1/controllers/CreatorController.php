@@ -549,16 +549,7 @@ class CreatorController extends ActiveController
         if (!$user || !$this->isCreatorUser($user)) {
             return false;
         }
-        $status = DreamlandCreatorApproval::resolveStatus($user);
-        if ($status === DreamlandCreatorApproval::STATUS_APPROVED) {
-            return true;
-        }
-        if (in_array($status, [DreamlandCreatorApproval::STATUS_PENDING, DreamlandCreatorApproval::STATUS_REJECTED], true)) {
-            return false;
-        }
-        return isset($user->dreamland_account_type)
-            && $user->dreamland_account_type === 'creator'
-            && (int) $user->role === User::ROLE_AGENT;
+        return DreamlandCreatorApproval::resolveStatus($user) === DreamlandCreatorApproval::STATUS_APPROVED;
     }
 
     private function resolveCreatorStatus($user): string

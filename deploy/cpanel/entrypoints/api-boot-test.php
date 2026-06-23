@@ -22,7 +22,10 @@ $config = yii\helpers\ArrayHelper::merge(
     require $yiiRoot . '/common/config/main-local.php',
     require $yiiRoot . '/api/config/main.php',
     require $yiiRoot . '/api/config/main-local.php',
-    require $yiiRoot . '/deploy/cpanel/config/api-subdir.php'
+    require $yiiRoot . '/deploy/cpanel/config/api-subdir.php',
+    is_file($yiiRoot . '/deploy/cpanel/config/db-mysql-fix.php')
+        ? require $yiiRoot . '/deploy/cpanel/config/db-mysql-fix.php'
+        : []
 );
 
 try {

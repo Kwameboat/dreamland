@@ -40,7 +40,7 @@ class DreamlandAuthController extends ActiveController
         $model = new User();
         $model->scenario = 'register';
         $model->username = trim((string) ($params['username'] ?? ''));
-        $model->email = trim((string) ($params['email'] ?? ''));
+        $model->email = strtolower(trim((string) ($params['email'] ?? '')));
         $model->password = (string) ($params['password'] ?? '');
         $model->name = trim((string) ($params['name'] ?? $model->username));
         $model->device_type = (string) ($params['device_type'] ?? '3');
@@ -52,6 +52,13 @@ class DreamlandAuthController extends ActiveController
         $model->account_created_with = 1;
         $model->profile_visibility = 1;
         $model->is_push_notification_allow = 0;
+
+        if ($model->hasAttribute('dreamland_account_type')) {
+            $model->dreamland_account_type = $accountType;
+        }
+        if ($model->hasAttribute('dreamland_creator_status')) {
+            $model->dreamland_creator_status = $accountType === 'creator' ? 'pending' : 'none';
+        }
 
         if (Yii::$app->has('dreamlandAi')) {
             $aiCheck = Yii::$app->dreamlandAi->checkSignupText($model->name, $model->username);
@@ -68,13 +75,25 @@ class DreamlandAuthController extends ActiveController
         }
 
         if (!$model->validate()) {
+            $existing = User::find()
+                ->where(['email' => $model->email])
+                ->andWhere(['<>', 'status', User::STATUS_DELETED])
+                ->one();
+            if ($existing && $existing->validatePassword($model->password, $existing->password_hash)) {
+                return $this->registrationLoginResponse($existing, $accountType, 'You already have an account — signed you in.');
+            }
+
             $flat = [];
             foreach ($model->errors as $fieldErrors) {
                 foreach ((array) $fieldErrors as $msg) {
                     $flat[] = $msg;
                 }
             }
-            return ['statusCode' => 422, 'message' => $flat[0] ?? 'Validation failed.', 'errors' => $model->errors];
+            $message = $flat[0] ?? 'Validation failed.';
+            if (isset($model->errors['email']) && $existing) {
+                $message = 'This email is already registered. Sign in instead.';
+            }
+            return ['statusCode' => 422, 'message' => $message, 'errors' => $model->errors];
         }
 
         $defaultPackage = (new Package())->getDefaultPackage();
@@ -88,14 +107,19 @@ class DreamlandAuthController extends ActiveController
         }
 
         if ($model->save()) {
-            if ($this->hasAccountTypeColumn()) {
-                $userUpdates = ['dreamland_account_type' => $accountType];
+            if ($this->hasAccountTypeColumn() || $this->hasCreatorStatusColumn()) {
+                $userUpdates = [];
+                if ($this->hasAccountTypeColumn()) {
+                    $userUpdates['dreamland_account_type'] = $accountType;
+                }
                 if ($this->hasCreatorStatusColumn()) {
                     $userUpdates['dreamland_creator_status'] = $accountType === 'creator' ? 'pending' : 'none';
                 }
-                Yii::$app->db->createCommand()
-                    ->update('user', $userUpdates, ['id' => $model->id])
-                    ->execute();
+                if ($userUpdates !== []) {
+                    Yii::$app->db->createCommand()
+                        ->update('user', $userUpdates, ['id' => $model->id])
+                        ->execute();
+                }
             }
 
             if ($referralUserId > 0 && $referralUserId !== (int) $model->id) {
@@ -106,24 +130,36 @@ class DreamlandAuthController extends ActiveController
                 }
             }
 
-            $profile = $model->getProfile($model->id);
-            if ($profile && $this->hasAccountTypeColumn()) {
-                $profile->dreamland_account_type = $accountType;
-            }
-            if ($profile && $this->hasCreatorStatusColumn()) {
-                $profile->dreamland_creator_status = $accountType === 'creator' ? 'pending' : 'none';
-            }
-
-            return [
-                'message' => $accountType === 'creator'
-                    ? 'Creator account created. Upload unlocks after Dreamland approves your application.'
-                    : 'Viewer account created. Welcome to Dreamland.',
-                'user' => $this->decorateUser($profile, $accountType),
-                'auth_key' => $profile->auth_key ?? $model->auth_key,
-            ];
+            return $this->registrationLoginResponse($model, $accountType, $accountType === 'creator'
+                ? 'Creator account created. Upload unlocks after Dreamland approves your application.'
+                : 'Viewer account created. Welcome to Dreamland.');
         }
 
         return ['statusCode' => 422, 'message' => 'Registration failed. Please try again.'];
+    }
+
+    private function registrationLoginResponse(User $model, string $accountType, string $message): array
+    {
+        try {
+            $profile = $model->getProfile($model->id) ?: $model;
+        } catch (\Throwable $e) {
+            Yii::warning($e->getMessage(), __METHOD__);
+            $profile = $model;
+        }
+
+        if ($profile && $this->hasAccountTypeColumn()) {
+            $profile->dreamland_account_type = $profile->dreamland_account_type ?? $accountType;
+        }
+        if ($profile && $this->hasCreatorStatusColumn()) {
+            $profile->dreamland_creator_status = $profile->dreamland_creator_status
+                ?? ($accountType === 'creator' ? 'pending' : 'none');
+        }
+
+        return [
+            'message' => $message,
+            'user' => $this->decorateUser($profile, $accountType),
+            'auth_key' => $profile->auth_key ?? $model->auth_key,
+        ];
     }
 
     private function hasAccountTypeColumn(): bool

@@ -40,11 +40,17 @@ class DreamlandSetting extends ActiveRecord
 
     public static function getSettings()
     {
-        $settings = static::findOne(1);
-        if (!$settings) {
+        try {
+            $settings = static::findOne(1);
+            if (!$settings) {
+                $settings = new static(['id' => 1]);
+                $settings->save(false);
+            }
+            return $settings;
+        } catch (\Throwable $e) {
+            \Yii::warning($e->getMessage(), __METHOD__);
             $settings = new static(['id' => 1]);
-            $settings->save(false);
+            return $settings;
         }
-        return $settings;
     }
 }

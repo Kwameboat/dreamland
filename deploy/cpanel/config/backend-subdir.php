@@ -30,6 +30,15 @@ return [
         'session' => [
             'savePath' => dirname(__DIR__, 3) . '/backend/runtime',
         ],
+        'urlManager' => [
+            'enablePrettyUrl' => true,
+            'showScriptName' => false,
+            'baseUrl' => '/admin',
+            'rules' => [
+                '' => 'site/index',
+                '<controller:\w+>/<action:\w+>' => '<controller>/<action>',
+            ],
+        ],
         'assetManager' => [
             'basePath' => dirname(__DIR__, 3) . '/backend/web/assets',
             'baseUrl' => '/admin/assets',

@@ -712,6 +712,7 @@ class User extends ActiveRecord implements IdentityInterface
     public function checkUniqueEmail($attribute, $params, $validator)
     {
         if (!$this->hasErrors()) {
+            $this->$attribute = strtolower(trim((string) $this->$attribute));
             if ($this->isNewRecord) {
                 $count = User::find()->where([$attribute => $this->$attribute])->andWhere(['<>', 'status', self::STATUS_DELETED])->count();
             } else {
@@ -799,7 +800,34 @@ class User extends ActiveRecord implements IdentityInterface
 
     public function getProfile($id)
     {
-        return $this->find()->select(['id','role', 'name', 'username', 'email','unique_id', 'bio', 'status','description', 'image', 'cover_image', 'user.is_verified', 'user.country_code', 'user.phone', 'user.country', 'user.city', 'user.sex', 'user.dob', 'user.paypal_id', 'user.available_balance', 'user.available_coin', 'user.is_biometric_login', 'is_push_notification_allow', 'account_created_with', 'auth_key', 'is_login_first_time','profile_visibility','follower_status','following_status','is_show_online_chat_status','passionate','holistic_path','dreamland_account_type','dreamland_creator_status'])->where(['id' => $id])->one();
+        return $this->find()->select(static::profileSelectColumns())->where(['id' => $id])->one();
+    }
+
+    /** Columns safe to select on all deployments (missing Dreamland cols won't 500 registration). */
+    public static function profileSelectColumns(): array
+    {
+        $columns = [
+            'id', 'role', 'name', 'username', 'email', 'unique_id', 'bio', 'status', 'description',
+            'image', 'cover_image', 'user.is_verified', 'user.country_code', 'user.phone', 'user.country',
+            'user.city', 'user.sex', 'user.dob', 'user.paypal_id', 'user.available_balance',
+            'user.available_coin', 'user.is_biometric_login', 'is_push_notification_allow',
+            'account_created_with', 'auth_key', 'is_login_first_time', 'profile_visibility',
+            'follower_status', 'following_status', 'is_show_online_chat_status', 'passionate', 'holistic_path',
+        ];
+
+        try {
+            $schema = Yii::$app->db->schema->getTableSchema(static::tableName(), true);
+            if ($schema && isset($schema->columns['dreamland_account_type'])) {
+                $columns[] = 'dreamland_account_type';
+            }
+            if ($schema && isset($schema->columns['dreamland_creator_status'])) {
+                $columns[] = 'dreamland_creator_status';
+            }
+        } catch (\Throwable $e) {
+            Yii::warning($e->getMessage(), __METHOD__);
+        }
+
+        return $columns;
     }
 
     public function getFullProfile($id)

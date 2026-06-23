@@ -3,14 +3,7 @@
  * Apply Dreamland v3 live unlock schema.
  * Usage: php scripts/apply-dreamland-v3-migration.php
  */
-$dbHost = getenv('DB_HOST') ?: '127.0.0.1';
-$dbPort = getenv('DB_PORT') ?: '3309';
-$dbName = getenv('DB_NAME') ?: 'yii2advanced';
-$dbUser = getenv('DB_USER') ?: 'yii2advanced';
-$dbPass = getenv('DB_PASSWORD') ?: 'secret';
-
-$dsn = "mysql:host={$dbHost};port={$dbPort};dbname={$dbName};charset=utf8mb4";
-$pdo = new PDO($dsn, $dbUser, $dbPass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+$pdo = require __DIR__ . '/lib/bootstrap-cli.php';
 
 function tableExists(PDO $pdo, string $table): bool
 {
@@ -23,9 +16,18 @@ function tableExists(PDO $pdo, string $table): bool
 }
 
 if (!tableExists($pdo, 'purchased_lives')) {
-    $sql = file_get_contents(__DIR__ . '/../doc/db/dreamland_v3_live.sql');
-    $pdo->exec($sql);
-    echo "Created purchased_lives table\n";
+    $sqlFile = __DIR__ . '/../doc/db/dreamland_v3_live.sql';
+    if (!is_file($sqlFile)) {
+        echo "SKIP: {$sqlFile} not found (optional on cPanel)\n";
+    } else {
+        $sql = file_get_contents($sqlFile);
+        if ($sql === false || trim($sql) === '') {
+            echo "SKIP: empty SQL in dreamland_v3_live.sql\n";
+        } else {
+            $pdo->exec($sql);
+            echo "Created purchased_lives table\n";
+        }
+    }
 } else {
     echo "purchased_lives already exists\n";
 }

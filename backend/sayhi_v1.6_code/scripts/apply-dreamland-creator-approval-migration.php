@@ -4,14 +4,7 @@
  *
  * Usage: php scripts/apply-dreamland-creator-approval-migration.php
  */
-$dbHost = getenv('DB_HOST') ?: '127.0.0.1';
-$dbPort = getenv('DB_PORT') ?: '3309';
-$dbName = getenv('DB_NAME') ?: 'yii2advanced';
-$dbUser = getenv('DB_USER') ?: 'yii2advanced';
-$dbPass = getenv('DB_PASSWORD') ?: 'secret';
-
-$dsn = "mysql:host={$dbHost};port={$dbPort};dbname={$dbName};charset=utf8mb4";
-$pdo = new PDO($dsn, $dbUser, $dbPass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+$pdo = require __DIR__ . '/lib/bootstrap-cli.php';
 
 function columnExists(PDO $pdo, string $table, string $column): bool
 {
@@ -24,7 +17,8 @@ function columnExists(PDO $pdo, string $table, string $column): bool
 }
 
 if (!columnExists($pdo, 'user', 'dreamland_creator_status')) {
-    $pdo->exec("ALTER TABLE `user` ADD COLUMN `dreamland_creator_status` VARCHAR(16) NOT NULL DEFAULT 'none' AFTER `dreamland_account_type`");
+    $after = columnExists($pdo, 'user', 'dreamland_account_type') ? ' AFTER `dreamland_account_type`' : '';
+    $pdo->exec("ALTER TABLE `user` ADD COLUMN `dreamland_creator_status` VARCHAR(16) NOT NULL DEFAULT 'none'{$after}");
     echo "Added user.dreamland_creator_status\n";
 }
 

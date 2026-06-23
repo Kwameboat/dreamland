@@ -28,14 +28,37 @@ class DreamlandCreatorApproval
 
     public static function resolveStatus(?ActiveRecord $user): string
     {
-        if (!$user || !self::hasCreatorStatusColumn()) {
+        if (!$user) {
             return self::STATUS_NONE;
         }
+
+        if (!self::hasCreatorStatusColumn()) {
+            if (self::isCreatorIdentity($user)) {
+                return self::STATUS_PENDING;
+            }
+            return self::STATUS_NONE;
+        }
+
         $status = strtolower(trim((string) ($user->getAttribute('dreamland_creator_status') ?? self::STATUS_NONE)));
         if (in_array($status, [self::STATUS_PENDING, self::STATUS_APPROVED, self::STATUS_REJECTED], true)) {
             return $status;
         }
+        if (self::isCreatorIdentity($user)) {
+            return self::STATUS_PENDING;
+        }
         return self::STATUS_NONE;
+    }
+
+    private static function isCreatorIdentity(?ActiveRecord $user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+        if ($user->hasAttribute('dreamland_account_type')
+            && (string) $user->getAttribute('dreamland_account_type') === 'creator') {
+            return true;
+        }
+        return $user->hasAttribute('role') && (int) $user->getAttribute('role') === 4;
     }
 
     public static function isPending(?ActiveRecord $user): bool

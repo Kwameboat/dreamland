@@ -48,7 +48,10 @@ $config = yii\helpers\ArrayHelper::merge(
     require $yiiRoot . '/common/config/main-local.php',
     require $yiiRoot . '/backend/config/main.php',
     require $yiiRoot . '/backend/config/main-local.php',
-    require $yiiRoot . '/deploy/cpanel/config/backend-subdir.php'
+    require $yiiRoot . '/deploy/cpanel/config/backend-subdir.php',
+    is_file($yiiRoot . '/deploy/cpanel/config/db-mysql-fix.php')
+        ? require $yiiRoot . '/deploy/cpanel/config/db-mysql-fix.php'
+        : []
 );
 
 (new yii\web\Application($config))->run();

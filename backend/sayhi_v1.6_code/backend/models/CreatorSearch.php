@@ -30,15 +30,20 @@ class CreatorSearch extends User
     public function search($params)
     {
         $reelType = 4;
+        $db = \Yii::$app->db;
+        $userRef = $db->quoteTableName('user') . '.' . $db->quoteColumnName('id');
+        $postTable = $db->quoteTableName('post');
+        $liveTable = $db->quoteTableName('user_live_history');
+
         $query = DreamlandAudience::creatorQuery()
             ->select([
                 'user.*',
                 'reel_count' => new Expression(
-                    '(SELECT COUNT(*) FROM post p WHERE p.user_id = "user".id AND p.type = :reelType AND p.status <> 0)',
+                    "(SELECT COUNT(*) FROM {$postTable} p WHERE p.user_id = {$userRef} AND p.type = :reelType AND p.status <> 0)",
                     [':reelType' => $reelType]
                 ),
                 'live_count' => new Expression(
-                    '(SELECT COUNT(*) FROM user_live_history ulh WHERE ulh.user_id = "user".id)'
+                    "(SELECT COUNT(*) FROM {$liveTable} ulh WHERE ulh.user_id = {$userRef})"
                 ),
             ]);
 
