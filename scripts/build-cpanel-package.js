@@ -128,6 +128,7 @@ fs.copyFileSync(path.join(ep, 'diagnose.php'), path.join(adminDir, 'diagnose.php
 fs.copyFileSync(path.join(ep, 'admin-boot-test.php'), path.join(adminDir, 'boot-test.php'));
 fs.copyFileSync(path.join(ep, 'admin-htaccess'), path.join(adminDir, '.htaccess'));
 fs.copyFileSync(path.join(ep, 'api-index.php'), path.join(apiDir, 'index.php'));
+fs.copyFileSync(path.join(ep, 'api-boot-test.php'), path.join(apiDir, 'boot-test.php'));
 fs.copyFileSync(path.join(ep, 'api-htaccess'), path.join(apiDir, '.htaccess'));
 fs.copyFileSync(path.join(ep, 'api-user.ini'), path.join(apiDir, '.user.ini'));
 fs.copyFileSync(path.join(ep, 'api-user.ini'), path.join(adminDir, '.user.ini'));

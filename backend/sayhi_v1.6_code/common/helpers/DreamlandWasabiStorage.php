@@ -2,7 +2,6 @@
 
 namespace common\helpers;
 
-use Aws\S3\S3Client;
 use common\models\Setting;
 use Yii;
 
@@ -139,13 +138,17 @@ JSON;
         return trim($folder, '/') . '/' . ltrim($fileName, '/');
     }
 
-    public static function createClient(?Setting $setting = null): S3Client
+    public static function createClient(?Setting $setting = null)
     {
+        if (!class_exists('Aws\\S3\\S3Client')) {
+            throw new \RuntimeException('AWS SDK missing. Run: composer require aws/aws-sdk-php');
+        }
+
         $setting = $setting ?: self::settingSnapshot();
         $region = trim((string) ($setting->wasabi_region ?? 'us-east-1'));
         $endpoint = self::normalizeEndpoint($setting->wasabi_access_url ?? '', $region);
 
-        return new S3Client([
+        return new \Aws\S3\S3Client([
             'version' => 'latest',
             'region' => $region,
             'endpoint' => $endpoint,

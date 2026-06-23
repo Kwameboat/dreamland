@@ -1,7 +1,7 @@
 <?php
 use backend\assets\AppAsset;
 use yii\helpers\Html;
-use dmstr\widgets\Alert;
+use common\widgets\Alert;
 
 /* @var $this \yii\web\View */
 /* @var $content string */

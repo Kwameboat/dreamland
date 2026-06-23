@@ -37,6 +37,8 @@ require $yiiRoot . '/common/config/render-https.php';
 require $yiiRoot . '/vendor/autoload.php';
 require $yiiRoot . '/vendor/yiisoft/yii2/Yii.php';
 require $yiiRoot . '/common/config/bootstrap.php';
+require $yiiRoot . '/backend/config/bootstrap.php';
+require $yiiRoot . '/backend/config/bootstrap.php';
 
 Yii::setAlias('@webroot', $yiiRoot . '/backend/web');
 Yii::setAlias('@web', '/admin');

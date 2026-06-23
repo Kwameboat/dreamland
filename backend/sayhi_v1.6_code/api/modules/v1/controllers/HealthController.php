@@ -20,53 +20,97 @@ class HealthController extends Controller
      */
     public function actionIndex()
     {
-        $dbOk = false;
-        $queueDepth = null;
         try {
-            Yii::$app->db->createCommand('SELECT 1')->queryScalar();
-            $dbOk = true;
-            if (Yii::$app->db->schema->getTableSchema('safety_scan_queue', true)) {
-                $queueDepth = (int) Yii::$app->db->createCommand(
-                    "SELECT COUNT(*) FROM safety_scan_queue WHERE status='queued'"
-                )->queryScalar();
+            $dbOk = false;
+            $queueDepth = null;
+            try {
+                Yii::$app->db->createCommand('SELECT 1')->queryScalar();
+                $dbOk = true;
+                if (Yii::$app->db->schema->getTableSchema('safety_scan_queue', true)) {
+                    $queueDepth = (int) Yii::$app->db->createCommand(
+                        "SELECT COUNT(*) FROM safety_scan_queue WHERE status='queued'"
+                    )->queryScalar();
+                }
+            } catch (\Throwable $e) {
+                return [
+                    'statusCode' => 503,
+                    'status' => 'error',
+                    'message' => 'Database unavailable.',
+                    'error' => $e->getMessage(),
+                    'services' => $this->serviceMap(false, false, false, false, false, null),
+                ];
             }
-        } catch (\Throwable $e) {
+
+            $liveOk = false;
+            $modOk = false;
+            $uploadsWritable = false;
+            $wasabi = ['ok' => false, 'message' => 'Wasabi check skipped.'];
+            $aiOk = false;
+            $health = null;
+            $geminiOk = false;
+
+            try {
+                $liveOk = Yii::$app->has('dreamlandLive') ? Yii::$app->dreamlandLive->isHealthy() : false;
+            } catch (\Throwable $e) {
+                Yii::warning($e->getMessage(), __METHOD__);
+            }
+            try {
+                $modOk = Yii::$app->has('dreamlandModeration') ? Yii::$app->dreamlandModeration->isHealthy() : false;
+            } catch (\Throwable $e) {
+                Yii::warning($e->getMessage(), __METHOD__);
+            }
+            try {
+                $uploadsWritable = Yii::$app->has('fileUpload') ? Yii::$app->fileUpload->isLocalDiskWritable() : false;
+            } catch (\Throwable $e) {
+                Yii::warning($e->getMessage(), __METHOD__);
+            }
+            try {
+                $wasabi = DreamlandWasabiStorage::testConnection();
+            } catch (\Throwable $e) {
+                $wasabi = ['ok' => false, 'message' => $e->getMessage()];
+            }
+            try {
+                $aiOk = Yii::$app->has('dreamlandAi') ? Yii::$app->dreamlandAi->isEnabled() : false;
+            } catch (\Throwable $e) {
+                Yii::warning($e->getMessage(), __METHOD__);
+            }
+            try {
+                $health = $modOk && Yii::$app->has('dreamlandModeration')
+                    ? Yii::$app->dreamlandModeration->getHealth()
+                    : null;
+                $geminiOk = is_array($health) && !empty($health['geminiConfigured']);
+            } catch (\Throwable $e) {
+                Yii::warning($e->getMessage(), __METHOD__);
+            }
+
             return [
+                'status' => 'ok',
+                'message' => 'Dreamland API is healthy.',
+                'checks' => [
+                    'database' => $dbOk,
+                    'uploads_writable' => $uploadsWritable,
+                    'wasabi_storage' => $wasabi['ok'] ?? false,
+                    'wasabi_message' => $wasabi['message'] ?? '',
+                    'safety_queue_depth' => $queueDepth,
+                    'live_server' => $liveOk,
+                    'moderation_agent' => $modOk,
+                    'ai_powered' => $aiOk,
+                    'gemini_multimodal' => $geminiOk,
+                    'dev_mode' => (bool) (Yii::$app->params['dreamlandDevMode'] ?? false),
+                    'timestamp' => time(),
+                ],
+                'services' => $this->serviceMap(true, $liveOk, $modOk, $aiOk, $geminiOk, $health),
+            ];
+        } catch (\Throwable $e) {
+            Yii::error($e->getMessage(), __METHOD__);
+            return [
+                'statusCode' => 500,
                 'status' => 'error',
-                'message' => 'Database unavailable.',
+                'message' => 'Health check failed.',
                 'error' => $e->getMessage(),
                 'services' => $this->serviceMap(false, false, false, false, false, null),
             ];
         }
-
-        $liveOk = Yii::$app->has('dreamlandLive') ? Yii::$app->dreamlandLive->isHealthy() : false;
-        $modOk = Yii::$app->has('dreamlandModeration') ? Yii::$app->dreamlandModeration->isHealthy() : false;
-        $uploadsWritable = Yii::$app->has('fileUpload') ? Yii::$app->fileUpload->isLocalDiskWritable() : false;
-        $wasabi = DreamlandWasabiStorage::testConnection();
-        $aiOk = Yii::$app->has('dreamlandAi') ? Yii::$app->dreamlandAi->isEnabled() : false;
-        $health = $modOk && Yii::$app->has('dreamlandModeration')
-            ? Yii::$app->dreamlandModeration->getHealth()
-            : null;
-        $geminiOk = is_array($health) && !empty($health['geminiConfigured']);
-
-        return [
-            'status' => 'ok',
-            'message' => 'Dreamland API is healthy.',
-            'checks' => [
-                'database' => $dbOk,
-                'uploads_writable' => $uploadsWritable,
-                'wasabi_storage' => $wasabi['ok'] ?? false,
-                'wasabi_message' => $wasabi['message'] ?? '',
-                'safety_queue_depth' => $queueDepth,
-                'live_server' => $liveOk,
-                'moderation_agent' => $modOk,
-                'ai_powered' => $aiOk,
-                'gemini_multimodal' => $geminiOk,
-                'dev_mode' => (bool) (Yii::$app->params['dreamlandDevMode'] ?? false),
-                'timestamp' => time(),
-            ],
-            'services' => $this->serviceMap(true, $liveOk, $modOk, $aiOk, $geminiOk, $health),
-        ];
     }
 
     private function serviceMap(bool $apiOk, bool $liveOk, bool $modOk, bool $aiOk = false, bool $geminiOk = false, ?array $agentHealth = null): array
