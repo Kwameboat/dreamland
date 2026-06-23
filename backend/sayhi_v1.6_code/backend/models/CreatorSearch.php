@@ -5,6 +5,7 @@ namespace backend\models;
 use app\models\User;
 use common\models\DreamlandAudience;
 use common\helpers\DreamlandCreatorApproval;
+use Yii;
 use yii\base\Model;
 use yii\data\ActiveDataProvider;
 use yii\db\Expression;
@@ -29,23 +30,26 @@ class CreatorSearch extends User
 
     public function search($params)
     {
-        $reelType = 4;
-        $db = \Yii::$app->db;
-        $userRef = $db->quoteTableName('user') . '.' . $db->quoteColumnName('id');
-        $postTable = $db->quoteTableName('post');
-        $liveTable = $db->quoteTableName('user_live_history');
+        $query = DreamlandAudience::creatorQuery();
 
-        $query = DreamlandAudience::creatorQuery()
-            ->select([
-                'user.*',
+        if ($this->canCountReels()) {
+            $db = Yii::$app->db;
+            $userTable = $db->quoteTableName(User::tableName());
+            $userIdCol = $db->quoteColumnName('id');
+            $postTable = $db->quoteTableName('post');
+            $liveTable = $db->quoteTableName('user_live_history');
+            $userRef = "{$userTable}.{$userIdCol}";
+
+            $query->select([
+                User::tableName() . '.*',
                 'reel_count' => new Expression(
-                    "(SELECT COUNT(*) FROM {$postTable} p WHERE p.user_id = {$userRef} AND p.type = :reelType AND p.status <> 0)",
-                    [':reelType' => $reelType]
+                    "(SELECT COUNT(*) FROM {$postTable} p WHERE p.user_id = {$userRef} AND p.type = 4 AND p.status <> 0)"
                 ),
                 'live_count' => new Expression(
                     "(SELECT COUNT(*) FROM {$liveTable} ulh WHERE ulh.user_id = {$userRef})"
                 ),
             ]);
+        }
 
         $dataProvider = new ActiveDataProvider([
             'query' => $query,
@@ -59,46 +63,57 @@ class CreatorSearch extends User
         }
 
         $query->andFilterWhere([
-            'user.id' => $this->id,
-            'user.status' => $this->status,
+            'id' => $this->id,
+            'status' => $this->status,
         ]);
-        $query->andFilterWhere(['like', 'user.name', $this->name]);
-        $query->andFilterWhere(['like', 'user.email', $this->email]);
-        $query->andFilterWhere(['like', 'user.username', $this->username]);
+        $query->andFilterWhere(['like', 'name', $this->name]);
+        $query->andFilterWhere(['like', 'email', $this->email]);
+        $query->andFilterWhere(['like', 'username', $this->username]);
 
         switch ($this->filter) {
             case 'active':
-                $query->andWhere(['user.status' => User::STATUS_ACTIVE]);
+                $query->andWhere(['status' => User::STATUS_ACTIVE]);
                 if (DreamlandCreatorApproval::hasCreatorStatusColumn()) {
-                    $query->andWhere(['user.dreamland_creator_status' => DreamlandCreatorApproval::STATUS_APPROVED]);
+                    $query->andWhere(['dreamland_creator_status' => DreamlandCreatorApproval::STATUS_APPROVED]);
                 }
                 break;
             case 'banned':
-                $query->andWhere(['user.status' => User::STATUS_INACTIVE]);
+                $query->andWhere(['status' => User::STATUS_INACTIVE]);
                 break;
             case 'pending':
                 if (DreamlandCreatorApproval::hasCreatorStatusColumn()) {
                     $query->andWhere([
                         'or',
-                        ['user.dreamland_creator_status' => DreamlandCreatorApproval::STATUS_PENDING],
+                        ['dreamland_creator_status' => DreamlandCreatorApproval::STATUS_PENDING],
                         [
                             'and',
-                            ['user.role' => User::ROLE_AGENT],
+                            ['role' => User::ROLE_AGENT],
                             [
                                 'or',
-                                ['user.dreamland_creator_status' => DreamlandCreatorApproval::STATUS_NONE],
-                                ['user.dreamland_creator_status' => ''],
-                                ['user.dreamland_creator_status' => null],
+                                ['dreamland_creator_status' => DreamlandCreatorApproval::STATUS_NONE],
+                                ['dreamland_creator_status' => ''],
+                                ['dreamland_creator_status' => null],
                             ],
                         ],
                     ]);
                 } else {
-                    $query->andWhere(['user.role' => User::ROLE_AGENT]);
-                    $query->andWhere(['user.status' => User::STATUS_ACTIVE]);
+                    $query->andWhere(['role' => User::ROLE_AGENT, 'status' => User::STATUS_ACTIVE]);
                 }
                 break;
         }
 
         return $dataProvider;
+    }
+
+    private function canCountReels(): bool
+    {
+        try {
+            $schema = Yii::$app->db->schema;
+            return $schema->getTableSchema('post', true) !== null
+                && $schema->getTableSchema('user_live_history', true) !== null;
+        } catch (\Throwable $e) {
+            Yii::warning($e->getMessage(), __METHOD__);
+            return false;
+        }
     }
 }

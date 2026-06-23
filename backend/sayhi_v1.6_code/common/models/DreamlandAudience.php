@@ -4,6 +4,7 @@ namespace common\models;
 
 use app\models\User;
 use common\helpers\DreamlandCreatorApproval;
+use Yii;
 use yii\db\ActiveQuery;
 
 /**
@@ -36,17 +37,37 @@ class DreamlandAudience
         return isset(self::labels()[$audience]);
     }
 
+    public static function userSchema()
+    {
+        static $schema = false;
+        if ($schema === false) {
+            $schema = Yii::$app->db->schema->getTableSchema(User::tableName(), true);
+        }
+        return $schema;
+    }
+
+    public static function hasUserColumn(string $column): bool
+    {
+        $schema = self::userSchema();
+        return $schema && isset($schema->columns[$column]);
+    }
+
     public static function viewerQuery(): ActiveQuery
     {
-        return User::find()
+        $query = User::find()
             ->where(['role' => User::ROLE_CUSTOMER])
-            ->andWhere(['<>', 'status', User::STATUS_DELETED])
-            ->andWhere([
+            ->andWhere(['<>', 'status', User::STATUS_DELETED]);
+
+        if (self::hasUserColumn('dreamland_account_type')) {
+            $query->andWhere([
                 'or',
                 ['dreamland_account_type' => 'viewer'],
                 ['dreamland_account_type' => null],
                 ['dreamland_account_type' => ''],
             ]);
+        }
+
+        return $query;
     }
 
     public static function creatorQuery(): ActiveQuery
@@ -55,11 +76,10 @@ class DreamlandAudience
             ['role' => User::ROLE_AGENT],
         ];
 
-        $schema = Yii::$app->db->schema->getTableSchema('user', true);
-        if ($schema && isset($schema->columns['dreamland_account_type'])) {
+        if (self::hasUserColumn('dreamland_account_type')) {
             $or[] = ['dreamland_account_type' => 'creator'];
         }
-        if ($schema && isset($schema->columns['dreamland_creator_status'])) {
+        if (self::hasUserColumn('dreamland_creator_status')) {
             $or[] = [
                 'dreamland_creator_status' => [
                     DreamlandCreatorApproval::STATUS_PENDING,
@@ -88,15 +108,18 @@ class DreamlandAudience
             return array_values(array_unique(array_filter(array_map('intval', $customIds))));
         }
 
-        $query = match ($audience) {
-            self::VIEWERS => self::viewerQuery(),
-            self::CREATORS => self::creatorQuery(),
-            self::ADMINS => self::adminQuery(),
-            default => null,
-        };
-
-        if (!$query) {
-            return [];
+        switch ($audience) {
+            case self::VIEWERS:
+                $query = self::viewerQuery();
+                break;
+            case self::CREATORS:
+                $query = self::creatorQuery();
+                break;
+            case self::ADMINS:
+                $query = self::adminQuery();
+                break;
+            default:
+                return [];
         }
 
         return array_map('intval', $query->select('id')->column());
@@ -104,20 +127,28 @@ class DreamlandAudience
 
     public static function applyToQuery(ActiveQuery $query, string $audience): ActiveQuery
     {
-        return match ($audience) {
-            self::CREATORS => $query->andWhere([
-                'or',
-                ['user.dreamland_account_type' => 'creator'],
-                ['user.role' => User::ROLE_AGENT],
-            ]),
-            self::ADMINS => $query->andWhere(['user.role' => [User::ROLE_ADMIN, User::ROLE_SUBADMIN]]),
-            self::VIEWERS => $query->andWhere(['user.role' => User::ROLE_CUSTOMER])->andWhere([
-                'or',
-                ['user.dreamland_account_type' => 'viewer'],
-                ['user.dreamland_account_type' => null],
-                ['user.dreamland_account_type' => ''],
-            ]),
-            default => $query,
-        };
+        switch ($audience) {
+            case self::CREATORS:
+                $parts = [['user.role' => User::ROLE_AGENT]];
+                if (self::hasUserColumn('dreamland_account_type')) {
+                    $parts[] = ['user.dreamland_account_type' => 'creator'];
+                }
+                return $query->andWhere(array_merge(['or'], $parts));
+            case self::ADMINS:
+                return $query->andWhere(['user.role' => [User::ROLE_ADMIN, User::ROLE_SUBADMIN]]);
+            case self::VIEWERS:
+                $q = $query->andWhere(['user.role' => User::ROLE_CUSTOMER]);
+                if (self::hasUserColumn('dreamland_account_type')) {
+                    $q->andWhere([
+                        'or',
+                        ['user.dreamland_account_type' => 'viewer'],
+                        ['user.dreamland_account_type' => null],
+                        ['user.dreamland_account_type' => ''],
+                    ]);
+                }
+                return $q;
+            default:
+                return $query;
+        }
     }
 }

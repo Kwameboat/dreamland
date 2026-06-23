@@ -48,6 +48,11 @@ $tabs = [
                     'filterModel' => $searchModel,
                     'columns' => [
                         ['class' => 'kartik\grid\SerialColumn'],
+                        [
+                            'attribute' => 'id',
+                            'label' => 'User ID',
+                            'width' => '80px',
+                        ],
                         'name',
                         'username',
                         'email',
@@ -65,11 +70,13 @@ $tabs = [
                             'attribute' => 'reel_count',
                             'label' => 'Reels',
                             'format' => 'integer',
+                            'value' => static fn($model) => isset($model->reel_count) ? (int) $model->reel_count : 0,
                         ],
                         [
                             'attribute' => 'live_count',
                             'label' => 'Live',
                             'format' => 'integer',
+                            'value' => static fn($model) => isset($model->live_count) ? (int) $model->live_count : 0,
                         ],
                         [
                             'attribute' => 'available_coin',

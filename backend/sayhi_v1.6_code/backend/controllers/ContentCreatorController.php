@@ -47,15 +47,27 @@ class ContentCreatorController extends Controller
 
     public function actionIndex()
     {
-        $searchModel = new CreatorSearch();
-        $searchModel->filter = (string) Yii::$app->request->get('filter', 'all');
-        $dataProvider = $searchModel->search(Yii::$app->request->queryParams);
+        try {
+            $searchModel = new CreatorSearch();
+            $searchModel->filter = (string) Yii::$app->request->get('filter', 'all');
+            $dataProvider = $searchModel->search(Yii::$app->request->queryParams);
 
-        return $this->render('index', [
-            'searchModel' => $searchModel,
-            'dataProvider' => $dataProvider,
-            'filter' => $searchModel->filter,
-        ]);
+            return $this->render('index', [
+                'searchModel' => $searchModel,
+                'dataProvider' => $dataProvider,
+                'filter' => $searchModel->filter,
+            ]);
+        } catch (\Throwable $e) {
+            Yii::error($e->getMessage() . "\n" . $e->getTraceAsString(), __METHOD__);
+            Yii::$app->session->setFlash('error', 'Could not load creators list. Try again after running fix-content-creators.sh on the server.');
+            $searchModel = new CreatorSearch();
+            $searchModel->filter = (string) Yii::$app->request->get('filter', 'all');
+            return $this->render('index', [
+                'searchModel' => $searchModel,
+                'dataProvider' => new ActiveDataProvider(['query' => User::find()->where('0=1')]),
+                'filter' => $searchModel->filter,
+            ]);
+        }
     }
 
     public function actionCreate()
@@ -357,12 +369,15 @@ class ContentCreatorController extends Controller
 
     protected function findCreatorForm($id): CreatorForm
     {
+        $id = (int) $id;
+        $this->findCreator($id);
+
         $model = CreatorForm::find()
-            ->where(['id' => (int) $id])
+            ->where(['id' => $id])
             ->andWhere(['<>', 'status', User::STATUS_DELETED])
             ->one();
 
-        if (!$model || !DreamlandAudience::creatorQuery()->andWhere(['id' => $model->id])->exists()) {
+        if (!$model) {
             throw new NotFoundHttpException('Creator not found.');
         }
 
