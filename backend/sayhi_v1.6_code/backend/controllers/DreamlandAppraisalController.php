@@ -20,7 +20,10 @@ class DreamlandAppraisalController extends Controller
             'verbs' => ['class' => VerbFilter::className(), 'actions' => ['evaluate' => ['POST']]],
             'access' => [
                 'class' => AccessControl::className(),
-                'rules' => [['allow' => true, 'roles' => ['@']]],
+                'rules' => [[
+                    'allow' => Yii::$app->authPermission->can(Yii::$app->authPermission::DREAMLAND_APPRAISAL),
+                    'roles' => ['@'],
+                ]],
             ],
         ];
     }

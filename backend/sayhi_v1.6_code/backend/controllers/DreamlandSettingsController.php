@@ -16,7 +16,10 @@ class DreamlandSettingsController extends Controller
             'verbs' => ['class' => VerbFilter::className(), 'actions' => ['update' => ['POST']]],
             'access' => [
                 'class' => AccessControl::className(),
-                'rules' => [['allow' => true, 'roles' => ['@']]],
+                'rules' => [[
+                    'allow' => Yii::$app->authPermission->can(Yii::$app->authPermission::DREAMLAND_SETTINGS),
+                    'roles' => ['@'],
+                ]],
             ],
         ];
     }

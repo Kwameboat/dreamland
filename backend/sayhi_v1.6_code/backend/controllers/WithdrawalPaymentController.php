@@ -3,6 +3,7 @@ namespace backend\controllers;
 use Yii;
 use yii\web\Controller;
 use yii\web\NotFoundHttpException;
+use yii\filters\AccessControl;
 use yii\filters\VerbFilter;
 use common\models\WithdrawalPayment;
 use backend\models\WithdrawalPaymentSearch;
@@ -28,6 +29,13 @@ class WithdrawalPaymentController extends Controller
                 'actions' => [
                     'delete' => ['POST'],
                 ],
+            ],
+            'access' => [
+                'class' => AccessControl::className(),
+                'rules' => [[
+                    'allow' => Yii::$app->authPermission->can(Yii::$app->authPermission::PAYMENT),
+                    'roles' => ['@'],
+                ]],
             ],
         ];
     }

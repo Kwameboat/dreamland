@@ -890,3 +890,82 @@ body.dreamland-login a {
     animation: none !important;
   }
 }
+
+/* ── Admin privileges UI ── */
+.dl-privileges-index-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.dl-privileges-hero {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+  background: var(--dl-bg-surface);
+  border: 1px solid var(--dl-border);
+  border-left: 4px solid var(--dl-magenta);
+  border-radius: var(--dl-radius);
+}
+
+.dl-privileges-hero h2 {
+  margin: 0 0 6px;
+}
+
+.dl-privileges-note {
+  max-width: 360px;
+  margin: 0;
+  color: var(--dl-text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.dl-privileges-group {
+  margin-bottom: 18px;
+}
+
+.dl-privileges-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.dl-privilege-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--dl-border);
+  border-radius: 10px;
+  background: var(--dl-bg-hover);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.dl-privilege-card--on {
+  border-color: rgba(255, 0, 85, 0.45);
+  background: rgba(255, 0, 85, 0.08);
+}
+
+.dl-privilege-card__title {
+  font-weight: 600;
+  color: var(--dl-text);
+}
+
+.dl-privilege-card__alias {
+  font-size: 12px;
+  color: var(--dl-text-secondary);
+}
+
+.dl-privileges-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}

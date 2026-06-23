@@ -43,10 +43,15 @@ INSERT INTO module_auth (id, name, alias, level, parent_id, action_list) VALUES
   (24, 'Report', 'report', 1, NULL, NULL),
   (25, 'Setting', 'setting', 1, NULL, NULL),
   (26, 'Live History', 'liveHistory', 1, NULL, NULL),
-  (27, 'Post Promotion', 'promotion', 1, NULL, NULL)
+  (27, 'Post Promotion', 'promotion', 1, NULL, NULL),
+  (28, 'Dreamland Appraisal', 'dreamlandAppraisal', 1, NULL, NULL),
+  (29, 'Dreamland AI Moderation', 'dreamlandModeration', 1, NULL, NULL),
+  (30, 'Dreamland Safety Queue', 'dreamlandSafety', 1, NULL, NULL),
+  (31, 'Dreamland Platform Settings', 'dreamlandSettings', 1, NULL, NULL),
+  (32, 'Credit Packages', 'creditPackage', 1, NULL, NULL)
 ON CONFLICT (id) DO NOTHING;
 
 SELECT setval(
   pg_get_serial_sequence('module_auth', 'id'),
-  GREATEST((SELECT COALESCE(MAX(id), 1) FROM module_auth), 27)
+  GREATEST((SELECT COALESCE(MAX(id), 1) FROM module_auth), 32)
 );

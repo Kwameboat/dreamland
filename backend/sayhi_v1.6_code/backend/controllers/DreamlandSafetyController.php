@@ -18,7 +18,10 @@ class DreamlandSafetyController extends Controller
         return [
             'access' => [
                 'class' => AccessControl::className(),
-                'rules' => [['allow' => true, 'roles' => ['@']]],
+                'rules' => [[
+                    'allow' => Yii::$app->authPermission->can(Yii::$app->authPermission::DREAMLAND_SAFETY),
+                    'roles' => ['@'],
+                ]],
             ],
             'verbs' => [
                 'class' => VerbFilter::className(),

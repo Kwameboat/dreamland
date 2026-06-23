@@ -18,7 +18,10 @@ class CreditPackageController extends Controller
             'verbs' => ['class' => VerbFilter::className(), 'actions' => ['delete' => ['POST']]],
             'access' => [
                 'class' => AccessControl::className(),
-                'rules' => [['allow' => true, 'roles' => ['@']]],
+                'rules' => [[
+                    'allow' => Yii::$app->authPermission->can(Yii::$app->authPermission::CREDIT_PACKAGE),
+                    'roles' => ['@'],
+                ]],
             ],
         ];
     }

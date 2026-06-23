@@ -30,7 +30,10 @@ class DreamlandModerationController extends Controller
             ],
             'access' => [
                 'class' => AccessControl::className(),
-                'rules' => [['allow' => true, 'roles' => ['@']]],
+                'rules' => [[
+                    'allow' => Yii::$app->authPermission->can(Yii::$app->authPermission::DREAMLAND_MODERATION),
+                    'roles' => ['@'],
+                ]],
             ],
         ];
     }

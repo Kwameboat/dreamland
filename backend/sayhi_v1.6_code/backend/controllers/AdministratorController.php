@@ -102,7 +102,8 @@ class AdministratorController extends Controller
         $model->scenario = 'create';
 
         if ($model->load(Yii::$app->request->post()) && $model->save()) {
-            return $this->redirect(['index']);
+            Yii::$app->session->setFlash('success', 'Admin user created. Choose which modules they can access.');
+            return $this->redirect(['auth-permission', 'uid' => $model->id]);
         }
 
         return $this->render('create', [
@@ -219,105 +220,82 @@ class AdministratorController extends Controller
         
     }
     public function actionAuthPermission($uid){
-        {
-            
-            
-            //$model = $this->findModel($uid);
-
-            $modelModuleAuthList =  new ModuleAuth();
-            $moduleAuthUser =  new ModuleAuthUser();
-            $moduleAuthListRecord = $modelModuleAuthList->find()->where(['level'=>1])->orderby(['name'=>SORT_ASC])->asArray()->all();
-            
-           
-            if ($moduleAuthUser->load(Yii::$app->request->post())) {
-                $moduleAuthListRecord = $modelModuleAuthList->find()->orderby(['name'=>SORT_ASC])->asArray()->all();
-                $modelUser = new User();
-                $modelUser->checkPageAccess();
-                if($moduleAuthUser->module_ids){
-
-                    $values = [];
-                    foreach ($moduleAuthListRecord as $key => $item) {
-                        $isEnabled = 0;
-                        if(in_array($item['id'],$moduleAuthUser->module_ids)){
-                            $isEnabled =1;
-                        }
-
-                        $dataInner['user_id']           = $uid;
-                        $dataInner['module_auth_id']    = $item['id'];
-                        $dataInner['is_enabled']        = $isEnabled;
-                        $values[] = $dataInner;
-                    }
-                    
-                    $moduleAuthUser->deleteAll( ['user_id' => $uid]);
-                  
-                    if (count($values) > 0) {
-                        Yii::$app->db
-                            ->createCommand()
-                            ->batchInsert('module_auth_user', ['user_id','module_auth_id','is_enabled'], $values)
-                            ->execute();
-                    }
-  
-                }
-               
-                    Yii::$app->session->setFlash('success', "Permisstion updated successfully");
-                    return $this->redirect(['index']);
-                               
-            }
-            $moduleAuthUserRecord = $moduleAuthUser->find()->where(['user_id'=>$uid])->asArray()->all();
-            $moduleList = array();
-            foreach ($moduleAuthListRecord as $key => $item) {
-                $item['is_active'] =0;
-                $found_key = array_search($item['id'], array_column($moduleAuthUserRecord, 'module_auth_id'));
-                if(is_int($found_key)){
-                    $enabledRecords = $moduleAuthUserRecord[$found_key];
-                    if($enabledRecords){
-                        if($enabledRecords['is_enabled']){
-                            $item['is_active'] =1;        
-                        }
-                    }
-                }else{
-                    $item['is_active'] =1;
-                }
-                
-                /// start child action permission
-                $itemChildArray=[];
-                $moudleId = $item['id'];
-                $moduleAuthChildListRecord = $modelModuleAuthList->find()->where(['level'=>2,'parent_id'=>$moudleId])->asArray()->all();
-                foreach ($moduleAuthChildListRecord as $k => $itemChild) {
-                    $itemChild['is_active']=0;
-                    $found_key = array_search($itemChild['id'], array_column($moduleAuthUserRecord, 'module_auth_id'));
-                    if(is_int($found_key)){
-                        $enabledRecords = $moduleAuthUserRecord[$found_key];
-                        if($enabledRecords){
-                            if($enabledRecords['is_enabled']){
-                                $itemChild['is_active'] =1;        
-                            }
-                        }
-                    }else{
-                        $itemChild['is_active'] =1;
-                    }
-                    $itemChildArray[] = $itemChild;
-                   
-                }
-                $item['child_action_list']=$itemChildArray;
-                /// END child action permission
-              
-                $moduleList[$key] = $item;
-               
-
-            }
-          //  ksort($moduleList, SORT_NUMERIC);
-
-            //echo '<pre>';
-            //print_r($moduleList);
-           // $sections=['1'=>'Feature List','2'=>'Gift Section'];
-            return $this->render('auth-permission', [
-                'model' => $moduleAuthUser,
-                'moduleList'=>$moduleList,
-                //'sections'=>$sections
-            ]);
+        $uid = (int) $uid;
+        $admin = Administrator::findOne($uid);
+        if (!$admin) {
+            throw new NotFoundHttpException('Admin user not found.');
         }
-     }
+        if ((int) $admin->role === Administrator::ROLE_ADMIN) {
+            Yii::$app->session->setFlash('warning', 'Super admin always has full access.');
+            return $this->redirect(['index']);
+        }
+
+        $modelModuleAuthList = new ModuleAuth();
+        $moduleAuthUser = new ModuleAuthUser();
+        $moduleAuthListRecord = $modelModuleAuthList->find()->where(['level' => 1])->orderBy(['name' => SORT_ASC])->asArray()->all();
+
+        if ($moduleAuthUser->load(Yii::$app->request->post())) {
+            $moduleAuthListRecord = $modelModuleAuthList->find()->orderBy(['name' => SORT_ASC])->asArray()->all();
+            $modelUser = new User();
+            $modelUser->checkPageAccess();
+
+            $selected = array_map('intval', (array) ($moduleAuthUser->module_ids ?? []));
+            $values = [];
+            foreach ($moduleAuthListRecord as $item) {
+                $values[] = [
+                    'user_id' => $uid,
+                    'module_auth_id' => (int) $item['id'],
+                    'is_enabled' => in_array((int) $item['id'], $selected, true) ? 1 : 0,
+                ];
+            }
+
+            $moduleAuthUser->deleteAll(['user_id' => $uid]);
+            if ($values !== []) {
+                Yii::$app->db
+                    ->createCommand()
+                    ->batchInsert('module_auth_user', ['user_id', 'module_auth_id', 'is_enabled'], $values)
+                    ->execute();
+            }
+
+            Yii::$app->session->setFlash('success', 'Module access updated for ' . $admin->username);
+            return $this->redirect(['index']);
+        }
+
+        $moduleAuthUserRecord = $moduleAuthUser->find()->where(['user_id' => $uid])->asArray()->all();
+        $moduleList = [];
+        foreach ($moduleAuthListRecord as $key => $item) {
+            $item['is_active'] = 0;
+            $found_key = array_search($item['id'], array_column($moduleAuthUserRecord, 'module_auth_id'));
+            if (is_int($found_key)) {
+                $enabledRecords = $moduleAuthUserRecord[$found_key];
+                if ($enabledRecords && $enabledRecords['is_enabled']) {
+                    $item['is_active'] = 1;
+                }
+            }
+
+            $itemChildArray = [];
+            $moduleAuthChildListRecord = $modelModuleAuthList->find()->where(['level' => 2, 'parent_id' => $item['id']])->asArray()->all();
+            foreach ($moduleAuthChildListRecord as $itemChild) {
+                $itemChild['is_active'] = 0;
+                $found_key = array_search($itemChild['id'], array_column($moduleAuthUserRecord, 'module_auth_id'));
+                if (is_int($found_key)) {
+                    $enabledRecords = $moduleAuthUserRecord[$found_key];
+                    if ($enabledRecords && $enabledRecords['is_enabled']) {
+                        $itemChild['is_active'] = 1;
+                    }
+                }
+                $itemChildArray[] = $itemChild;
+            }
+            $item['child_action_list'] = $itemChildArray;
+            $moduleList[$key] = $item;
+        }
+
+        return $this->render('auth-permission', [
+            'model' => $moduleAuthUser,
+            'moduleList' => $moduleList,
+            'admin' => $admin,
+        ]);
+    }
 
 
     /**

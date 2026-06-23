@@ -3,6 +3,7 @@ namespace backend\components;
 
 use backend\models\ModuleAuth;
 use backend\models\ModuleAuthUser;
+use common\models\User;
 use Yii;
 use yii\base\Component;
 
@@ -35,6 +36,11 @@ class AuthPermission extends Component
     const LIVE_HISTORY = 'liveHistory';
     const PROMOTION = 'promotion';
     const SETTING = 'setting';
+    const DREAMLAND_APPRAISAL = 'dreamlandAppraisal';
+    const DREAMLAND_MODERATION = 'dreamlandModeration';
+    const DREAMLAND_SAFETY = 'dreamlandSafety';
+    const DREAMLAND_SETTINGS = 'dreamlandSettings';
+    const CREDIT_PACKAGE = 'creditPackage';
 
     /** @var array<string, bool> */
     private $_canResults = [];
@@ -48,8 +54,32 @@ class AuthPermission extends Component
     /** @var array<int, ModuleAuthUser> */
     private $_userPermissions = [];
 
+    public function isSuperAdmin(): bool
+    {
+        $identity = Yii::$app->user->identity;
+        return $identity && (int) $identity->role === User::ROLE_ADMIN;
+    }
+
+    /**
+     * @param string[] $moduleNames
+     */
+    public function canAny(array $moduleNames): bool
+    {
+        foreach ($moduleNames as $moduleName) {
+            if ($this->can($moduleName)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function can($moduleName)
     {
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
         $identity = Yii::$app->user->identity;
         if (!$identity) {
             return false;
@@ -57,7 +87,7 @@ class AuthPermission extends Component
 
         $controller = Yii::$app->controller;
         $urlAction = $controller->id . '/' . $controller->action->id;
-        $cacheKey = $moduleName . ':' . $urlAction;
+        $cacheKey = (int) $identity->id . ':' . $moduleName . ':' . $urlAction;
 
         if (array_key_exists($cacheKey, $this->_canResults)) {
             return $this->_canResults[$cacheKey];
@@ -106,12 +136,12 @@ class AuthPermission extends Component
 
             $resultModule = $this->_modulesByAlias[$moduleName] ?? null;
             if (!$resultModule) {
-                return true;
+                return false;
             }
 
             $moduleActionId = 0;
             foreach ($resultModule->moduleAuthChild as $childAction) {
-                $actionListArr = explode(',', (string) $childAction->action_list);
+                $actionListArr = array_filter(array_map('trim', explode(',', (string) $childAction->action_list)));
                 $foundKey = array_search($urlAction, $actionListArr, true);
                 if (is_int($foundKey)) {
                     $moduleActionId = (int) $childAction->id;
@@ -123,19 +153,19 @@ class AuthPermission extends Component
                 $moduleActionId = (int) $resultModule->id;
             }
 
-            if ($moduleActionId > 0) {
-                $resultPermission = $this->_userPermissions[$moduleActionId] ?? null;
-                if ($resultPermission) {
-                    return (bool) $resultPermission->is_enabled;
-                }
-
-                return true;
+            if ($moduleActionId <= 0) {
+                return false;
             }
 
-            return true;
+            $resultPermission = $this->_userPermissions[$moduleActionId] ?? null;
+            if ($resultPermission) {
+                return (bool) $resultPermission->is_enabled;
+            }
+
+            return false;
         } catch (\Throwable $e) {
             Yii::warning($e->getMessage(), __METHOD__);
-            return true;
+            return false;
         }
     }
 }
