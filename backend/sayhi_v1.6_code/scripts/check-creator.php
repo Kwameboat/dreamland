@@ -62,6 +62,19 @@ foreach ($rows as $row) {
 
 if ($id > 0 && $rows) {
     $row = $rows[0];
+    $action = isset($argv[2]) ? strtolower(trim((string) $argv[2])) : '';
+
+    if ($action === 'approve' && in_array('dreamland_creator_status', $cols, true)) {
+        $pdo->prepare('UPDATE user SET dreamland_creator_status = ?, role = 4 WHERE id = ?')
+            ->execute(['approved', $id]);
+        if (in_array('dreamland_account_type', $cols, true)) {
+            $pdo->prepare('UPDATE user SET dreamland_account_type = ? WHERE id = ?')
+                ->execute(['creator', $id]);
+        }
+        echo "Approved user #{$id} for PWA upload.\n";
+        exit(0);
+    }
+
     $sets = [];
     if ((int) $row['role'] !== 4) {
         $sets[] = 'role = 4';

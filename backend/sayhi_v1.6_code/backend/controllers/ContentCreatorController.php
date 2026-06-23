@@ -290,14 +290,17 @@ class ContentCreatorController extends Controller
         $model = $this->findCreator($id);
         (new User())->checkPageAccess();
 
-        $model->status = User::STATUS_ACTIVE;
-        DreamlandCreatorApproval::applyCreatorIdentity($model);
-        if ($approved) {
-            DreamlandCreatorApproval::approve($model);
-        } else {
-            DreamlandCreatorApproval::reject($model);
+        $status = $approved
+            ? DreamlandCreatorApproval::STATUS_APPROVED
+            : DreamlandCreatorApproval::STATUS_REJECTED;
+
+        if (!DreamlandCreatorApproval::persistCreatorApproval($model, $status, User::STATUS_ACTIVE)) {
+            Yii::$app->session->setFlash(
+                'error',
+                'Could not save PWA creator approval. Run fix-content-creators.sh on the server, then try again.'
+            );
+            return $this->redirect(['view', 'id' => $id]);
         }
-        $model->save(false);
 
         Yii::$app->session->setFlash('success', $message);
         return $this->redirect(['view', 'id' => $id]);

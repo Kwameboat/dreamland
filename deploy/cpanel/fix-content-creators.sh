@@ -50,6 +50,13 @@ php scripts/apply-dreamland-creator-approval-migration.php 2>&1 | tail -3 || tru
 php scripts/sync-pwa-creators.php 2>&1 || true
 
 echo ""
+echo "--- Clear Yii schema cache ---"
+rm -rf "$DL/backend/runtime/cache/"* 2>/dev/null || true
+rm -rf "$DL/api/runtime/cache/"* 2>/dev/null || true
+rm -rf "$DL/common/runtime/cache/"* 2>/dev/null || true
+echo "Schema cache cleared."
+
+echo ""
 echo "--- Creators in database ---"
 php scripts/check-creator.php 2>&1 || true
 

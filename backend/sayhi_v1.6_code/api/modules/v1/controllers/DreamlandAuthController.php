@@ -4,6 +4,7 @@ namespace api\modules\v1\controllers;
 
 use api\modules\v1\models\Package;
 use api\modules\v1\models\User;
+use common\helpers\DreamlandCreatorApproval;
 use Yii;
 use yii\rest\ActiveController;
 
@@ -194,8 +195,7 @@ class DreamlandAuthController extends ActiveController
             ? ($user->dreamland_account_type ?? $accountType)
             : $accountType;
         if ($this->hasCreatorStatusColumn()) {
-            $data['dreamland_creator_status'] = $user->dreamland_creator_status
-                ?? ($accountType === 'creator' ? 'pending' : 'none');
+            $data['dreamland_creator_status'] = DreamlandCreatorApproval::resolveStatus($user);
         }
         return $data;
     }

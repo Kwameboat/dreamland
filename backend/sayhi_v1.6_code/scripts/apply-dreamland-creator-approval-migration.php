@@ -22,8 +22,8 @@ if (!columnExists($pdo, 'user', 'dreamland_creator_status')) {
     echo "Added user.dreamland_creator_status\n";
 }
 
-$pdo->exec("UPDATE `user` SET dreamland_creator_status = 'approved' WHERE dreamland_account_type = 'creator' OR role = 4");
-$pdo->exec("UPDATE `user` SET dreamland_creator_status = 'none' WHERE dreamland_account_type = 'viewer' OR role = 3");
+$pdo->exec("UPDATE `user` SET dreamland_creator_status = 'approved' WHERE (dreamland_account_type = 'creator' OR role = 4) AND (dreamland_creator_status IS NULL OR dreamland_creator_status = '' OR dreamland_creator_status = 'none')");
+$pdo->exec("UPDATE `user` SET dreamland_creator_status = 'none' WHERE (dreamland_account_type = 'viewer' OR role = 3) AND (dreamland_creator_status IS NULL OR dreamland_creator_status = '' OR dreamland_creator_status = 'none')");
 $pdo->exec("UPDATE `user` SET dreamland_creator_status = 'approved' WHERE email IN ('creator@dreamland.app')");
 $pdo->exec("UPDATE `user` SET dreamland_creator_status = 'none' WHERE email IN ('viewer@dreamland.app')");
 echo "Synced demo creator/viewer approval status\n";
