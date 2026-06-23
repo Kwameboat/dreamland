@@ -8,9 +8,16 @@ $this->title = 'Dreamland Safety Queue';
 ?>
 <div class="dreamland-admin">
     <h1><?= Html::encode($this->title) ?></h1>
+    <?php if (Yii::$app->session->hasFlash('success')): ?>
+        <div class="alert alert-success"><?= Html::encode(Yii::$app->session->getFlash('success')) ?></div>
+    <?php endif; ?>
     <p>
         <?= Html::a('Open AI Moderation Agent', ['/dreamland-moderation'], ['class' => 'btn btn-primary']) ?>
         <?= Html::a('Appraisal Workspace', ['/dreamland-appraisal'], ['class' => 'btn btn-default']) ?>
+        <?= Html::beginForm(['process-queue'], 'post', ['style' => 'display:inline-block;margin-left:8px']) ?>
+            <?= Html::hiddenInput('limit', 25) ?>
+            <?= Html::submitButton('Process safety queue now', ['class' => 'btn btn-success']) ?>
+        <?= Html::endForm() ?>
     </p>
     <h3>Pending safety review</h3>
     <?= GridView::widget([

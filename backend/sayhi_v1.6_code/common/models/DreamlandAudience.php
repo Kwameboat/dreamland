@@ -49,7 +49,35 @@ class DreamlandAudience
     public static function hasUserColumn(string $column): bool
     {
         $schema = self::userSchema();
-        return $schema && isset($schema->columns[$column]);
+        if ($schema && isset($schema->columns[$column])) {
+            return true;
+        }
+
+        if (self::columnExistsInDatabase(User::tableName(), $column)) {
+            Yii::$app->db->schema->refreshTableSchema(User::tableName());
+            return true;
+        }
+
+        return false;
+    }
+
+    private static function columnExistsInDatabase(string $table, string $column): bool
+    {
+        try {
+            $db = Yii::$app->db;
+            if ($db->driverName !== 'mysql') {
+                return false;
+            }
+
+            return (int) $db->createCommand(
+                'SELECT COUNT(*) FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND COLUMN_NAME = :c',
+                [':t' => $table, ':c' => $column]
+            )->queryScalar() > 0;
+        } catch (\Throwable $e) {
+            Yii::warning($e->getMessage(), __METHOD__);
+            return false;
+        }
     }
 
     public static function viewerQuery(): ActiveQuery

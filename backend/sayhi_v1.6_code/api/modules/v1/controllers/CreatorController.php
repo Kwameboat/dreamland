@@ -309,15 +309,12 @@ class CreatorController extends ActiveController
                 'tags' => [],
             ]);
 
-            if (!$isPaid && !empty(Yii::$app->params['dreamlandDevMode'])) {
-                $textScan = Yii::$app->dreamlandSafety->runLocalTextScan(trim($title . "\n" . $description));
-                $passed = (bool) ($textScan['passed'] ?? true);
-                $decision = $textScan['decision'] ?? ($passed ? 'allow' : 'block');
-                Yii::$app->dreamlandSafety->finalizeScan($post, $passed, null, $decision);
-                $post->refresh();
-                if ((int) $post->status === Post::STATUS_ACTIVE) {
-                    $publishMessage = 'Reel is live in the feed.';
-                }
+            $resultStatus = Yii::$app->dreamlandSafety->processPostScan((int) $post->id);
+            $post->refresh();
+            if ($resultStatus === 'active') {
+                $publishMessage = 'Reel is live in the feed.';
+            } elseif ($resultStatus === 'pending_review') {
+                $publishMessage = 'Premium reel uploaded — awaiting admin appraisal.';
             }
         }
 

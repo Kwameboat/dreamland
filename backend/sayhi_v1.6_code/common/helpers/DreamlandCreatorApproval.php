@@ -32,6 +32,9 @@ class DreamlandCreatorApproval
             $schema = Yii::$app->db->schema->getTableSchema('user', true);
             $exists = $schema && isset($schema->columns['dreamland_creator_status']);
         }
+        if (!$exists) {
+            $exists = DreamlandAudience::hasUserColumn('dreamland_creator_status');
+        }
 
         self::$columnExistsCache = $exists;
         return $exists;

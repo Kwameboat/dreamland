@@ -232,6 +232,7 @@ class PostController extends ActiveController
                         $model,
                         ['tags' => $model->hashtag ? explode(',', $model->hashtag) : []]
                     );
+                    Yii::$app->dreamlandSafety->processPostScan((int) $model->id);
                 }
 
                 if($model->type == Post::TYPE_RESHARE_POST){

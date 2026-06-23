@@ -119,6 +119,7 @@ class PostGallary extends \yii\db\ActiveRecord
 
             }
             $dataInner['created_at'] = time();
+            $dataInner['status'] = self::STATUS_ACTIVE;
             $dataInner['width'] = isset($image['width'])? $image['width']:0;
             $dataInner['height'] = isset($image['height'])? $image['height']:0;
             $values[] = $dataInner;
@@ -132,7 +133,7 @@ class PostGallary extends \yii\db\ActiveRecord
 
             Yii::$app->db
                 ->createCommand()
-                ->batchInsert('post_gallary', ['post_id','type', 'media_type', 'filename','video_thumb','is_default', 'created_at','width','height'], $values)
+                ->batchInsert('post_gallary', ['post_id','type', 'media_type', 'filename','video_thumb','is_default', 'created_at','status','width','height'], $values)
                 ->execute();
         }
     }

@@ -132,6 +132,109 @@ class DreamlandSafetyPipeline extends Component
     }
 
     /**
+     * Process queued safety jobs (PHP fallback when Node workers are offline).
+     *
+     * @return string[] result status per job
+     */
+    public function processQueuedJobs(int $limit = 10): array
+    {
+        $jobs = SafetyScanQueue::find()
+            ->where(['status' => SafetyScanQueue::STATUS_QUEUED])
+            ->orderBy(['id' => SORT_ASC])
+            ->limit($limit)
+            ->all();
+
+        $results = [];
+        foreach ($jobs as $job) {
+            $results[] = $this->processJob($job);
+        }
+
+        return $results;
+    }
+
+    /**
+     * Process the latest queued job for a post, or advance a stuck pending_safety post.
+     */
+    public function processPostScan(int $postId): ?string
+    {
+        $job = SafetyScanQueue::find()
+            ->where(['video_id' => $postId, 'status' => SafetyScanQueue::STATUS_QUEUED])
+            ->orderBy(['id' => SORT_DESC])
+            ->one();
+
+        if (!$job) {
+            return null;
+        }
+
+        return $this->processJob($job);
+    }
+
+    public function processJob(SafetyScanQueue $job): string
+    {
+        $job->status = SafetyScanQueue::STATUS_PROCESSING;
+        $job->save(false);
+
+        try {
+            $post = $this->normalizePost((int) $job->video_id);
+            $text = $this->extractTextFromJob($job);
+            $scan = $this->runLocalTextScan($text);
+            $passed = (bool) ($scan['passed'] ?? true);
+            $decision = $scan['decision'] ?? ($passed ? 'allow' : 'block');
+
+            if (Yii::$app->has('dreamlandModeration') && Yii::$app->dreamlandModeration->isHealthy()) {
+                $mediaUrl = $job->media_url ?: $this->resolveMediaUrl($post);
+                $agentResult = Yii::$app->dreamlandModeration->moderateContent([
+                    'text' => $text,
+                    'media_url' => $mediaUrl,
+                ]);
+                if (is_array($agentResult)) {
+                    $decision = $agentResult['decision'] ?? $decision;
+                    $passed = ($decision === 'allow') && ($agentResult['ok'] ?? true);
+                }
+            }
+
+            $resultStatus = $this->finalizeScan($post, $passed, null, $decision);
+
+            $job->status = SafetyScanQueue::STATUS_COMPLETED;
+            $job->result_status = $resultStatus;
+            $job->processed_at = date('Y-m-d H:i:s');
+            $job->failure_reason = null;
+            $job->save(false);
+
+            return $resultStatus;
+        } catch (\Throwable $e) {
+            $job->status = SafetyScanQueue::STATUS_FAILED;
+            $job->failure_reason = $e->getMessage();
+            $job->processed_at = date('Y-m-d H:i:s');
+            $job->save(false);
+            Yii::error($e->getMessage(), __METHOD__);
+            return 'failed';
+        }
+    }
+
+    private function extractTextFromJob(SafetyScanQueue $job): string
+    {
+        if (!$job->text_payload) {
+            return '';
+        }
+
+        $payload = json_decode($job->text_payload, true);
+        if (!is_array($payload)) {
+            return '';
+        }
+
+        $parts = [
+            (string) ($payload['title'] ?? ''),
+            (string) ($payload['description'] ?? ''),
+        ];
+        if (!empty($payload['tags']) && is_array($payload['tags'])) {
+            $parts[] = implode(' ', $payload['tags']);
+        }
+
+        return trim(implode("\n", $parts));
+    }
+
+    /**
      * @param Post|\api\modules\v1\models\Post|int $post
      */
     private function normalizePost($post): Post
@@ -156,17 +259,26 @@ class DreamlandSafetyPipeline extends Component
         throw new \InvalidArgumentException('Invalid post model for safety scan.');
     }
 
-    private function resolveMediaUrl(Post $post)
+    private function resolveMediaUrl(Post $post): ?string
     {
         $gallery = \api\modules\v1\models\PostGallary::find()
-            ->where(['post_id' => $post->id, 'status' => 10])
+            ->where(['post_id' => $post->id])
             ->orderBy(['is_default' => SORT_DESC, 'id' => SORT_ASC])
             ->one();
-        if (!$gallery) {
+        if (!$gallery || empty($gallery->filename)) {
             return null;
         }
+
+        if (Yii::$app->has('fileUpload')) {
+            return Yii::$app->fileUpload->getFileUrl(
+                Yii::$app->fileUpload::TYPE_POST,
+                $gallery->filename
+            );
+        }
+
         $folder = Yii::$app->params['pathUploadImageFolder'] ?? 'image';
 
-        return Yii::$app->params['siteUrl'] . Yii::$app->urlManagerFrontend->baseUrl . '/uploads/' . $folder . '/' . $gallery->filename;
+        return Yii::$app->params['siteUrl'] . Yii::$app->urlManagerFrontend->baseUrl
+            . '/uploads/' . $folder . '/' . $gallery->filename;
     }
 }

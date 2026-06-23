@@ -46,6 +46,9 @@ return [
         'dreamlandModeration' => [
             'class' => 'common\components\DreamlandModerationAgent',
         ],
+        'dreamlandSafety' => [
+            'class' => 'common\components\DreamlandSafetyPipeline',
+        ],
         'dreamlandAi' => [
             'class' => 'common\components\DreamlandAiService',
         ],

@@ -73,7 +73,7 @@ class CreatorSearch extends User
         switch ($this->filter) {
             case 'active':
                 $query->andWhere(['status' => User::STATUS_ACTIVE]);
-                if (DreamlandCreatorApproval::hasCreatorStatusColumn()) {
+                if (DreamlandAudience::hasUserColumn('dreamland_creator_status')) {
                     $query->andWhere(['dreamland_creator_status' => DreamlandCreatorApproval::STATUS_APPROVED]);
                 }
                 break;
@@ -81,7 +81,7 @@ class CreatorSearch extends User
                 $query->andWhere(['status' => User::STATUS_INACTIVE]);
                 break;
             case 'pending':
-                if (DreamlandCreatorApproval::hasCreatorStatusColumn()) {
+                if (DreamlandAudience::hasUserColumn('dreamland_creator_status')) {
                     $query->andWhere([
                         'or',
                         ['dreamland_creator_status' => DreamlandCreatorApproval::STATUS_PENDING],
@@ -96,8 +96,14 @@ class CreatorSearch extends User
                             ],
                         ],
                     ]);
-                } else {
-                    $query->andWhere(['role' => User::ROLE_AGENT, 'status' => User::STATUS_ACTIVE]);
+                    $query->andWhere([
+                        'not in',
+                        'dreamland_creator_status',
+                        [
+                            DreamlandCreatorApproval::STATUS_APPROVED,
+                            DreamlandCreatorApproval::STATUS_REJECTED,
+                        ],
+                    ]);
                 }
                 break;
         }
