@@ -23,6 +23,7 @@ class DreamlandSettingsController extends Controller
 
     public function actionIndex()
     {
+        DreamlandSetting::ensureColumns();
         $model = DreamlandSetting::getSettings();
         if (Yii::$app->request->isPost) {
             if (Yii::$app->request->post('generate_vapid')) {

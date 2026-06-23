@@ -2,6 +2,7 @@
 
 namespace common\models;
 
+use Yii;
 use yii\db\ActiveRecord;
 
 class DreamlandSetting extends ActiveRecord
@@ -33,38 +34,38 @@ class DreamlandSetting extends ActiveRecord
         ];
     }
 
+    public function hasAttribute($name)
+    {
+        if ($name === 'max_reel_duration_minutes') {
+            return true;
+        }
+        return parent::hasAttribute($name);
+    }
+
     public function afterFind()
     {
         parent::afterFind();
-        $this->initMinutesFromSeconds();
+        $this->initDurationMinutes();
     }
 
-    /** Safe when upload-limit columns are not migrated yet. */
-    public function initMinutesFromSeconds(): void
+    public function initDurationMinutes(): void
     {
-        $secs = 60;
-        if ($this->hasAttribute('max_reel_duration_seconds')) {
-            $secs = (int) $this->getAttribute('max_reel_duration_seconds');
-            if ($secs <= 0) {
-                $secs = 60;
-            }
+        $secs = $this->hasAttribute('max_reel_duration_seconds')
+            ? (int) $this->getAttribute('max_reel_duration_seconds')
+            : 60;
+        if ($secs <= 0) {
+            $secs = 60;
         }
         $this->max_reel_duration_minutes = max(1, (int) round($secs / 60));
     }
 
-    public function hasUploadLimitColumns(): bool
-    {
-        return $this->hasAttribute('max_reel_duration_seconds')
-            && $this->hasAttribute('max_reel_upload_mb');
-    }
-
     public function beforeSave($insert)
     {
-        if ($this->hasAttribute('max_reel_duration_seconds')
-            && $this->max_reel_duration_minutes !== null
-            && $this->max_reel_duration_minutes !== '') {
+        if ($this->max_reel_duration_minutes !== null && $this->max_reel_duration_minutes !== '') {
             $mins = max(1, min(10, (int) $this->max_reel_duration_minutes));
-            $this->setAttribute('max_reel_duration_seconds', $mins * 60);
+            if ($this->hasAttribute('max_reel_duration_seconds')) {
+                $this->setAttribute('max_reel_duration_seconds', $mins * 60);
+            }
         }
         if ($this->hasAttribute('max_live_duration_seconds')) {
             $this->setAttribute('max_live_duration_seconds', 0);
@@ -82,20 +83,69 @@ class DreamlandSetting extends ActiveRecord
         ];
     }
 
+    /** Add missing columns on older cPanel DBs (idempotent). */
+    public static function ensureColumns(): void
+    {
+        try {
+            $db = static::getDb();
+            if ($db->driverName !== 'mysql') {
+                return;
+            }
+
+            $table = static::tableName();
+            $schema = $db->schema->getTableSchema($table, true);
+            if (!$schema) {
+                $db->createCommand("CREATE TABLE IF NOT EXISTS `{$table}` (
+                    `id` SMALLINT NOT NULL DEFAULT 1 PRIMARY KEY,
+                    `platform_commission_percent` SMALLINT NOT NULL DEFAULT 20,
+                    `streak_freeze_cost` INT NOT NULL DEFAULT 5,
+                    `streak_watch_threshold_seconds` INT NOT NULL DEFAULT 300,
+                    `streak_game_score_threshold` INT NOT NULL DEFAULT 100
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4")->execute();
+                $db->createCommand("INSERT IGNORE INTO `{$table}` (`id`) VALUES (1)")->execute();
+                $db->schema->refreshTableSchema($table);
+                $schema = $db->schema->getTableSchema($table, true);
+            }
+
+            $columns = [
+                'preview_seconds' => 'TINYINT NOT NULL DEFAULT 3',
+                'paystack_public_key' => 'VARCHAR(128) NULL DEFAULT NULL',
+                'paystack_secret_key' => 'VARCHAR(128) NULL DEFAULT NULL',
+                'vapid_public_key' => 'VARCHAR(255) NULL DEFAULT NULL',
+                'vapid_private_key' => 'TEXT NULL DEFAULT NULL',
+                'max_reel_duration_seconds' => 'INT NOT NULL DEFAULT 60',
+                'max_reel_upload_mb' => 'INT NOT NULL DEFAULT 128',
+                'max_live_duration_seconds' => 'INT NOT NULL DEFAULT 0',
+            ];
+
+            foreach ($columns as $column => $definition) {
+                if ($schema && !isset($schema->columns[$column])) {
+                    $db->createCommand("ALTER TABLE `{$table}` ADD COLUMN `{$column}` {$definition}")->execute();
+                }
+            }
+
+            $db->schema->refreshTableSchema($table);
+        } catch (\Throwable $e) {
+            Yii::warning($e->getMessage(), __METHOD__);
+        }
+    }
+
     public static function getSettings()
     {
+        static::ensureColumns();
+
         try {
             $settings = static::findOne(1);
             if (!$settings) {
                 $settings = new static(['id' => 1]);
                 $settings->save(false);
             }
-            $settings->initMinutesFromSeconds();
+            $settings->initDurationMinutes();
             return $settings;
         } catch (\Throwable $e) {
-            \Yii::warning($e->getMessage(), __METHOD__);
+            Yii::warning($e->getMessage(), __METHOD__);
             $settings = new static(['id' => 1]);
-            $settings->initMinutesFromSeconds();
+            $settings->initDurationMinutes();
             return $settings;
         }
     }

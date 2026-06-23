@@ -3,6 +3,7 @@ use yii\helpers\Html;
 use yii\widgets\ActiveForm;
 /** @var common\models\DreamlandSetting $model */
 $this->title = 'Dreamland Settings';
+$model->initDurationMinutes();
 ?>
 <div class="dreamland-admin">
     <h1><?= Html::encode($this->title) ?></h1>
@@ -15,22 +16,13 @@ $this->title = 'Dreamland Settings';
     <div class="panel panel-default">
         <div class="panel-heading"><h4>Creator upload limits</h4></div>
         <div class="panel-body">
-            <?php if ($model->hasUploadLimitColumns()): ?>
-                <?= $form->field($model, 'max_reel_duration_minutes')->input('number', ['min' => 1, 'max' => 10])
-                    ->hint('Maximum length for uploaded or recorded reels (e.g. 1 = only clips up to 1 minute). Applies to Studio uploads and in-app recording — not live broadcasts.') ?>
-                <?= $form->field($model, 'max_reel_upload_mb')->input('number', ['min' => 1, 'max' => 512])
-                    ->hint('Maximum reel file size in megabytes.') ?>
-                <p class="help-block text-muted" style="margin-top:8px;">
-                    <strong>Live broadcasts</strong> are not time-limited. Creators start and end live manually in the PWA.
-                </p>
-            <?php else: ?>
-                <div class="alert alert-warning">
-                    Upload limit columns are missing from <code>dreamland_settings</code>.
-                    On cPanel Terminal run:
-                    <pre style="margin-top:8px;">cd ~/dreamland && php scripts/apply-dreamland-upload-limits-migration.php</pre>
-                    Then refresh this page.
-                </div>
-            <?php endif; ?>
+            <?= $form->field($model, 'max_reel_duration_minutes')->input('number', ['min' => 1, 'max' => 10])
+                ->hint('Maximum length for uploaded or recorded reels (e.g. 1 = only clips up to 1 minute). Applies to Studio uploads and in-app recording — not live broadcasts.') ?>
+            <?= $form->field($model, 'max_reel_upload_mb')->input('number', ['min' => 1, 'max' => 512])
+                ->hint('Maximum reel file size in megabytes.') ?>
+            <p class="help-block text-muted" style="margin-top:8px;">
+                <strong>Live broadcasts</strong> are not time-limited. Creators start and end live manually in the PWA.
+            </p>
         </div>
     </div>
     <?= $form->field($model, 'paystack_public_key')->textInput() ?>
