@@ -457,17 +457,37 @@ function reelGallery(post) {
 }
 
 function reelMediaCandidates(post) {
+  if (post?.reel_video_url) {
+    return [post.reel_video_url];
+  }
+
   const gallery = reelGallery(post);
-  if (!gallery) return [];
-  const filename = gallery.filename || '';
-  const candidates = [
-    gallery.filenameUrl,
-    gallery.fileUrl,
-    filename ? `${apiUploadsBase()}/${filename}` : '',
-    filename ? `${UPLOADS_BASE}/${filename}` : '',
-    window.__DL_ENV__?.uploads && filename ? `${window.__DL_ENV__.uploads}/${filename}` : '',
-  ].filter(Boolean);
-  return [...new Set(candidates)];
+  const filename = gallery?.filename || '';
+  const textHints = [post?.description, post?.title, post?.image]
+    .map((value) => String(value || '').trim())
+    .filter((value) => looksLikeUploadFilename(value));
+
+  const filenames = [...new Set([filename, ...textHints].filter(Boolean))];
+  const expanded = [];
+  filenames.forEach((name) => {
+    expanded.push(name);
+    if (!/\.[a-z0-9]{2,5}$/i.test(name)) {
+      ['mp4', 'mov', 'webm', 'm4v'].forEach((ext) => expanded.push(`${name}.${ext}`));
+    }
+  });
+
+  const candidates = [];
+  if (gallery?.filenameUrl) candidates.push(gallery.filenameUrl);
+  if (gallery?.fileUrl) candidates.push(gallery.fileUrl);
+  expanded.forEach((name) => {
+    candidates.push(`${apiUploadsBase()}/${name}`);
+    candidates.push(`${UPLOADS_BASE}/${name}`);
+    if (window.__DL_ENV__?.uploads) {
+      candidates.push(`${window.__DL_ENV__.uploads}/${name}`);
+    }
+  });
+
+  return [...new Set(candidates.filter(Boolean))];
 }
 
 function clearSession() {
@@ -767,8 +787,12 @@ function playReelVideo(video) {
   if (!video || video.tagName !== 'VIDEO') return;
   video.muted = dlSocial?.isMuted?.() ?? true;
   video.playsInline = true;
+  video.setAttribute('playsinline', '');
+  video.setAttribute('webkit-playsinline', '');
   const attempt = () => {
-    video.play().catch(() => {});
+    video.play().catch((err) => {
+      console.warn('Reel play blocked:', err?.message || err, video.currentSrc || video.src);
+    });
   };
   if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
     attempt();
@@ -776,6 +800,9 @@ function playReelVideo(video) {
   }
   video.addEventListener('loadeddata', attempt, { once: true });
   video.addEventListener('canplay', attempt, { once: true });
+  video.addEventListener('error', () => {
+    console.warn('Reel video failed to load:', video.currentSrc || video.src);
+  }, { once: true });
   try {
     video.load();
   } catch {
@@ -787,11 +814,15 @@ function bindReelVideoFallback(video, post) {
   if (!video || video.dataset.fallbackBound === '1') return;
   video.dataset.fallbackBound = '1';
   const candidates = reelMediaCandidates(post);
-  if (candidates.length < 2) return;
+  if (candidates.length < 1) return;
   let index = 0;
   video.addEventListener('error', () => {
     index += 1;
-    if (index >= candidates.length) return;
+    if (index >= candidates.length) {
+      console.warn('Reel video exhausted URL fallbacks for post', post?.id, candidates);
+      return;
+    }
+    console.warn('Reel video retrying URL:', candidates[index]);
     video.src = candidates[index];
     playReelVideo(video);
   });
@@ -3131,6 +3162,7 @@ function renderFeed() {
     const price = dream.paywall?.price_credits || post.price_credits || 0;
     const title = humanizePostText(post.title, 'Dreamland Reel');
     const desc = humanizePostText(post.description, '');
+    const descHtml = desc && !looksLikeUploadFilename(desc) ? `<p class="reel-desc">${escapeHtml(desc)}</p>` : '';
     const likes = formatCount(post.total_like);
 
     const previewSec = dlFeatures?.getPreviewSeconds?.() || PREVIEW_SECONDS;
@@ -3177,7 +3209,7 @@ function renderFeed() {
               <p class="reel-premium-foot">
                 <span class="reel-premium-foot__chip">Exclusive</span>
                 <span class="reel-premium-foot__text">${previewSec}s preview · ${price} credits for the full reel</span>
-              </p>` : (desc ? `<p class="reel-desc">${escapeHtml(desc)}</p>` : '')}
+              </p>` : descHtml}
           </div>
           <div class="reel-rail reel-rail--lux">
             <button type="button" class="rail-btn rail-btn--lux guest-gate ${dlSocial?.isLiked?.(post.id) ? 'rail-btn--liked' : ''}" data-action="like" aria-label="Like">

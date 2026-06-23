@@ -9,6 +9,7 @@ use api\modules\v1\models\PostComment;
 use api\modules\v1\models\Follower;
 use api\modules\v1\models\ReportedPost;
 use api\modules\v1\models\PostGallary;
+use common\helpers\DreamlandMediaUrl;
 use api\modules\v1\models\MentionUser;
 use api\modules\v1\models\Club;
 use api\modules\v1\models\GiftHistory;
@@ -160,6 +161,9 @@ class Post extends \yii\db\ActiveRecord
             return Yii::$app->params['siteUrl'] . Yii::$app->urlManagerFrontend->baseUrl . '/post/share/?pid=' . $model->unique_id;
         });
         $fields[] = 'postGallary';
+        $fields['reel_video_url'] = static function ($model) {
+            return DreamlandMediaUrl::resolvePostVideoUrl($model);
+        };
         $fields['is_like'] = (function ($model) {
             return self::safeFlagRelation($model, 'isLike');
         });

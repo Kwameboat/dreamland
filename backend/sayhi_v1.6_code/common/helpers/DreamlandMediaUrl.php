@@ -2,6 +2,8 @@
 
 namespace common\helpers;
 
+use api\modules\v1\models\PostGallary;
+use common\components\FileUpload;
 use Yii;
 
 /**
@@ -41,5 +43,122 @@ class DreamlandMediaUrl
         }
 
         return self::localPublicUploadsBase((string) $folder);
+    }
+
+    /**
+     * @param \api\modules\v1\models\Post|\common\models\Post|int $post
+     */
+    public static function resolvePostVideoUrl($post): ?string
+    {
+        if (is_numeric($post)) {
+            $post = \api\modules\v1\models\Post::findOne((int) $post);
+        }
+        if (!$post) {
+            return null;
+        }
+
+        foreach (self::filenameCandidatesForPost($post) as $filename) {
+            $url = self::fileUrlForPostFilename($filename);
+            if ($url !== '') {
+                return $url;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param \api\modules\v1\models\Post|\common\models\Post $post
+     * @return string[]
+     */
+    public static function filenameCandidatesForPost($post): array
+    {
+        $names = [];
+        $postId = (int) $post->id;
+
+        $galleries = PostGallary::find()
+            ->where(['post_id' => $postId])
+            ->andWhere(['media_type' => PostGallary::MEDIA_TYPE_VIDEO])
+            ->orderBy(['is_default' => SORT_DESC, 'id' => SORT_ASC])
+            ->all();
+
+        foreach ($galleries as $gallery) {
+            if (!empty($gallery->filename)) {
+                $names[] = (string) $gallery->filename;
+            }
+        }
+
+        foreach ([$post->title ?? '', $post->description ?? '', $post->image ?? ''] as $value) {
+            $text = trim((string) $value);
+            if ($text === '' || !preg_match('/^[A-Za-z0-9._-]+$/', $text)) {
+                continue;
+            }
+            $names[] = $text;
+            if (!preg_match('/\.[A-Za-z0-9]{2,5}$/', $text)) {
+                foreach (['mp4', 'mov', 'webm', 'm4v'] as $ext) {
+                    $names[] = $text . '.' . $ext;
+                }
+            }
+        }
+
+        $names = array_values(array_unique(array_filter($names)));
+        $existing = [];
+        foreach ($names as $name) {
+            if (self::localFileExists($name) || DreamlandWasabiStorage::isConfigured()) {
+                $existing[] = $name;
+            }
+        }
+
+        return $existing !== [] ? $existing : $names;
+    }
+
+    public static function fileUrlForPostFilename(string $filename): string
+    {
+        $filename = ltrim(trim($filename), '/');
+        if ($filename === '') {
+            return '';
+        }
+
+        if (Yii::$app->has('fileUpload')) {
+            return (string) Yii::$app->fileUpload->getFileUrl(FileUpload::TYPE_POST, $filename);
+        }
+
+        return self::localPublicUploadsBase('image') . '/' . $filename;
+    }
+
+    public static function localFileExists(string $filename): bool
+    {
+        $filename = ltrim(basename($filename), '/');
+        if ($filename === '') {
+            return false;
+        }
+
+        foreach (self::localUploadDirs() as $dir) {
+            if (is_file($dir . DIRECTORY_SEPARATOR . $filename)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @return string[] */
+    public static function localUploadDirs(): array
+    {
+        $dirs = [];
+        $override = getenv('DREAMLAND_UPLOAD_DIR');
+        if (is_string($override) && $override !== '') {
+            $dirs[] = rtrim($override, '/\\') . '/image';
+        }
+
+        foreach (['@api/runtime/uploads/image', '@frontend/web/uploads/image'] as $alias) {
+            try {
+                $dirs[] = Yii::getAlias($alias);
+            } catch (\Throwable $e) {
+                // ignore missing alias
+            }
+        }
+
+        return array_values(array_unique($dirs));
     }
 }

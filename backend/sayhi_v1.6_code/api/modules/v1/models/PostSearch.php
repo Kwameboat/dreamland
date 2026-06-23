@@ -352,6 +352,9 @@ class PostSearch extends Post
         if ($this->is_reel) {
 
             $query->andWhere(['post.type' => Post::TYPE_REEL]);
+            $query->with(['postGallary' => function ($galleryQuery) {
+                $galleryQuery->orderBy(['is_default' => SORT_DESC, 'id' => SORT_ASC]);
+            }]);
         }
 
         if ($this->category_id) {
