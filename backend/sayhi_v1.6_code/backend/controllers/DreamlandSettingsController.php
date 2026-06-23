@@ -23,15 +23,29 @@ class DreamlandSettingsController extends Controller
 
     public function actionIndex()
     {
-        DreamlandSetting::ensureColumns();
+        $migrationOk = DreamlandSetting::ensureColumns();
         $model = DreamlandSetting::getSettings();
+
+        if (!$migrationOk) {
+            Yii::$app->session->setFlash(
+                'warning',
+                'Some settings columns are missing in the database. Run on cPanel: curl -fsSL https://raw.githubusercontent.com/Kwameboat/dreamland/main/deploy/cpanel/fix-dreamland-settings.sh | bash'
+            );
+        }
+
         if (Yii::$app->request->isPost) {
             if (Yii::$app->request->post('generate_vapid')) {
                 return $this->generateVapidKeys($model);
             }
             $model->load(Yii::$app->request->post());
+            DreamlandSetting::ensureColumns();
             if ($model->save(false)) {
                 Yii::$app->session->setFlash('success', 'Dreamland settings saved.');
+            } else {
+                Yii::$app->session->setFlash(
+                    'error',
+                    'Could not save settings. Run fix-dreamland-settings.sh on the server to repair the database.'
+                );
             }
             return $this->refresh();
         }
@@ -40,6 +54,8 @@ class DreamlandSettingsController extends Controller
 
     protected function generateVapidKeys(DreamlandSetting $model)
     {
+        DreamlandSetting::ensureColumns();
+
         $opensslConf = Yii::getAlias('@app/../openssl.cnf');
         if (is_file($opensslConf)) {
             putenv('OPENSSL_CONF=' . $opensslConf);
@@ -47,16 +63,24 @@ class DreamlandSettingsController extends Controller
 
         try {
             $keys = \Minishlink\WebPush\VAPID::createVapidKeys();
-            $model->vapid_public_key = $keys['publicKey'];
-            $model->vapid_private_key = $keys['privateKey'];
+            if ($model->hasAttribute('vapid_public_key')) {
+                $model->vapid_public_key = $keys['publicKey'];
+            }
+            if ($model->hasAttribute('vapid_private_key')) {
+                $model->vapid_private_key = $keys['privateKey'];
+            }
             $model->save(false);
             Yii::$app->session->setFlash('success', 'Web Push VAPID keys generated.');
         } catch (\Throwable $e) {
             $public = getenv('DREAMLAND_VAPID_PUBLIC') ?: '';
             $private = getenv('DREAMLAND_VAPID_PRIVATE') ?: '';
             if ($public && $private) {
-                $model->vapid_public_key = $public;
-                $model->vapid_private_key = $private;
+                if ($model->hasAttribute('vapid_public_key')) {
+                    $model->vapid_public_key = $public;
+                }
+                if ($model->hasAttribute('vapid_private_key')) {
+                    $model->vapid_private_key = $private;
+                }
                 $model->save(false);
                 Yii::$app->session->setFlash('success', 'Web Push VAPID keys loaded from environment.');
             } else {
