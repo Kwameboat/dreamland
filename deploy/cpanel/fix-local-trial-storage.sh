@@ -32,6 +32,7 @@ fetch "$TMP/api-index.php" "$GITHUB/deploy/cpanel/entrypoints/api-index.php"
 fetch "$TMP/find-reel-video.php" "$BASE/scripts/find-reel-video.php"
 fetch "$TMP/ensure-upload-dirs.php" "$BASE/scripts/ensure-upload-dirs.php"
 fetch "$TMP/app.js" "$WEB_BASE/js/app.js"
+fetch "$TMP/dreamland-social.js" "$WEB_BASE/js/dreamland-social.js"
 fetch "$TMP/index.html" "$WEB_BASE/index.html"
 
 install() {
@@ -52,6 +53,7 @@ install "$TMP/serve-uploads.php" "$DL/api/web/serve-uploads.php"
 install "$TMP/find-reel-video.php" "$DL/scripts/find-reel-video.php"
 install "$TMP/ensure-upload-dirs.php" "$DL/scripts/ensure-upload-dirs.php"
 install "$TMP/app.js" "$WEB/js/app.js"
+install "$TMP/dreamland-social.js" "$WEB/js/dreamland-social.js"
 install "$TMP/index.html" "$WEB/index.html"
 
 mkdir -p "$API"

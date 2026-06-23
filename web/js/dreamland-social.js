@@ -45,9 +45,40 @@ export function createDreamlandSocial(ctx) {
     btn?.querySelector('.icon-unmuted')?.toggleAttribute('hidden', muted);
   }
 
+  function applySoundToActive(container) {
+    container?.querySelectorAll('.reel-video').forEach((video) => {
+      if (video.tagName !== 'VIDEO') return;
+      const reel = video.closest('.reel');
+      const active = reel?.classList.contains('reel--active');
+      const shouldMute = feedMuted || !active;
+      video.muted = shouldMute;
+      if (!shouldMute) {
+        video.volume = 1;
+      }
+    });
+  }
+
+  /** Unmute and resume the visible reel (call from a click/tap so audio is allowed). */
+  function resumeActiveReelAudio(container) {
+    applySoundToActive(container);
+    const video = container?.querySelector('.reel--active .reel-video');
+    if (video?.tagName !== 'VIDEO' || feedMuted) {
+      return Promise.resolve();
+    }
+    video.muted = false;
+    video.volume = 1;
+    return video.play().catch(() => {});
+  }
+
   function toggleSound() {
     setMuted(!feedMuted);
     showToast(feedMuted ? 'Sound off' : 'Sound on');
+    const feed = document.getElementById('feed-list');
+    if (!feedMuted) {
+      resumeActiveReelAudio(feed);
+    } else {
+      applySoundToActive(feed);
+    }
   }
 
   async function syncLikedIds(postIds) {
@@ -268,6 +299,10 @@ export function createDreamlandSocial(ctx) {
           e.preventDefault();
           showHeartBurst(reel, e.clientX, e.clientY);
           if (!isLiked(postId)) toggleLike(postId, likeBtn, likeCount);
+        } else if (feedMuted && reel.classList.contains('reel--active')) {
+          setMuted(false);
+          showToast('Sound on');
+          resumeActiveReelAudio(reel.closest('#feed-list') || reel.parentElement);
         }
         lastTap = now;
       });
@@ -276,15 +311,6 @@ export function createDreamlandSocial(ctx) {
         e.preventDefault();
         if (confirm('Show fewer reels like this?')) hideCreator(post.user?.id);
       });
-    });
-  }
-
-  function applySoundToActive(container) {
-    container?.querySelectorAll('.reel-video').forEach((video) => {
-      if (video.tagName !== 'VIDEO') return;
-      const reel = video.closest('.reel');
-      const active = reel?.classList.contains('reel--active');
-      video.muted = feedMuted || !active;
     });
   }
 
@@ -308,6 +334,7 @@ export function createDreamlandSocial(ctx) {
     stopWatchTracking,
     stopAllWatchTracking,
     applySoundToActive,
+    resumeActiveReelAudio,
     initSoundToggle,
     shareUrl,
   };

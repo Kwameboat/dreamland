@@ -786,14 +786,22 @@ function mediaUrl(post) {
 
 function playReelVideo(video) {
   if (!video || video.tagName !== 'VIDEO') return;
-  video.muted = dlSocial?.isMuted?.() ?? true;
   video.playsInline = true;
   video.setAttribute('playsinline', '');
   video.setAttribute('webkit-playsinline', '');
+  // Browsers require muted autoplay; unmute happens via sound toggle or tap (user gesture).
+  video.muted = true;
   const attempt = () => {
-    video.play().catch((err) => {
-      console.warn('Reel play blocked:', err?.message || err, video.currentSrc || video.src);
-    });
+    video.play()
+      .then(() => {
+        if (!dlSocial?.isMuted?.()) {
+          video.muted = false;
+          video.volume = 1;
+        }
+      })
+      .catch((err) => {
+        console.warn('Reel play blocked:', err?.message || err, video.currentSrc || video.src);
+      });
   };
   if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
     attempt();
@@ -3366,6 +3374,10 @@ function setupReelPlayback() {
           if (progressFill) progressFill.style.width = '0%';
         }
         playReelVideo(video);
+        dlSocial?.applySoundToActive?.(els.feedList);
+        if (!dlSocial?.isMuted?.()) {
+          dlSocial?.resumeActiveReelAudio?.(els.feedList);
+        }
         dlSocial?.recordView?.(reel.dataset.id);
         dlSocial?.startWatchTracking?.(reel, reel.dataset.id);
       } else {
@@ -3396,6 +3408,7 @@ function setupReelPlayback() {
     if (post) bindReelVideoFallback(first, post);
     firstReel.classList.add('reel--active');
     playReelVideo(first);
+    dlSocial?.applySoundToActive?.(els.feedList);
   }
 }
 
