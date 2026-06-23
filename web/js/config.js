@@ -58,9 +58,16 @@ function resolveApiBase() {
 
 export const API_BASE = resolveApiBase();
 
+export function apiUploadsBase() {
+  if (!API_BASE) return '';
+  return `${API_BASE.replace(/\/v1\/?$/, '')}/frontend/web/uploads/image`;
+}
+
+const derivedUploads = apiUploadsBase();
 export const UPLOADS_BASE = localStorage.getItem('dreamland_uploads')
+  || derivedUploads
   || window.__DL_ENV__?.uploads
-  || (API_BASE ? `${API_BASE.replace(/\/v1\/?$/, '')}/frontend/web/uploads/image` : PRODUCTION_UPLOADS);
+  || PRODUCTION_UPLOADS;
 
 /** Localhost service map for walkthrough */
 export const LOCAL_SERVICES = {

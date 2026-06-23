@@ -163,8 +163,7 @@ class HealthController extends Controller
         try {
             return DreamlandWasabiStorage::uploadsBaseForApi();
         } catch (\Throwable $e) {
-            $site = rtrim((string) (Yii::$app->params['siteUrl'] ?? 'https://dreamlandgh.app'), '/');
-            return $site . '/frontend/web/uploads/image';
+            return \common\helpers\DreamlandMediaUrl::publicUploadsBase();
         }
     }
 }

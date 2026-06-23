@@ -121,8 +121,7 @@ class FileUpload extends Component
 
     private function publicUrlForFolder(string $folder): string
     {
-        $site = rtrim((string) (Yii::$app->params['siteUrl'] ?? ''), '/');
-        return $site . '/frontend/web/uploads/' . $folder;
+        return \common\helpers\DreamlandMediaUrl::localPublicUploadsBase($folder);
     }
 
     private function ensureUploadDir(string $dir): void

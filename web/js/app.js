@@ -4,6 +4,7 @@ import {
   DEV_ALLOW_BROWSER,
   DEV_CREATOR_LOGIN,
   UPLOADS_BASE,
+  apiUploadsBase,
 } from './config.js';
 import { createDreamlandFeatures } from './dreamland-features.js';
 import { createDreamlandAi } from './dreamland-ai.js';
@@ -437,7 +438,36 @@ function humanizePostText(value, fallback = '') {
       return fallback;
     }
   }
+  if (looksLikeUploadFilename(text)) return fallback;
   return text;
+}
+
+function looksLikeUploadFilename(text) {
+  if (!text || text.length < 20) return false;
+  if (/\s/.test(text)) return false;
+  return /^[A-Za-z0-9._-]+$/.test(text);
+}
+
+function reelGallery(post) {
+  const gallery = post?.postGallary;
+  if (!gallery) return null;
+  const items = Array.isArray(gallery) ? gallery : (gallery.items || []);
+  if (!items.length) return null;
+  return items.find((item) => Number(item.media_type) === 2) || items[0];
+}
+
+function reelMediaCandidates(post) {
+  const gallery = reelGallery(post);
+  if (!gallery) return [];
+  const filename = gallery.filename || '';
+  const candidates = [
+    gallery.filenameUrl,
+    gallery.fileUrl,
+    filename ? `${apiUploadsBase()}/${filename}` : '',
+    filename ? `${UPLOADS_BASE}/${filename}` : '',
+    window.__DL_ENV__?.uploads && filename ? `${window.__DL_ENV__.uploads}/${filename}` : '',
+  ].filter(Boolean);
+  return [...new Set(candidates)];
 }
 
 function clearSession() {
@@ -713,7 +743,7 @@ async function pingApi() {
     if (checks.live_server === false) parts.push('live offline');
     if (checks.dev_mode) parts.push('dev wallet');
     setApiStatus(true, DEV_ALLOW_BROWSER ? parts.join(' · ') : 'API connected');
-    if (DEV_ALLOW_BROWSER && services.uploads && !localStorage.getItem('dreamland_uploads')) {
+    if (services.uploads) {
       localStorage.setItem('dreamland_uploads', services.uploads);
     }
   } catch {
@@ -729,11 +759,42 @@ function isGuest() {
 }
 
 function mediaUrl(post) {
-  const gallery = post.postGallary?.[0] || post.postGallary?.items?.[0];
-  if (!gallery) return '';
-  if (gallery.filenameUrl) return gallery.filenameUrl;
-  if (gallery.filename) return `${UPLOADS_BASE}/${gallery.filename}`;
-  return '';
+  const candidates = reelMediaCandidates(post);
+  return candidates[0] || '';
+}
+
+function playReelVideo(video) {
+  if (!video || video.tagName !== 'VIDEO') return;
+  video.muted = dlSocial?.isMuted?.() ?? true;
+  video.playsInline = true;
+  const attempt = () => {
+    video.play().catch(() => {});
+  };
+  if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+    attempt();
+    return;
+  }
+  video.addEventListener('loadeddata', attempt, { once: true });
+  video.addEventListener('canplay', attempt, { once: true });
+  try {
+    video.load();
+  } catch {
+    attempt();
+  }
+}
+
+function bindReelVideoFallback(video, post) {
+  if (!video || video.dataset.fallbackBound === '1') return;
+  video.dataset.fallbackBound = '1';
+  const candidates = reelMediaCandidates(post);
+  if (candidates.length < 2) return;
+  let index = 0;
+  video.addEventListener('error', () => {
+    index += 1;
+    if (index >= candidates.length) return;
+    video.src = candidates[index];
+    playReelVideo(video);
+  });
 }
 
 function isCreator(user = state.user) {
@@ -3076,7 +3137,7 @@ function renderFeed() {
 
     return `
       <article class="reel ${locked ? 'reel--locked reel--previewing' : ''}" data-id="${post.id}">
-        ${src ? `<video class="reel-video" src="${src}" muted playsinline ${locked ? `data-preview="${previewSec}"` : 'loop'}></video>` : '<div class="reel-video" style="background:#111"></div>'}
+        ${src ? `<video class="reel-video" src="${escapeHtml(src)}" muted playsinline preload="auto" ${locked ? `data-preview="${previewSec}"` : 'loop'}></video>` : '<div class="reel-video" style="background:#111"></div>'}
         <div class="reel-vignette" aria-hidden="true"></div>
         <div class="reel-gradient"></div>
         ${dream.is_paid && locked ? `
@@ -3240,10 +3301,12 @@ function setupReelPlayback() {
       const reel = entry.target;
       const video = reel.querySelector('.reel-video');
       if (!video || video.tagName !== 'VIDEO') return;
+      const post = state.feed.find((item) => String(item.id) === String(reel.dataset.id));
 
-      if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.35) {
         els.feedList.querySelectorAll('.reel').forEach((r) => r.classList.remove('reel--active'));
         reel.classList.add('reel--active');
+        if (post) bindReelVideoFallback(video, post);
         if (reel.classList.contains('reel--previewing')) {
           video.currentTime = 0;
           const countEl = reel.querySelector('.reel-preview-count');
@@ -3252,8 +3315,7 @@ function setupReelPlayback() {
           if (countEl) countEl.textContent = String(seconds);
           if (progressFill) progressFill.style.width = '0%';
         }
-        video.muted = dlSocial?.isMuted?.() ?? true;
-        video.play().catch(() => {});
+        playReelVideo(video);
         dlSocial?.recordView?.(reel.dataset.id);
         dlSocial?.startWatchTracking?.(reel, reel.dataset.id);
       } else {
@@ -3273,15 +3335,17 @@ function setupReelPlayback() {
       }
     });
     dlSocial?.applySoundToActive?.(els.feedList);
-  }, { threshold: [0.6] });
+  }, { threshold: [0.35, 0.6] });
 
   els.feedList.querySelectorAll('.reel').forEach((reel) => reelObserver.observe(reel));
 
-  const first = els.feedList.querySelector('.reel-video');
+  const firstReel = els.feedList.querySelector('.reel');
+  const first = firstReel?.querySelector('.reel-video');
   if (first?.tagName === 'VIDEO') {
-    first.closest('.reel')?.classList.add('reel--active');
-    first.muted = dlSocial?.isMuted?.() ?? true;
-    first.play().catch(() => {});
+    const post = state.feed.find((item) => String(item.id) === String(firstReel.dataset.id));
+    if (post) bindReelVideoFallback(first, post);
+    firstReel.classList.add('reel--active');
+    playReelVideo(first);
   }
 }
 

@@ -129,8 +129,9 @@ JSON;
     public static function uploadsBaseForApi(?Setting $setting = null): string
     {
         if (!self::isConfigured($setting)) {
-            $site = rtrim((string) (Yii::$app->params['siteUrl'] ?? 'http://localhost:8080'), '/');
-            return $site . '/frontend/web/uploads/image';
+            return \common\helpers\DreamlandMediaUrl::localPublicUploadsBase(
+                (string) (Yii::$app->params['pathUploadImageFolder'] ?? 'image')
+            );
         }
 
         $folder = Yii::$app->params['pathUploadImageFolder'] ?? 'image';
