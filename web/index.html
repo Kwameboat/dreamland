@@ -208,6 +208,7 @@
         </div>
       </div>
       <div class="dl-header-actions">
+        <button type="button" id="feed-refresh-btn" class="dl-icon-btn dl-header-action feed-refresh-btn" aria-label="Refresh reels" title="Refresh reels" hidden>↻</button>
         <button type="button" id="search-open-btn" class="dl-icon-btn dl-header-action" aria-label="Search">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         </button>
@@ -827,7 +828,7 @@
     (async function () {
       try {
         if (window.__DL_BOOT_PROMISE__) await window.__DL_BOOT_PROMISE__;
-        await import('/js/app.js?v=build-178232');
+        await import('/js/app.js?v=build-178240');
       } catch (err) {
         console.error('Dreamland module load failed:', err);
         window.__DL_LAST_ERROR__ = err.message || String(err);

@@ -1172,7 +1172,7 @@ body {
   height: 100%;
   min-height: 100%;
   scroll-snap-align: start;
-  scroll-snap-stop: normal;
+  scroll-snap-stop: always;
   background: #000;
   overflow: hidden;
   flex-shrink: 0;
@@ -2616,6 +2616,12 @@ body {
   flex-shrink: 0;
   white-space: nowrap;
   font-weight: 600;
+}
+
+.feed-refresh-btn {
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .studio-avatar-wrap {

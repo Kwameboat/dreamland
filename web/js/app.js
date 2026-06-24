@@ -235,12 +235,44 @@ function readStoredUser() {
 }
 
 function setFeedLoadingMessage(title = 'Loading reels…') {
-  if (!els.feedList) return;
+  if (!els.feedList || state.feed.length) return;
   els.feedList.innerHTML = `
     <div class="live-loading glass-card" style="margin:16px;padding:16px">
       <p class="eyebrow">Watch</p>
       <h2>${title}</h2>
     </div>`;
+}
+
+function loadFeedCache() {
+  try {
+    const raw = localStorage.getItem(FEED_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed?.items) || !parsed.items.length) return null;
+    if (Date.now() - Number(parsed.at || 0) > FEED_CACHE_TTL_MS) return null;
+    return parsed.items;
+  } catch {
+    return null;
+  }
+}
+
+function saveFeedCache(items) {
+  if (!Array.isArray(items) || !items.length) return;
+  try {
+    localStorage.setItem(FEED_CACHE_KEY, JSON.stringify({
+      items: items.slice(0, 20),
+      at: Date.now(),
+    }));
+  } catch { /* quota */ }
+}
+
+function hydrateFeedFromCache() {
+  const cached = loadFeedCache();
+  if (!cached?.length) return false;
+  state.feed = cached;
+  state.feedError = '';
+  renderFeed();
+  return true;
 }
 
 function isFeedBootStuck() {
@@ -283,29 +315,11 @@ function stopDashboardAutoRefresh() {
 function touchDashboardRefreshHint() {
   const el = document.getElementById('dashboard-refresh-hint');
   if (!el) return;
-  el.textContent = `Updated ${new Date().toLocaleTimeString()} · auto-refresh every 60s`;
+  el.textContent = `Updated ${new Date().toLocaleTimeString()} · tap Refresh to update`;
 }
 
-function startDashboardAutoRefresh(viewId) {
+function startDashboardAutoRefresh() {
   stopDashboardAutoRefresh();
-  if (!state.token) return;
-
-  if (viewId === 'creator-view' && isCreator()) {
-    dashboardRefreshTimer = setInterval(() => {
-      if (document.hidden) return;
-      if (!document.getElementById('creator-view')?.classList.contains('active')) return;
-      loadCreatorDashboard(true);
-    }, DASHBOARD_REFRESH_MS);
-    return;
-  }
-
-  if (viewId === 'viewer-view' && !isCreator()) {
-    dashboardRefreshTimer = setInterval(() => {
-      if (document.hidden) return;
-      if (!document.getElementById('viewer-view')?.classList.contains('active')) return;
-      loadViewerDashboard(true);
-    }, DASHBOARD_REFRESH_MS);
-  }
 }
 
 const MAX_UPLOAD_BYTES_DEFAULT = 128 * 1024 * 1024;
@@ -369,6 +383,8 @@ const els = {
 };
 
 const PREVIEW_SECONDS = 3;
+const FEED_CACHE_KEY = 'dreamland_feed_cache_v1';
+const FEED_CACHE_TTL_MS = 8 * 60 * 1000;
 
 function previewSecondsForPost(post) {
   const dream = post?.dreamland || {};
@@ -384,6 +400,8 @@ function isLockedPremiumPost(post) {
   return Boolean(dream.is_paid && !dream.is_unlocked);
 }
 let reelObserver = null;
+let reelScrollRaf = 0;
+let feedGestureBound = false;
 let toastTimer = null;
 let authMode = 'signin';
 let authForgotStep = 'email';
@@ -961,18 +979,24 @@ function playReelVideo(video) {
 
   const wantSound = !(dlSocial?.isMuted?.() ?? false);
   const canPlaySound = wantSound && (dlSocial?.isAudioUnlocked?.() ?? false);
-  video.muted = !canPlaySound;
-  if (canPlaySound) {
-    video.removeAttribute('muted');
-    video.volume = 1;
-  } else {
-    video.setAttribute('muted', '');
-  }
 
-  const attempt = () => {
+  const attempt = (forceMuted = false) => {
+    const muted = forceMuted || !canPlaySound;
+    video.muted = muted;
+    if (muted) {
+      video.setAttribute('muted', '');
+    } else {
+      video.removeAttribute('muted');
+      video.volume = 1;
+    }
+
     video.play().then(() => {
       syncReelVideoBackdrop(video);
     }).catch((err) => {
+      if (!forceMuted) {
+        attempt(true);
+        return;
+      }
       console.warn('Reel play blocked:', err?.message || err, video.currentSrc || video.src);
     });
   };
@@ -982,8 +1006,8 @@ function playReelVideo(video) {
     return;
   }
 
-  video.addEventListener('loadeddata', attempt, { once: true });
-  video.addEventListener('canplay', attempt, { once: true });
+  video.addEventListener('loadeddata', () => attempt(), { once: true });
+  video.addEventListener('canplay', () => attempt(), { once: true });
   video.addEventListener('error', () => {
     console.warn('Reel video failed to load:', video.currentSrc || video.src);
   }, { once: true });
@@ -1175,7 +1199,7 @@ function renderViewerDashboard(data) {
       <button type="button" class="btn-ghost" id="viewer-open-wallet">Top up wallet</button>
       <button type="button" class="btn-ghost" id="viewer-open-account">Account settings</button>
     </div>
-    <p class="muted viewer-refresh-hint" id="dashboard-refresh-hint">Auto-refresh every 60s</p>
+    <p class="muted viewer-refresh-hint" id="dashboard-refresh-hint">Tap Refresh to update</p>
     <section class="creator-section glass-card">
       <h3>Your activity</h3>
       <p class="muted">Unlock premium reels, spin daily rewards, and climb streak milestones from the Watch and Play tabs.</p>
@@ -1539,7 +1563,7 @@ function renderCreatorDashboard(data) {
       <div class="studio-quick glass-card">
         <button type="button" class="btn-primary studio-quick-btn" id="creator-watch-feed">Watch feed</button>
         <button type="button" class="btn-ghost studio-quick-btn" id="creator-refresh">Refresh dashboard</button>
-        <p class="muted studio-refresh-hint" id="dashboard-refresh-hint">Auto-refresh every 60s</p>
+        <p class="muted studio-refresh-hint" id="dashboard-refresh-hint">Tap Refresh to update</p>
       </div>
 
       <section class="studio-library">
@@ -2130,6 +2154,7 @@ async function startLiveSession() {
     startBtn.textContent = 'Starting…';
   }
 
+  let apiLiveStarted = false;
   try {
     if (!cameraStream) await startLiveBroadcastCamera();
     const form = new FormData();
@@ -2139,6 +2164,7 @@ async function startLiveSession() {
 
     const res = await apiUpload(API_ROUTES.creatorStartLive, form);
     const live = res.data?.live;
+    apiLiveStarted = Boolean(live?.id);
     if (live?.rtc) {
       const liveClient = await ensureDreamlandLive();
       await liveClient.startBroadcast({
@@ -2168,6 +2194,9 @@ async function startLiveSession() {
     state.creatorDashboard = null;
     await loadCreatorDashboard(true);
   } catch (err) {
+    if (apiLiveStarted) {
+      try { await endLiveSession(); } catch (_) { /* best-effort cleanup */ }
+    }
     showToast(err.message || 'Could not go live');
   } finally {
     if (startBtn) {
@@ -3189,19 +3218,14 @@ function bootMainApp() {
     try { dlSocial.initSoundToggle(); } catch (err) { console.error('sound toggle failed:', err); }
     try { dlSearch.bindSearchUi(); } catch (err) { console.error('search ui failed:', err); }
     bindFeedScroll();
+    bindFeedGestureAudioUnlock();
     loadReferralFromUrl();
     updateFeedHeaderUi();
     window.__dlScrollToReel = scrollToReel;
-    setFeedLoadingMessage();
+    const hadCachedFeed = hydrateFeedFromCache();
+    if (!hadCachedFeed) setFeedLoadingMessage();
     pingApi();
-    const bootFeed = () => {
-      if (document.getElementById('feed-view')?.classList.contains('active')) loadFeed(true);
-    };
-    if (typeof requestIdleCallback === 'function') {
-      requestIdleCallback(bootFeed, { timeout: 1500 });
-    } else {
-      window.setTimeout(bootFeed, 80);
-    }
+    loadFeed(true, false, { keepCache: hadCachedFeed });
     Promise.allSettled([
       dlAi.init(),
       dlFeatures.init(),
@@ -3210,7 +3234,6 @@ function bootMainApp() {
       dlAi.bindSignupSafety(document.getElementById('auth-form'), 'auth-errors');
       dlFeatures.renderGenreFilter(document.getElementById('genre-filter'), () => loadFeed(true));
       dlFeatures.loadStreakPanel(document.getElementById('feed-streak-bar'));
-      if (!state.feed.length) loadFeed(true);
     }).catch((err) => {
       console.error('Dreamland features init failed:', err);
     });
@@ -3220,7 +3243,12 @@ function bootMainApp() {
         loadFeed(true);
       }
     }, 8000);
-    validateSession().finally(() => {
+    (async () => {
+      await handlePaystackReturn();
+      await validateSession();
+      if (sessionStorage.getItem('dreamland_paystack_ref') && state.token) {
+        await handlePaystackReturn();
+      }
       if (state.user) {
         if (isCreator()) loadCreatorDashboard(true);
         else loadViewerDashboard(true);
@@ -3228,7 +3256,7 @@ function bootMainApp() {
       loadPackages();
       dlFeatures?.loadWalletTransactions(document.getElementById('wallet-ledger'));
       dlFeatures?.registerPush?.();
-    });
+    })().catch((err) => console.error('Post-boot session failed:', err));
   } catch (err) {
     console.error('Dreamland boot failed:', err);
     showBootError(err.message || 'App failed to start');
@@ -3318,6 +3346,7 @@ function updateFeedHeaderUi() {
 
   document.querySelector('.header-mode-switch')?.toggleAttribute('hidden', !onFeed);
   document.getElementById('feed-back-btn')?.toggleAttribute('hidden', !onFeed || !isLive);
+  document.getElementById('feed-refresh-btn')?.toggleAttribute('hidden', !onFeed || !isReels);
   document.getElementById('brand-home')?.toggleAttribute('hidden', !onFeed ? false : isLive);
   document.getElementById('sound-toggle')?.toggleAttribute('hidden', !onFeed || isLive);
   document.getElementById('notif-btn')?.toggleAttribute('hidden', false);
@@ -3382,7 +3411,7 @@ function renderFeed() {
     return;
   }
 
-  els.feedList.innerHTML = state.feed.map((post) => {
+  els.feedList.innerHTML = state.feed.map((post, index) => {
     const dream = post.dreamland || {};
     const locked = isLockedPremiumPost(post);
     const src = mediaUrl(post);
@@ -3395,10 +3424,14 @@ function renderFeed() {
     const likes = formatCount(post.total_like);
 
     const previewSec = previewSecondsForPost(post);
+    const preload = index === 0 ? 'auto' : index < 4 ? 'metadata' : 'none';
+    const videoAttrs = locked
+      ? `muted playsinline webkit-playsinline preload="${preload}" data-preview="${previewSec}"`
+      : `muted playsinline webkit-playsinline preload="${preload}" loop`;
 
     return `
       <article class="reel ${locked ? 'reel--locked reel--previewing' : ''}" data-id="${post.id}" data-price="${price}" data-preview="${previewSec}">
-        ${src ? `<div class="reel-media"><video class="reel-video reel-video-main" src="${escapeHtml(src)}" playsinline preload="auto" ${locked ? `data-preview="${previewSec}"` : 'loop'}></video></div>` : '<div class="reel-media"><div class="reel-video reel-video-main reel-video--empty" style="background:#111"></div></div>'}
+        ${src ? `<div class="reel-media"><video class="reel-video reel-video-main" src="${escapeHtml(src)}" ${videoAttrs}></video></div>` : '<div class="reel-media"><div class="reel-video reel-video-main reel-video--empty" style="background:#111"></div></div>'}
         <button type="button" class="reel-sound-hint" hidden aria-label="Tap for sound">Tap for sound</button>
         <div class="reel-vignette" aria-hidden="true"></div>
         <div class="reel-gradient"></div>
@@ -3559,68 +3592,121 @@ function setupLockedReelPreview(reel) {
   reel._endPreview = endPreview;
 }
 
+function prefetchReelVideos(startIndex = 0) {
+  const reels = els.feedList?.querySelectorAll('.reel');
+  if (!reels?.length) return;
+  const end = Math.min(startIndex + 3, reels.length);
+  for (let i = startIndex; i < end; i += 1) {
+    const video = getReelMainVideo(reels[i]);
+    if (!video || video.tagName !== 'VIDEO') continue;
+    if (i === startIndex) video.preload = 'auto';
+    else if (video.preload === 'none') video.preload = 'metadata';
+    if (video.readyState < HTMLMediaElement.HAVE_METADATA) {
+      try { video.load(); } catch { /* ignore */ }
+    }
+  }
+}
+
+function scheduleReelPlaybackSync() {
+  if (reelScrollRaf) return;
+  reelScrollRaf = requestAnimationFrame(() => {
+    reelScrollRaf = 0;
+    syncActiveReelPlayback();
+  });
+}
+
+function syncActiveReelPlayback() {
+  if (!els.feedList || state.feedMode !== 'reels') return;
+
+  const container = els.feedList.getBoundingClientRect();
+  let bestReel = null;
+  let bestVisible = 0;
+
+  els.feedList.querySelectorAll('.reel').forEach((reel) => {
+    const rect = reel.getBoundingClientRect();
+    const top = Math.max(rect.top, container.top);
+    const bottom = Math.min(rect.bottom, container.bottom);
+    const visible = Math.max(0, bottom - top);
+    if (visible > bestVisible) {
+      bestVisible = visible;
+      bestReel = reel;
+    }
+  });
+
+  const minVisible = container.height * 0.38;
+  if (!bestReel || bestVisible < minVisible) return;
+
+  const activeId = bestReel.dataset.id;
+  els.feedList.querySelectorAll('.reel').forEach((reel) => {
+    const video = getReelMainVideo(reel);
+    const active = reel === bestReel;
+    reel.classList.toggle('reel--active', active);
+    if (!video || video.tagName !== 'VIDEO') return;
+
+    if (active) {
+      const post = state.feed.find((item) => String(item.id) === String(reel.dataset.id));
+      if (post) bindReelVideoFallback(video, post);
+      if (reel.classList.contains('reel--previewing')) {
+        const countEl = reel.querySelector('.reel-preview-count');
+        const progressFill = reel.querySelector('.reel-preview-progress__fill');
+        const seconds = Number(video.dataset.preview) || dlFeatures?.getPreviewSeconds?.() || PREVIEW_SECONDS;
+        if (countEl) countEl.textContent = String(seconds);
+        if (progressFill) progressFill.style.width = '0%';
+      }
+      playReelVideo(video);
+      dlSocial?.recordView?.(reel.dataset.id);
+      dlSocial?.startWatchTracking?.(reel, reel.dataset.id);
+    } else {
+      video.pause();
+      dlSocial?.stopWatchTracking?.(reel.dataset.id);
+      if (reel.classList.contains('reel--previewing') && !reel.classList.contains('reel--preview-ended')) {
+        video.currentTime = 0;
+        const countEl = reel.querySelector('.reel-preview-count');
+        const progressFill = reel.querySelector('.reel-preview-progress__fill');
+        const seconds = Number(video.dataset.preview) || dlFeatures?.getPreviewSeconds?.() || PREVIEW_SECONDS;
+        if (countEl) countEl.textContent = String(seconds);
+        if (progressFill) progressFill.style.width = '0%';
+      }
+    }
+  });
+
+  dlSocial?.applySoundToActive?.(els.feedList);
+  if (!dlSocial?.isMuted?.() && dlSocial?.isAudioUnlocked?.()) {
+    dlSocial?.resumeActiveReelAudio?.(els.feedList);
+  }
+
+  const activeIndex = [...els.feedList.querySelectorAll('.reel')].findIndex((r) => r.dataset.id === activeId);
+  if (activeIndex >= 0) prefetchReelVideos(activeIndex);
+}
+
+function bindFeedGestureAudioUnlock() {
+  if (feedGestureBound || !els.feedList) return;
+  feedGestureBound = true;
+  const unlock = () => {
+    if (!dlSocial || dlSocial.isAudioUnlocked()) return;
+    dlSocial.unlockAudio(els.feedList);
+    if (!dlSocial.isMuted()) scheduleReelPlaybackSync();
+  };
+  els.feedList.addEventListener('scroll', unlock, { once: true, passive: true });
+  els.feedList.addEventListener('touchstart', unlock, { once: true, passive: true });
+  els.feedList.addEventListener('pointerdown', unlock, { once: true, passive: true });
+}
+
 function setupReelPlayback() {
   if (reelObserver) reelObserver.disconnect();
   dlSocial?.stopAllWatchTracking?.();
 
   els.feedList.querySelectorAll('.reel--locked.reel--previewing').forEach(setupLockedReelPreview);
 
-  reelObserver = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => {
-      const reel = entry.target;
-      const video = getReelMainVideo(reel);
-      if (!video || video.tagName !== 'VIDEO') return;
-      const post = state.feed.find((item) => String(item.id) === String(reel.dataset.id));
-
-      if (entry.isIntersecting && entry.intersectionRatio >= 0.35) {
-        els.feedList.querySelectorAll('.reel').forEach((r) => r.classList.remove('reel--active'));
-        reel.classList.add('reel--active');
-        if (post) bindReelVideoFallback(video, post);
-        if (reel.classList.contains('reel--previewing')) {
-          video.currentTime = 0;
-          const countEl = reel.querySelector('.reel-preview-count');
-          const progressFill = reel.querySelector('.reel-preview-progress__fill');
-          const seconds = Number(video.dataset.preview) || dlFeatures?.getPreviewSeconds?.() || PREVIEW_SECONDS;
-          if (countEl) countEl.textContent = String(seconds);
-          if (progressFill) progressFill.style.width = '0%';
-        }
-        playReelVideo(video);
-        dlSocial?.applySoundToActive?.(els.feedList);
-        if (!dlSocial?.isMuted?.() && dlSocial?.isAudioUnlocked?.()) {
-          dlSocial?.resumeActiveReelAudio?.(els.feedList);
-        }
-        dlSocial?.recordView?.(reel.dataset.id);
-        dlSocial?.startWatchTracking?.(reel, reel.dataset.id);
-      } else {
-        video.pause();
-        if (reel.classList.contains('reel--active')) {
-          reel.classList.remove('reel--active');
-          dlSocial?.stopWatchTracking?.(reel.dataset.id);
-        }
-        if (reel.classList.contains('reel--previewing') && !reel.classList.contains('reel--preview-ended')) {
-          video.currentTime = 0;
-          const countEl = reel.querySelector('.reel-preview-count');
-          const progressFill = reel.querySelector('.reel-preview-progress__fill');
-          const seconds = Number(video.dataset.preview) || dlFeatures?.getPreviewSeconds?.() || PREVIEW_SECONDS;
-          if (countEl) countEl.textContent = String(seconds);
-          if (progressFill) progressFill.style.width = '0%';
-        }
-      }
-    });
-    dlSocial?.applySoundToActive?.(els.feedList);
-  }, { threshold: [0.35, 0.6] });
+  reelObserver = new IntersectionObserver(() => {
+    scheduleReelPlaybackSync();
+  }, {
+    root: els.feedList,
+    threshold: [0.35, 0.55, 0.75, 1],
+  });
 
   els.feedList.querySelectorAll('.reel').forEach((reel) => reelObserver.observe(reel));
-
-  const firstReel = els.feedList.querySelector('.reel');
-  const first = getReelMainVideo(firstReel);
-  if (first?.tagName === 'VIDEO') {
-    const post = state.feed.find((item) => String(item.id) === String(firstReel.dataset.id));
-    if (post) bindReelVideoFallback(first, post);
-    firstReel.classList.add('reel--active');
-    playReelVideo(first);
-    dlSocial?.applySoundToActive?.(els.feedList);
-  }
+  scheduleReelPlaybackSync();
 }
 
 function openPaywall(videoId, price) {
@@ -3841,12 +3927,13 @@ function sendLiveChatMessage() {
   if (input) input.value = '';
 }
 
-async function loadFeed(force = false, append = false) {
+async function loadFeed(force = false, append = false, opts = {}) {
   if (state.feedLoading) return;
+  const keepCache = Boolean(opts.keepCache);
   if (force) {
     state.feedPage = 1;
     state.feedHasMore = true;
-    if (!append) state.feed = [];
+    if (!append && !keepCache) state.feed = [];
   }
   if (!state.feedHasMore && append) return;
 
@@ -3860,16 +3947,23 @@ async function loadFeed(force = false, append = false) {
       path += '&is_ai_feed=1';
     }
     if (state.feedGenre) path += `&category_id=${encodeURIComponent(state.feedGenre)}`;
-    const res = await apiWithRetry(path);
+    const res = append
+      ? await apiWithRetry(path)
+      : await api(path, { timeoutMs: apiTimeoutMs() }).catch(() => apiWithRetry(path, {}, 2));
     const items = parseFeedItems(res.data).filter((post) => !dlSocial?.isHiddenCreator?.(post.user?.id));
     if (append) state.feed = [...state.feed, ...items];
     else state.feed = items;
 
     state.feedHasMore = items.length >= 20;
-    if (items.length) state.feedPage += 1;
+    if (items.length) {
+      state.feedPage += 1;
+      if (!append) saveFeedCache(items);
+    }
 
-    if (state.feedSource === 'foryou' && state.feed.length && dlAi?.isEnabled?.()) {
-      await maybeRankFeedClient();
+    if (state.feedSource === 'foryou' && state.feed.length > 1 && dlAi?.isEnabled?.()) {
+      void maybeRankFeedClient().then(() => {
+        if (state.feed.length) renderFeed();
+      });
     }
 
     if (!state.feed.length && !append) {
@@ -3877,7 +3971,7 @@ async function loadFeed(force = false, append = false) {
     }
   } catch (err) {
     console.warn('Feed API failed:', err.message, API_BASE);
-    if (!append) state.feed = [];
+    if (!append && !keepCache) state.feed = [];
     state.feedError = err.message || 'Could not load feed';
   } finally {
     state.feedLoading = false;
@@ -3918,7 +4012,7 @@ function scrollToReel(postId) {
   const reel = els.feedList?.querySelector(`.reel[data-id="${postId}"]`);
   if (reel) {
     reel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    setupReelPlayback();
+    scheduleReelPlaybackSync();
   }
 }
 
@@ -3933,6 +4027,7 @@ function bindFeedScroll() {
   if (feedScrollBound || !els.feedList) return;
   feedScrollBound = true;
   els.feedList.addEventListener('scroll', () => {
+    scheduleReelPlaybackSync();
     if (state.feedMode !== 'reels' || state.feedLoading || !state.feedHasMore) return;
     const nearBottom = els.feedList.scrollTop + els.feedList.clientHeight >= els.feedList.scrollHeight - 320;
     if (nearBottom) loadFeed(false, true);
@@ -3952,6 +4047,61 @@ function switchFeedSource(source) {
 function loadReferralFromUrl() {
   const ref = new URLSearchParams(window.location.search).get('ref');
   if (ref) localStorage.setItem('dreamland_ref', ref);
+}
+
+function getPaystackReturnReference() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('reference') || params.get('trxref') || '';
+}
+
+function applyWalletTopupFromVerify(result = {}) {
+  const granted = Number(result.credits_granted || 0);
+  if (!state.user) return granted;
+  if (result.available_coin != null) {
+    state.user.available_coin = Number(result.available_coin);
+  } else if (granted > 0) {
+    state.user.available_coin = (Number(state.user.available_coin) || 0) + granted;
+  }
+  localStorage.setItem('dreamland_user', JSON.stringify(state.user));
+  updateAuthUi();
+  return granted;
+}
+
+async function handlePaystackReturn() {
+  let reference = getPaystackReturnReference();
+  if (reference) {
+    window.history.replaceState({}, '', `${window.location.pathname}${window.location.hash}`);
+    sessionStorage.setItem('dreamland_paystack_ref', reference);
+  } else {
+    reference = sessionStorage.getItem('dreamland_paystack_ref') || '';
+  }
+  if (!reference) return false;
+
+  if (!state.token) {
+    showToast('Sign in to receive your wallet credits');
+    openAuthModal('signin');
+    return false;
+  }
+
+  try {
+    const res = await api(`${API_ROUTES.paystackVerify}?reference=${encodeURIComponent(reference)}`);
+    const result = res.data || {};
+    const granted = applyWalletTopupFromVerify(result);
+    if (result.already_completed) {
+      showToast('Wallet top-up already applied');
+    } else {
+      showToast(granted ? `+${granted} credits added to your wallet` : (res.message || 'Payment verified'));
+    }
+    sessionStorage.removeItem('dreamland_paystack_ref');
+    switchView('wallet-view');
+    await validateSession();
+    if (!isCreator()) await loadViewerDashboard(true);
+    dlFeatures?.loadWalletTransactions(document.getElementById('wallet-ledger'));
+    return true;
+  } catch (err) {
+    showToast(err.message || 'Payment verification failed — tap refresh or contact support');
+    return false;
+  }
 }
 
 async function loadPackages() {
@@ -3989,13 +4139,15 @@ async function loadPackages() {
 
 async function checkoutPackage(pkg) {
   if (gateGuest()) return;
+  let checkout = {};
   try {
     const init = await api(API_ROUTES.paystackInit, {
       method: 'POST',
       body: JSON.stringify({ package_id: pkg.id, email: state.user?.email }),
     });
-    const checkout = init.data?.data || init.data || {};
+    checkout = init.data?.data || init.data || {};
     if (checkout.authorization_url) {
+      if (checkout.reference) sessionStorage.setItem('dreamland_paystack_ref', checkout.reference);
       window.location.href = checkout.authorization_url;
       return;
     }
@@ -4008,25 +4160,26 @@ async function checkoutPackage(pkg) {
           body: JSON.stringify({ package_id: pkg.id }),
         });
         const payload = dev.data?.data || dev.data || {};
-        const granted = payload.credits_granted;
-        if (state.user) {
-          if (payload.available_coin != null) state.user.available_coin = payload.available_coin;
-          else if (granted) state.user.available_coin = (Number(state.user.available_coin) || 0) + Number(granted);
-        }
-        localStorage.setItem('dreamland_user', JSON.stringify(state.user));
-        updateWalletBalance();
-        showToast(dev.message || `+${granted || pkg.credits} credits (local dev)`);
+        applyWalletTopupFromVerify(payload);
+        showToast(dev.message || `+${payload.credits_granted || pkg.credits} credits (local dev)`);
+        switchView('wallet-view');
         return;
       } catch (devErr) {
         showToast(devErr.message || 'Could not add demo credits');
         return;
       }
     }
-    console.warn('Server initialize failed, falling back to inline Paystack', e.message);
+    showToast(e.message || 'Could not start payment — try again');
+    return;
+  }
+
+  if (!checkout.reference) {
+    showToast('Checkout could not be started');
+    return;
   }
 
   if (!PAYSTACK_KEY) {
-    showToast('Paystack not configured — use local dev top-up on localhost');
+    showToast('Paystack not configured');
     return;
   }
   if (!window.PaystackPop) {
@@ -4040,13 +4193,20 @@ async function checkoutPackage(pkg) {
     key: PAYSTACK_KEY,
     email: state.user?.email || 'guest@dreamland.app',
     amount: Math.round(Number(pkg.amount) * 100),
-    currency: 'GHS',
+    currency: pkg.currency || 'GHS',
+    ref: checkout.reference,
     callback: async (response) => {
       try {
-        await api(`${API_ROUTES.paystackVerify}?reference=${encodeURIComponent(response.reference)}`);
-        showToast('Top-up complete — credits added to your wallet');
+        const ref = response.reference || checkout.reference;
+        const res = await api(`${API_ROUTES.paystackVerify}?reference=${encodeURIComponent(ref)}`);
+        const granted = applyWalletTopupFromVerify(res.data || {});
+        showToast(granted ? `+${granted} credits added to your wallet` : 'Top-up complete');
+        await validateSession();
+        if (!isCreator()) await loadViewerDashboard(true);
+        switchView('wallet-view');
+        dlFeatures?.loadWalletTransactions(document.getElementById('wallet-ledger'));
       } catch (err) {
-        alert(err.message || 'Payment verification failed.');
+        showToast(err.message || 'Payment verification failed');
       }
     },
   });
@@ -4485,6 +4645,7 @@ async function loginUser(email, password, options = {}) {
   if (!token) throw new Error(res.message || 'Login failed — no auth token returned.');
 
   finishAuthSession(user, token, options);
+  await handlePaystackReturn();
   if (isCreator(user)) {
     await loadCreatorDashboard(true);
     if (options.goDashboard !== false) switchView('creator-view');
@@ -4519,6 +4680,12 @@ function bindLiveBroadcastUi() {
   });
 }
 
+function refreshReelsFeed() {
+  const feedList = els.feedList || document.getElementById('feed-list');
+  if (feedList) feedList.scrollTop = 0;
+  loadFeed(true);
+}
+
 function bindUi() {
   bindRecordCaptureUi();
   bindLiveBroadcastUi();
@@ -4543,6 +4710,11 @@ function bindUi() {
   document.getElementById('brand-home')?.addEventListener('click', (e) => {
     e.preventDefault();
     switchView('feed-view');
+  });
+
+  document.getElementById('feed-refresh-btn')?.addEventListener('click', () => {
+    refreshReelsFeed();
+    showToast('Refreshing reels…');
   });
 
   document.getElementById('auth-btn')?.addEventListener('click', () => {
@@ -4802,13 +4974,6 @@ function bindUi() {
 function registerPwaUpdates() {
   if (!('serviceWorker' in navigator) || DEV_ALLOW_BROWSER) return;
 
-  let refreshing = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (refreshing) return;
-    refreshing = true;
-    window.location.reload();
-  });
-
   navigator.serviceWorker.register('/sw.js').then((registration) => {
     registration.addEventListener('updatefound', () => {
       const worker = registration.installing;
@@ -4823,15 +4988,7 @@ function registerPwaUpdates() {
     if (registration.waiting) {
       showPwaUpdatePrompt(registration.waiting);
     }
-
-    setInterval(() => registration.update().catch(() => {}), 5 * 60 * 1000);
   }).catch(() => {});
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      navigator.serviceWorker.getRegistration().then((reg) => reg?.update().catch(() => {}));
-    }
-  });
 }
 
 function showPwaUpdatePrompt(worker) {
@@ -4847,6 +5004,7 @@ function showPwaUpdatePrompt(worker) {
   document.getElementById('pwa-update-apply')?.addEventListener('click', () => {
     worker.postMessage({ type: 'SKIP_WAITING' });
     el.remove();
+    window.setTimeout(() => window.location.reload(), 300);
   });
   document.getElementById('pwa-update-dismiss')?.addEventListener('click', () => el.remove());
 }

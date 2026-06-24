@@ -11,6 +11,9 @@ return array_merge(
         'dreamlandPwaUrl' => getenv('DREAMLAND_PWA_URL') ?: getenv('PWA_URL') ?: 'https://dreamlandgh.app',
         'dreamlandAdminUrl' => getenv('DREAMLAND_ADMIN_URL') ?: getenv('ADMIN_URL') ?: 'https://dreamlandgh.app/admin',
         'dreamlandPaystackCallbackUrl' => getenv('DREAMLAND_PAYSTACK_CALLBACK') ?: ((getenv('DREAMLAND_PWA_URL') ?: getenv('PWA_URL') ?: 'https://dreamlandgh.app') . '/wallet/callback'),
+        'dreamlandLiveServerUrl' => (($liveServer = getenv('DREAMLAND_LIVE_SERVER_URL')) && $liveServer !== '') ? $liveServer : 'http://127.0.0.1:4443',
+        'dreamlandLiveSignalingUrl' => (($liveSignal = getenv('DREAMLAND_LIVE_SIGNALING_URL') ?: getenv('DREAMLAND_LIVE_SERVER_URL')) && $liveSignal !== '') ? $liveSignal : 'http://localhost:4443',
+        'dreamlandLiveSecret' => getenv('DREAMLAND_LIVE_SECRET') ?: 'dreamland-live-dev-secret',
         'dreamlandDevMode' => filter_var(getenv('DREAMLAND_DEV_MODE') ?: '0', FILTER_VALIDATE_BOOLEAN),
         'db' => [
             'driver' => getenv('DB_DRIVER') ?: 'pgsql',

@@ -74,6 +74,14 @@ class DreamlandLiveRtcService extends Component
         return is_array($result) && !empty($result['ok']);
     }
 
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function roomStatus(int $liveId): ?array
+    {
+        return $this->request('GET', '/internal/rooms/' . $liveId . '/status');
+    }
+
     public function isHealthy(): bool
     {
         $result = $this->request('GET', '/health', null, 1);

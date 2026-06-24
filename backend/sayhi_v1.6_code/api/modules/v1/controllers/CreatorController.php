@@ -354,10 +354,29 @@ class CreatorController extends ActiveController
         $userId = (int) Yii::$app->user->identity->id;
         $existing = $this->findActiveLive($userId);
         if ($existing) {
-            return [
-                'message' => 'You are already live.',
-                'live' => $this->serializeLive($existing, 'host'),
-            ];
+            /** @var \common\components\DreamlandLiveRtcService $rtc */
+            $rtc = Yii::$app->dreamlandLive;
+            $status = $rtc->roomStatus((int) $existing->id);
+            $hasActiveHost = is_array($status) && !empty($status['hasHost']);
+
+            if (!$hasActiveHost) {
+                if ($rtc->registerRoom((int) $existing->id, $userId, (string) $existing->token)) {
+                    return [
+                        'message' => 'Resuming your live session.',
+                        'live' => $this->serializeLive($existing, 'host'),
+                    ];
+                }
+
+                $existing->status = UserLiveHistory::STATUS_COMPLETED;
+                $existing->end_time = time();
+                $existing->save(false);
+                $rtc->closeRoom((int) $existing->id);
+            } else {
+                return [
+                    'message' => 'You are already live.',
+                    'live' => $this->serializeLive($existing, 'host'),
+                ];
+            }
         }
 
         $title = trim((string) Yii::$app->request->post('title', 'Dreamland Live'));

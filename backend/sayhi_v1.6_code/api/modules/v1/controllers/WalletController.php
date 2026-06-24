@@ -8,6 +8,7 @@ use common\models\PurchasedLive;
 use common\models\PurchasedVideo;
 use api\modules\v1\models\Payment;
 use common\models\CreditPackage;
+use common\models\CreditPackageTransaction;
 use Yii;
 use yii\filters\auth\CompositeAuth;
 use yii\filters\auth\HttpBearerAuth;
@@ -84,7 +85,7 @@ class WalletController extends ActiveController
      */
     public function actionDevTopup()
     {
-        if (!($Yii::$app->params['dreamlandDevMode'] ?? false)) {
+        if (!(Yii::$app->params['dreamlandDevMode'] ?? false)) {
             return ['statusCode' => 403, 'message' => 'Dev top-up is disabled on this server.'];
         }
 
@@ -115,6 +116,16 @@ class WalletController extends ActiveController
         if (!$reference) {
             return ['statusCode' => 422, 'message' => 'reference is required.'];
         }
+
+        $userId = (int) Yii::$app->user->identity->id;
+        $txRecord = CreditPackageTransaction::findOne(['paystack_reference' => $reference]);
+        if (!$txRecord) {
+            return ['statusCode' => 422, 'message' => 'Transaction not found.'];
+        }
+        if ((int) $txRecord->user_id !== $userId) {
+            return ['statusCode' => 403, 'message' => 'This payment belongs to another account.'];
+        }
+
         $result = Yii::$app->dreamlandWallet->verifyAndFulfill($reference);
         if (!$result['ok']) {
             return ['statusCode' => 422, 'message' => $result['error']];
@@ -129,8 +140,12 @@ class WalletController extends ActiveController
     {
         $payload = json_decode(Yii::$app->request->rawBody, true) ?: [];
         $keys = Yii::$app->dreamlandWallet->getPaystackKeys();
-        $signature = Yii::$app->request->headers->get('X-Paystack-Signature');
-        if (!empty($keys['secret']) && $signature) {
+        $signature = (string) Yii::$app->request->headers->get('X-Paystack-Signature', '');
+        if (!empty($keys['secret'])) {
+            if ($signature === '') {
+                Yii::$app->response->statusCode = 401;
+                return ['statusCode' => 401, 'message' => 'Missing Paystack signature.'];
+            }
             $computed = hash_hmac('sha512', Yii::$app->request->rawBody, $keys['secret']);
             if (!hash_equals($computed, $signature)) {
                 Yii::$app->response->statusCode = 401;
@@ -138,6 +153,9 @@ class WalletController extends ActiveController
             }
         }
         $result = Yii::$app->dreamlandWallet->handleWebhook($payload);
+        if (empty($result['ok'])) {
+            Yii::warning('Paystack webhook fulfillment failed: ' . ($result['error'] ?? 'unknown'), __METHOD__);
+        }
         return ['message' => 'ok', 'data' => $result];
     }
 
