@@ -13,6 +13,9 @@
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" type="image/png" href="/icons/icon-192.png" />
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <link rel="preconnect" href="https://dreamlandgh.app" />
+  <link rel="preconnect" href="https://s3.us-east-1.wasabisys.com" crossorigin />
+  <link rel="dns-prefetch" href="https://dreamlandgh.app" />
   <link rel="preconnect" href="https://dreamland-t1ck.onrender.com" />
   <link rel="dns-prefetch" href="https://dreamland-t1ck.onrender.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -26,6 +29,68 @@
   <link rel="stylesheet" href="/css/app.css?v=69" />
   <title>Dreamland — Play, Watch, Earn</title>
   <script src="/env-config.js?v=2"></script>
+  <script>
+    (function () {
+      var env = window.__DL_ENV__ || {};
+      function addPreconnect(href, crossOrigin) {
+        if (!href) return;
+        try {
+          var origin = new URL(href, location.href).origin;
+          var link = document.createElement('link');
+          link.rel = 'preconnect';
+          link.href = origin;
+          if (crossOrigin) link.crossOrigin = 'anonymous';
+          document.head.appendChild(link);
+        } catch (e) { /* ignore */ }
+      }
+      addPreconnect(env.api, false);
+      addPreconnect(env.uploads, true);
+
+      function resolveApiBase() {
+        if (window.__DL_API__) return String(window.__DL_API__).replace(/\/$/, '');
+        if (env.api) return String(env.api).replace(/\/$/, '');
+        var h = location.hostname;
+        if (h === 'localhost' || h === '127.0.0.1') {
+          return location.protocol + '//' + (h === '127.0.0.1' ? '127.0.0.1' : 'localhost') + ':8080/v1';
+        }
+        var parts = h.split('.').filter(Boolean);
+        if (parts.length >= 2) return 'https://api.' + parts.slice(-2).join('.') + '/v1';
+        return 'https://dreamland-t1ck.onrender.com/v1';
+      }
+
+      function parseFeedPayload(json) {
+        if (!json || typeof json !== 'object') return [];
+        var data = json.data != null ? json.data : json;
+        if (Array.isArray(data)) return data;
+        var post = data.post || data.items;
+        if (Array.isArray(post)) return post;
+        if (post && Array.isArray(post.items)) return post.items;
+        return [];
+      }
+
+      document.addEventListener('DOMContentLoaded', function () {
+        try {
+          var raw = localStorage.getItem('dreamland_feed_cache_v1');
+          if (!raw) return;
+          var parsed = JSON.parse(raw);
+          if (!parsed || !Array.isArray(parsed.items) || !parsed.items.length) return;
+          var feed = document.getElementById('feed-list');
+          if (feed && /Starting Dreamland/i.test(feed.textContent || '')) {
+            feed.innerHTML = '<div class="live-loading glass-card" style="margin:16px;padding:16px"><p class="eyebrow">Watch</p><h2>Loading your reels…</h2></div>';
+          }
+        } catch (e) { /* ignore */ }
+      });
+
+      var feedUrl = resolveApiBase() + '/posts/search-post?is_reel=1&expand=dreamland,user,postGallary&page=1&is_ai_feed=1';
+      window.__DL_FEED_PREFETCH__ = fetch(feedUrl, { credentials: 'omit', cache: 'default' })
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (json) {
+          var items = parseFeedPayload(json);
+          return items.length ? { items: items, at: Date.now() } : null;
+        })
+        .catch(function () { return null; });
+    })();
+  </script>
   <script>
     (function () {
       if (window.__DL_ENV__?.api) {
@@ -828,7 +893,7 @@
     (async function () {
       try {
         if (window.__DL_BOOT_PROMISE__) await window.__DL_BOOT_PROMISE__;
-        await import('/js/app.js?v=build-178240');
+        await import('/js/app.js?v=build-178241');
       } catch (err) {
         console.error('Dreamland module load failed:', err);
         window.__DL_LAST_ERROR__ = err.message || String(err);

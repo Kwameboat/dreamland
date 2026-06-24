@@ -243,14 +243,16 @@ function setFeedLoadingMessage(title = 'Loading reels…') {
     </div>`;
 }
 
-function loadFeedCache() {
+function loadFeedCache(options = {}) {
   try {
     const raw = localStorage.getItem(FEED_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed?.items) || !parsed.items.length) return null;
-    if (Date.now() - Number(parsed.at || 0) > FEED_CACHE_TTL_MS) return null;
-    return parsed.items;
+    const age = Date.now() - Number(parsed.at || 0);
+    if (age > FEED_CACHE_STALE_MS) return null;
+    if (!options.allowStale && age > FEED_CACHE_TTL_MS) return null;
+    return { items: parsed.items, stale: age > FEED_CACHE_TTL_MS, at: Number(parsed.at || 0) };
   } catch {
     return null;
   }
@@ -260,18 +262,20 @@ function saveFeedCache(items) {
   if (!Array.isArray(items) || !items.length) return;
   try {
     localStorage.setItem(FEED_CACHE_KEY, JSON.stringify({
-      items: items.slice(0, 20),
+      items: items.slice(0, FEED_CACHE_MAX_ITEMS),
       at: Date.now(),
     }));
   } catch { /* quota */ }
 }
 
 function hydrateFeedFromCache() {
-  const cached = loadFeedCache();
-  if (!cached?.length) return false;
-  state.feed = cached;
+  const cached = loadFeedCache({ allowStale: true });
+  if (!cached?.items?.length) return false;
+  state.feed = cached.items;
   state.feedError = '';
+  state.feedStale = Boolean(cached.stale);
   renderFeed();
+  warmReelMediaUrls(cached.items, 3);
   return true;
 }
 
@@ -292,6 +296,7 @@ const state = {
   feedHasMore: true,
   feedLoading: false,
   feedError: '',
+  feedStale: false,
   packages: [],
   currentPaywallVideo: null,
   currentPaywallLive: null,
@@ -385,6 +390,33 @@ const els = {
 const PREVIEW_SECONDS = 3;
 const FEED_CACHE_KEY = 'dreamland_feed_cache_v1';
 const FEED_CACHE_TTL_MS = 8 * 60 * 1000;
+const FEED_CACHE_STALE_MS = 24 * 60 * 60 * 1000;
+const FEED_CACHE_MAX_ITEMS = 30;
+const prefetchedReelUrls = new Set();
+const warmReelVideoEls = [];
+
+function warmReelMediaUrls(posts, limit = 3) {
+  if (!Array.isArray(posts) || !posts.length) return;
+  posts.slice(0, limit).forEach((post) => {
+    const url = mediaUrl(post);
+    if (!url || prefetchedReelUrls.has(url)) return;
+    prefetchedReelUrls.add(url);
+    const link = document.createElement('link');
+    link.rel = 'prefetch';
+    link.as = 'fetch';
+    link.href = url;
+    document.head.appendChild(link);
+    if (warmReelVideoEls.length >= 2) return;
+    const video = document.createElement('video');
+    video.preload = 'auto';
+    video.muted = true;
+    video.playsInline = true;
+    video.src = url;
+    video.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none';
+    document.body.appendChild(video);
+    warmReelVideoEls.push(video);
+  });
+}
 
 function previewSecondsForPost(post) {
   const dream = post?.dreamland || {};
@@ -3214,18 +3246,18 @@ function bootMainApp() {
     });
     els.appShell?.classList.add('app-shell--feed-nav');
     updateAuthUi();
-    try { bindUi(); } catch (err) { console.error('bindUi failed:', err); }
-    try { dlSocial.initSoundToggle(); } catch (err) { console.error('sound toggle failed:', err); }
-    try { dlSearch.bindSearchUi(); } catch (err) { console.error('search ui failed:', err); }
     bindFeedScroll();
     bindFeedGestureAudioUnlock();
     loadReferralFromUrl();
     updateFeedHeaderUi();
     window.__dlScrollToReel = scrollToReel;
     const hadCachedFeed = hydrateFeedFromCache();
-    if (!hadCachedFeed) setFeedLoadingMessage();
+    if (!hadCachedFeed) setFeedLoadingMessage('Loading reels…');
     pingApi();
-    loadFeed(true, false, { keepCache: hadCachedFeed });
+    loadFeed(true, false, { keepCache: hadCachedFeed, usePrefetch: true });
+    try { bindUi(); } catch (err) { console.error('bindUi failed:', err); }
+    try { dlSocial.initSoundToggle(); } catch (err) { console.error('sound toggle failed:', err); }
+    try { dlSearch.bindSearchUi(); } catch (err) { console.error('search ui failed:', err); }
     Promise.allSettled([
       dlAi.init(),
       dlFeatures.init(),
@@ -3424,7 +3456,7 @@ function renderFeed() {
     const likes = formatCount(post.total_like);
 
     const previewSec = previewSecondsForPost(post);
-    const preload = index === 0 ? 'auto' : index < 4 ? 'metadata' : 'none';
+    const preload = index === 0 ? 'auto' : index < 5 ? 'metadata' : 'none';
     const videoAttrs = locked
       ? `muted playsinline webkit-playsinline preload="${preload}" data-preview="${previewSec}"`
       : `muted playsinline webkit-playsinline preload="${preload}" loop`;
@@ -3595,7 +3627,7 @@ function setupLockedReelPreview(reel) {
 function prefetchReelVideos(startIndex = 0) {
   const reels = els.feedList?.querySelectorAll('.reel');
   if (!reels?.length) return;
-  const end = Math.min(startIndex + 3, reels.length);
+  const end = Math.min(startIndex + 5, reels.length);
   for (let i = startIndex; i < end; i += 1) {
     const video = getReelMainVideo(reels[i]);
     if (!video || video.tagName !== 'VIDEO') continue;
@@ -3927,6 +3959,31 @@ function sendLiveChatMessage() {
   if (input) input.value = '';
 }
 
+async function fetchFeedItemsFromNetwork(append = false) {
+  let path = `${API_ROUTES.feed}&page=${state.feedPage}`;
+  if (state.feedSource === 'following') {
+    path += '&is_following_user_post=1';
+  } else {
+    path += '&is_ai_feed=1';
+  }
+  if (state.feedGenre) path += `&category_id=${encodeURIComponent(state.feedGenre)}`;
+  const res = append
+    ? await apiWithRetry(path)
+    : await api(path, { timeoutMs: apiTimeoutMs() }).catch(() => apiWithRetry(path, {}, 2));
+  return parseFeedItems(res.data).filter((post) => !dlSocial?.isHiddenCreator?.(post.user?.id));
+}
+
+async function consumePrefetchedFeed() {
+  if (!window.__DL_FEED_PREFETCH__) return null;
+  const prefetched = await Promise.race([
+    window.__DL_FEED_PREFETCH__,
+    new Promise((resolve) => window.setTimeout(() => resolve(null), 12000)),
+  ]).catch(() => null);
+  window.__DL_FEED_PREFETCH__ = null;
+  if (!prefetched?.items?.length) return null;
+  return prefetched.items.filter((post) => !dlSocial?.isHiddenCreator?.(post.user?.id));
+}
+
 async function loadFeed(force = false, append = false, opts = {}) {
   if (state.feedLoading) return;
   const keepCache = Boolean(opts.keepCache);
@@ -3940,24 +3997,22 @@ async function loadFeed(force = false, append = false, opts = {}) {
   state.feedLoading = true;
   state.feedError = '';
   try {
-    let path = `${API_ROUTES.feed}&page=${state.feedPage}`;
-    if (state.feedSource === 'following') {
-      path += '&is_following_user_post=1';
-    } else {
-      path += '&is_ai_feed=1';
+    let items = null;
+    if (!append && opts.usePrefetch) {
+      items = await consumePrefetchedFeed();
     }
-    if (state.feedGenre) path += `&category_id=${encodeURIComponent(state.feedGenre)}`;
-    const res = append
-      ? await apiWithRetry(path)
-      : await api(path, { timeoutMs: apiTimeoutMs() }).catch(() => apiWithRetry(path, {}, 2));
-    const items = parseFeedItems(res.data).filter((post) => !dlSocial?.isHiddenCreator?.(post.user?.id));
+    if (!items?.length) {
+      items = await fetchFeedItemsFromNetwork(append);
+    }
     if (append) state.feed = [...state.feed, ...items];
     else state.feed = items;
 
+    state.feedStale = false;
     state.feedHasMore = items.length >= 20;
     if (items.length) {
       state.feedPage += 1;
       if (!append) saveFeedCache(items);
+      if (!append) warmReelMediaUrls(items, 3);
     }
 
     if (state.feedSource === 'foryou' && state.feed.length > 1 && dlAi?.isEnabled?.()) {
@@ -4683,7 +4738,8 @@ function bindLiveBroadcastUi() {
 function refreshReelsFeed() {
   const feedList = els.feedList || document.getElementById('feed-list');
   if (feedList) feedList.scrollTop = 0;
-  loadFeed(true);
+  window.__DL_FEED_PREFETCH__ = null;
+  loadFeed(true, false, { usePrefetch: false });
 }
 
 function bindUi() {
