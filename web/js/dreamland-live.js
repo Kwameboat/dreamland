@@ -2,28 +2,43 @@
  * Dreamland live WebRTC client — CDN libs load only when going live / watching.
  */
 
-function emitAck(socket, event, payload = {}) {
+function emitAck(socket, event, payload = {}, timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${event} timed out`)), timeoutMs);
     socket.emit(event, payload, (res) => {
+      clearTimeout(timer);
       if (res?.ok) resolve(res);
       else reject(new Error(res?.message || `${event} failed`));
     });
   });
 }
 
+function withTimeout(promise, ms, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      window.setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]);
+}
+
 let libsPromise = null;
 
 async function loadLiveLibs() {
   if (libsPromise) return libsPromise;
-  libsPromise = Promise.all([
-    import('https://cdn.socket.io/4.8.1/socket.io.esm.min.js'),
-    import('https://esm.sh/mediasoup-client@3.7.17'),
-  ]).then(([socketMod, mediasoupMod]) => ({
-    io: socketMod.io,
-    mediasoupClient: mediasoupMod,
-  })).catch((err) => {
+  libsPromise = withTimeout(
+    Promise.all([
+      import('https://cdn.socket.io/4.8.1/socket.io.esm.min.js'),
+      import('https://esm.sh/mediasoup-client@3.7.17'),
+    ]).then(([socketMod, mediasoupMod]) => ({
+      io: socketMod.io,
+      mediasoupClient: mediasoupMod,
+    })),
+    25000,
+    'Live libraries failed to load — check your connection',
+  ).catch((err) => {
     libsPromise = null;
-    throw new Error(`Live libraries failed to load: ${err.message}`);
+    throw err;
   });
   return libsPromise;
 }
@@ -34,7 +49,16 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
 
   async function connectSocket(rtc, role, userId) {
     const { io } = await loadLiveLibs();
-    const socket = io(rtc.signaling_url, {
+    const signalingUrl = String(rtc.signaling_url || '').replace(/\/$/, '');
+    if (!signalingUrl) {
+      throw new Error('Live signaling URL is missing');
+    }
+    const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (!isLocalHost && /localhost|127\.0\.0\.1/i.test(signalingUrl)) {
+      throw new Error('Live signaling is not configured for this site');
+    }
+
+    const socket = io(signalingUrl, {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 8,

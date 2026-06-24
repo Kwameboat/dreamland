@@ -351,11 +351,18 @@ class CreatorController extends ActiveController
             return $deny;
         }
 
+        /** @var \common\components\DreamlandLiveRtcService $rtc */
+        $rtc = Yii::$app->dreamlandLive;
+        if (!$rtc->isHealthy()) {
+            return [
+                'statusCode' => 503,
+                'message' => 'Dreamland Live server is offline. Set DREAMLAND_LIVE_SERVER_URL in .env and deploy live-server (see DEPLOY.md).',
+            ];
+        }
+
         $userId = (int) Yii::$app->user->identity->id;
         $existing = $this->findActiveLive($userId);
         if ($existing) {
-            /** @var \common\components\DreamlandLiveRtcService $rtc */
-            $rtc = Yii::$app->dreamlandLive;
             $status = $rtc->roomStatus((int) $existing->id);
             $hasActiveHost = is_array($status) && !empty($status['hasHost']);
 
@@ -409,6 +416,15 @@ class CreatorController extends ActiveController
 
         /** @var \common\components\DreamlandLiveRtcService $rtc */
         $rtc = Yii::$app->dreamlandLive;
+        if (!$rtc->isHealthy()) {
+            $live->status = UserLiveHistory::STATUS_COMPLETED;
+            $live->end_time = time();
+            $live->save(false);
+            return [
+                'statusCode' => 503,
+                'message' => 'Dreamland Live server is offline. Set DREAMLAND_LIVE_SERVER_URL in .env and deploy live-server (see DEPLOY.md).',
+            ];
+        }
         if (!$rtc->registerRoom((int) $live->id, $userId, (string) $live->token)) {
             $live->status = UserLiveHistory::STATUS_COMPLETED;
             $live->end_time = time();

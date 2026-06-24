@@ -700,7 +700,9 @@ async function apiUpload(path, formData, options = {}) {
   const file = formData.get('videoFile') || formData.get('imageFile');
   const fileSize = file?.size || 0;
   const timeoutMs = options.timeoutMs
-    ?? Math.min(1800000, Math.max(300000, 300000 + Math.floor(fileSize / 1024)));
+    ?? (fileSize > 0
+      ? Math.min(1800000, Math.max(300000, 300000 + Math.floor(fileSize / 1024)))
+      : 45000);
 
   const parseUploadResponse = (res, text) => {
     let json = {};
@@ -2175,6 +2177,28 @@ async function closeLiveBroadcast(forceEnd = false) {
   setLiveBroadcastUiStage(false);
 }
 
+async function ensureLiveServerReady() {
+  try {
+    const res = await api(API_ROUTES.health, { timeoutMs: 15000 });
+    const checks = res.data?.checks || {};
+    const signaling = String(res.data?.services?.live_signaling || '');
+    const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+    if (checks.live_server === false) {
+      showToast('Live server is offline — contact admin to enable Dreamland Live');
+      return false;
+    }
+    if (!isLocalHost && /localhost|127\.0\.0\.1/i.test(signaling)) {
+      showToast('Live signaling is not configured for production yet');
+      return false;
+    }
+    return true;
+  } catch (err) {
+    showToast(err.message || 'Could not verify live server');
+    return false;
+  }
+}
+
 async function startLiveSession() {
   const title = document.getElementById('live-title')?.value?.trim() || 'Dreamland Live';
   const isMonetized = document.getElementById('live-monetized')?.checked ? '1' : '0';
@@ -2188,15 +2212,20 @@ async function startLiveSession() {
 
   let apiLiveStarted = false;
   try {
+    if (!(await ensureLiveServerReady())) return;
+
     if (!cameraStream) await startLiveBroadcastCamera();
     const form = new FormData();
     form.append('title', title);
     form.append('is_monetized', isMonetized);
     form.append('price_credits', price);
 
-    const res = await apiUpload(API_ROUTES.creatorStartLive, form);
+    const res = await apiUpload(API_ROUTES.creatorStartLive, form, { timeoutMs: 45000 });
     const live = res.data?.live;
     apiLiveStarted = Boolean(live?.id);
+    if (!live?.rtc?.signaling_url) {
+      throw new Error('Live server did not return a signaling URL');
+    }
     if (live?.rtc) {
       const liveClient = await ensureDreamlandLive();
       await liveClient.startBroadcast({
