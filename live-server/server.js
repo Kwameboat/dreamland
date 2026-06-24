@@ -82,6 +82,16 @@ function listenOptions() {
   return [{ ip: listenIp }];
 }
 
+function transportOptions() {
+  const onRender = config.deployTarget === 'render';
+  return {
+    listenIps: listenOptions(),
+    enableUdp: !onRender,
+    enableTcp: true,
+    preferUdp: !onRender,
+  };
+}
+
 async function getOrCreateRoom(liveId, hostUserId) {
   let room = rooms.get(liveId);
   if (!room) {
@@ -238,10 +248,7 @@ async function boot() {
         const direction = payload?.direction === 'recv' ? 'recv' : 'send';
 
         const transport = await room.router.createWebRtcTransport({
-          listenIps: listenOptions(),
-          enableUdp: true,
-          enableTcp: true,
-          preferUdp: true,
+          ...transportOptions(),
           appData: { socketId: socket.id, direction },
         });
 
@@ -401,7 +408,11 @@ async function boot() {
   });
 
   server.listen(config.port, () => {
-    console.log(`Dreamland Live Server on http://localhost:${config.port}`);
+    const target = config.deployTarget || 'local';
+    console.log(`Dreamland Live Server listening on port ${config.port} (${target})`);
+    if (target === 'render') {
+      console.log('Render mode: TCP-only WebRTC — upgrade to Fly.io/VPS if video stays black');
+    }
     console.log('WebRTC SFU ready — no third-party streaming API required');
   });
 }
