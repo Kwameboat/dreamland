@@ -899,13 +899,21 @@
     </div>
   </div>
 
-  <script>window.__DL_BUILD__ = 'build-178245';</script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Glide.js/3.6.0/glide.min.js"></script>
   <script type="module">
     (async function () {
       try {
         if (window.__DL_BOOT_PROMISE__) await window.__DL_BOOT_PROMISE__;
-        await import('/js/app.js?v=build-178245');
+        let build = 'build-dev';
+        try {
+          const res = await fetch('/build-version.json', { cache: 'no-store' });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.version) build = data.version;
+          }
+        } catch { /* use fallback build */ }
+        window.__DL_BUILD__ = build;
+        await import(`/js/app.js?v=${encodeURIComponent(build)}`);
       } catch (err) {
         console.error('Dreamland module load failed:', err);
         window.__DL_LAST_ERROR__ = err.message || String(err);
