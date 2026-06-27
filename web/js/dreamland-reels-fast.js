@@ -50,7 +50,7 @@ export function createFastReelsEngine(ctx) {
       const firstKey = prefetchVideos.keys().next().value;
       const old = prefetchVideos.get(firstKey);
       try {
-        old?._playGen = (old?._playGen || 0) + 1;
+        if (old) old._playGen = (old._playGen || 0) + 1;
         old?.pause?.();
         old?.removeAttribute?.('src');
         old?.load?.();

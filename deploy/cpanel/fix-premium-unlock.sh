@@ -63,3 +63,4 @@ rm -rf "$DL/api/runtime/cache/"* 2>/dev/null || true
 BUILD="$(grep -o 'build-[0-9]*' "$TMP/build-version.json" | head -1 || echo unknown)"
 echo ""
 echo "Done ($BUILD). Hard refresh (Ctrl+Shift+R) after deploy."
+echo "Verify: head -c 80 $WEB/js/dreamland-reels-fast.js"
