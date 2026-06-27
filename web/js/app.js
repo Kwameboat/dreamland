@@ -12,6 +12,7 @@ import { createDreamlandSocial } from './dreamland-social.js';
 import { createDreamlandProfile } from './dreamland-profile.js';
 import { createDreamlandSearch } from './dreamland-search.js';
 import { createDreamlandAccount } from './dreamland-account.js';
+import { createFastReelsEngine, attachHlsToVideo } from './dreamland-reels-fast.js';
 
 const ONBOARDING_KEY = 'has_completed_onboarding';
 const WALKTHROUGH_KEY = 'has_seen_walkthrough';
@@ -407,11 +408,13 @@ function cleanupWarmReelVideos() {
     }
   });
   warmReelVideoEls.length = 0;
+  fastReels?.cleanupWarm?.();
 }
 
 function pauseAllReelVideos(root = els.feedList) {
   root?.querySelectorAll('.reel-video-main, .reel-video-backdrop, .reel-video').forEach((video) => {
     if (video.tagName !== 'VIDEO') return;
+    destroyVideoHls(video);
     try {
       video.pause();
     } catch {
@@ -431,8 +434,10 @@ function resetReelPlaybackSession() {
   }
 }
 
-function warmReelMediaUrls(posts, limit = 3) {
+function warmReelMediaUrls(posts, limit = 5) {
   if (!Array.isArray(posts) || !posts.length) return;
+  initFastReels();
+  fastReels?.prefetchAround?.(fastReels.getActiveIndex?.() ?? 0);
   posts.slice(0, limit).forEach((post) => {
     const url = mediaUrl(post);
     if (!url || prefetchedReelUrls.has(url)) return;
@@ -442,15 +447,15 @@ function warmReelMediaUrls(posts, limit = 3) {
     link.as = 'fetch';
     link.href = url;
     document.head.appendChild(link);
-    if (warmReelVideoEls.length >= 2) return;
-    const video = document.createElement('video');
-    video.preload = 'auto';
-    video.muted = true;
-    video.playsInline = true;
-    video.src = url;
-    video.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none';
-    document.body.appendChild(video);
-    warmReelVideoEls.push(video);
+    const poster = posterUrl(post);
+    if (poster && !prefetchedReelUrls.has(`poster:${poster}`)) {
+      prefetchedReelUrls.add(`poster:${poster}`);
+      const imgLink = document.createElement('link');
+      imgLink.rel = 'preload';
+      imgLink.as = 'image';
+      imgLink.href = poster;
+      document.head.appendChild(imgLink);
+    }
   });
 }
 
@@ -497,6 +502,8 @@ let dreamlandLive = null;
 let feedScrollBound = false;
 let pullRefreshBound = false;
 let pullRefreshing = false;
+let fastReels = null;
+const hlsPlayers = new WeakMap();
 
 async function ensureDreamlandLive() {
   if (dreamlandLive) return dreamlandLive;
@@ -603,6 +610,7 @@ function reelMediaCandidates(post) {
   const filename = gallery?.filename || '';
   const candidates = [];
 
+  if (gallery?.optimizedFilenameUrl) candidates.push(gallery.optimizedFilenameUrl);
   if (gallery?.filenameUrl) candidates.push(gallery.filenameUrl);
   if (gallery?.fileUrl) candidates.push(gallery.fileUrl);
   if (post?.reel_video_url) candidates.push(post.reel_video_url);
@@ -928,6 +936,46 @@ function mediaUrl(post) {
   return direct || candidates[0] || '';
 }
 
+function posterUrl(post) {
+  const gallery = reelGallery(post);
+  return post?.reel_poster_url
+    || gallery?.videoThumbUrl
+    || '';
+}
+
+function hlsUrl(post) {
+  const gallery = reelGallery(post);
+  return post?.reel_hls_url
+    || gallery?.hlsUrl
+    || '';
+}
+
+function initFastReels() {
+  if (fastReels || !els.feedList) return fastReels;
+  fastReels = createFastReelsEngine({
+    feedList: els.feedList,
+    buildReelMarkup,
+    mediaUrl,
+    posterUrl,
+    hlsUrl,
+    getSlotHeight: () => els.feedList?.clientHeight || window.innerHeight,
+    onAfterWindowRender: (container, activeIndex) => {
+      bindRenderedReelInteractions(container);
+      container.querySelectorAll('.reel').forEach((reel) => {
+        const post = state.feed[Number(reel.dataset.index)];
+        if (post) hintReelOrientationFromPost(post, reel);
+        const video = getReelMainVideo(reel);
+        if (video?.tagName === 'VIDEO') wireReelVideoFit(video);
+      });
+      setupReelPlayback();
+      attachReelGamificationCards();
+    },
+    onIndexChange: () => scheduleReelPlaybackSync(),
+  });
+  fastReels.mount();
+  return fastReels;
+}
+
 function getReelMainVideo(reel) {
   return reel?.querySelector('.reel-video-main') || reel?.querySelector('.reel-video:not(.reel-video-backdrop)');
 }
@@ -1098,71 +1146,106 @@ function toggleActiveReelPlayback(reel) {
   flashReelPlayIcon(reel);
 }
 
+async function ensureVideoSourceReady(video) {
+  if (!video || video.tagName !== 'VIDEO') return;
+  const mp4 = video.dataset.mp4Url || video.src;
+  const stream = video.dataset.hlsUrl;
+  if (video.dataset.useHls === '1' && stream) {
+    if (hlsPlayers.has(video)) return;
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = stream;
+      return;
+    }
+    if (window.Hls?.isSupported?.()) {
+      const hls = await attachHlsToVideo(video, stream, window.Hls);
+      if (hls) hlsPlayers.set(video, hls);
+      return;
+    }
+  }
+  if (!video.getAttribute('src') && mp4) {
+    video.src = mp4;
+  }
+}
+
+function destroyVideoHls(video) {
+  const hls = hlsPlayers.get(video);
+  if (hls) {
+    try { hls.destroy(); } catch { /* ignore */ }
+    hlsPlayers.delete(video);
+  }
+}
+
 function playReelVideo(video, { force = false } = {}) {
   if (!video || video.tagName !== 'VIDEO') return;
   video.playsInline = true;
   video.setAttribute('playsinline', '');
   video.setAttribute('webkit-playsinline', '');
 
-  if (!force && !video.paused && !video.ended) {
-    syncReelVideoBackdrop(video);
-    return;
-  }
-
-  video._playGen = (video._playGen || 0) + 1;
-  const gen = video._playGen;
-
-  const wantSound = !(dlSocial?.isMuted?.() ?? false);
-  const canPlaySound = wantSound && (dlSocial?.isAudioUnlocked?.() ?? false);
-
-  const attempt = (forceMuted = false) => {
-    if (gen !== video._playGen) return;
-    const muted = forceMuted || !canPlaySound;
-    video.muted = muted;
-    if (muted) {
-      video.setAttribute('muted', '');
-    } else {
-      video.removeAttribute('muted');
-      video.volume = 1;
-    }
-
-    video.play().then(() => {
-      if (gen !== video._playGen) {
-        video.pause();
-        return;
-      }
+  const startPlayback = () => {
+    if (!force && !video.paused && !video.ended) {
       syncReelVideoBackdrop(video);
-    }).catch((err) => {
-      if (gen !== video._playGen) return;
-      if (!forceMuted) {
-        attempt(true);
-        return;
-      }
-      console.warn('Reel play blocked:', err?.message || err, video.currentSrc || video.src);
-    });
-  };
-
-  if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-    attempt();
-    return;
-  }
-
-  const onReady = () => {
-    if (gen !== video._playGen) return;
-    attempt();
-  };
-  video.addEventListener('canplay', onReady, { once: true });
-  video.addEventListener('error', () => {
-    console.warn('Reel video failed to load:', video.currentSrc || video.src);
-  }, { once: true });
-
-  if (video.readyState < HTMLMediaElement.HAVE_METADATA && video.src) {
-    try {
-      video.load();
-    } catch {
-      attempt();
+      fastReels?.hidePosterForVideo?.(video);
+      return;
     }
-  }
+
+    video._playGen = (video._playGen || 0) + 1;
+    const gen = video._playGen;
+
+    const wantSound = !(dlSocial?.isMuted?.() ?? false);
+    const canPlaySound = wantSound && (dlSocial?.isAudioUnlocked?.() ?? false);
+
+    const attempt = (forceMuted = false) => {
+      if (gen !== video._playGen) return;
+      const muted = forceMuted || !canPlaySound;
+      video.muted = muted;
+      if (muted) {
+        video.setAttribute('muted', '');
+      } else {
+        video.removeAttribute('muted');
+        video.volume = 1;
+      }
+
+      video.play().then(() => {
+        if (gen !== video._playGen) {
+          video.pause();
+          return;
+        }
+        fastReels?.hidePosterForVideo?.(video);
+        syncReelVideoBackdrop(video);
+      }).catch((err) => {
+        if (gen !== video._playGen) return;
+        if (!forceMuted) {
+          attempt(true);
+          return;
+        }
+        console.warn('Reel play blocked:', err?.message || err, video.currentSrc || video.src);
+      });
+    };
+
+    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      attempt();
+      return;
+    }
+
+    const onReady = () => {
+      if (gen !== video._playGen) return;
+      attempt();
+    };
+    video.addEventListener('canplay', onReady, { once: true });
+    video.addEventListener('error', () => {
+      console.warn('Reel video failed to load:', video.currentSrc || video.src);
+    }, { once: true });
+
+    if (video.readyState < HTMLMediaElement.HAVE_METADATA && (video.src || video.dataset.hlsUrl)) {
+      try {
+        video.load();
+      } catch {
+        attempt();
+      }
+    }
+  };
+
+  void ensureVideoSourceReady(video).then(startPlayback);
 }
 
 function showReelVideoError(reel, message) {
@@ -3565,51 +3648,26 @@ const RAIL_ICONS = {
   follow: '<svg viewBox="0 0 24 24"><path d="M16 11c1.7 0 3-1.3 3-3S17.7 5 16 5s-3 1.3-3 3 1.3 3 3 3Z"/><path d="M8 12c1.7 0 3-1.3 3-3S9.7 6 8 6 5 7.3 5 9s1.3 3 3 3Z"/><path d="M2 20c0-3 2.7-5 6-5"/><path d="M10 20c0-2.5 2-4.5 4.5-4.5 1.2 0 2.3.5 3.1 1.2"/></svg>',
 };
 
-function renderFeed() {
-  pauseAllReelVideos();
-  if (reelObserver) {
-    reelObserver.disconnect();
-    reelObserver = null;
-  }
-  activeReelPlaybackId = null;
+function buildReelMarkup(post, index, isActive = false) {
+  const dream = post.dreamland || {};
+  const locked = isLockedPremiumPost(post);
+  const hasMedia = Boolean(mediaUrl(post) || hlsUrl(post));
+  const creator = post.user?.username || post.user?.name || 'creator';
+  const initial = creator.charAt(0).toUpperCase();
+  const price = dream.paywall?.price_credits || post.price_credits || 0;
+  const title = humanizePostText(post.title, 'Dreamland Reel');
+  const desc = humanizePostText(post.description, '');
+  const descHtml = desc && !looksLikeUploadFilename(desc) ? `<p class="reel-desc">${escapeHtml(desc)}</p>` : '';
+  const likes = formatCount(post.total_like);
+  const previewSec = previewSecondsForPost(post);
+  const poster = posterUrl(post);
+  const videoAttrs = locked
+    ? `muted playsinline webkit-playsinline preload="none" data-preview="${previewSec}"`
+    : 'muted playsinline webkit-playsinline preload="none" loop';
 
-  if (!state.feed.length) {
-    const hint = state.feedError
-      || (DEV_ALLOW_BROWSER ? 'Make sure the API is running on port 8080.' : 'The API may need a moment to wake up on Render free tier.');
-    els.feedList.innerHTML = `
-      <div class="empty-feed">
-        <div class="empty-feed-logo-wrap dl-logo-stage dl-logo-stage--feed">
-          <img src="/assets/logo.png" alt="Dreamland" width="140" height="140" class="empty-feed-logo dreamland-logo-img" />
-        </div>
-        <p>No reels loaded yet</p>
-        <p class="muted">${escapeHtml(hint)}</p>
-        <button type="button" id="feed-retry" class="btn-primary">Reload feed</button>
-      </div>`;
-    document.getElementById('feed-retry')?.addEventListener('click', () => loadFeed(true));
-    return;
-  }
-
-  els.feedList.innerHTML = state.feed.map((post, index) => {
-    const dream = post.dreamland || {};
-    const locked = isLockedPremiumPost(post);
-    const src = mediaUrl(post);
-    const creator = post.user?.username || post.user?.name || 'creator';
-    const initial = creator.charAt(0).toUpperCase();
-    const price = dream.paywall?.price_credits || post.price_credits || 0;
-    const title = humanizePostText(post.title, 'Dreamland Reel');
-    const desc = humanizePostText(post.description, '');
-    const descHtml = desc && !looksLikeUploadFilename(desc) ? `<p class="reel-desc">${escapeHtml(desc)}</p>` : '';
-    const likes = formatCount(post.total_like);
-
-    const previewSec = previewSecondsForPost(post);
-    const preload = index === 0 ? 'auto' : index < 5 ? 'metadata' : 'none';
-    const videoAttrs = locked
-      ? `muted playsinline webkit-playsinline preload="${preload}" data-preview="${previewSec}"`
-      : `muted playsinline webkit-playsinline preload="${preload}" loop`;
-
-    return `
-      <article class="reel ${locked ? 'reel--locked reel--previewing' : ''}" data-id="${post.id}" data-price="${price}" data-preview="${previewSec}">
-        ${src ? `<div class="reel-media"><video class="reel-video reel-video-main" src="${escapeHtml(src)}" ${videoAttrs}></video><button type="button" class="reel-play-toggle" aria-label="Pause video" tabindex="-1"><svg class="reel-play-toggle__icon reel-play-toggle__icon--pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg><svg class="reel-play-toggle__icon reel-play-toggle__icon--play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7Z"/></svg></button></div>` : '<div class="reel-media"><div class="reel-video reel-video-main reel-video--empty" style="background:#111"></div></div>'}
+  return `
+      <article class="reel ${locked ? 'reel--locked reel--previewing' : ''} ${isActive ? 'reel--active' : ''}" data-id="${post.id}" data-index="${index}" data-price="${price}" data-preview="${previewSec}">
+        ${hasMedia ? `<div class="reel-media">${poster ? `<img class="reel-poster" src="${escapeHtml(poster)}" alt="" decoding="async" fetchpriority="${index <= 1 ? 'high' : 'low'}" />` : '<img class="reel-poster" alt="" hidden decoding="async" />'}<video class="reel-video reel-video-main" ${videoAttrs}></video><button type="button" class="reel-play-toggle" aria-label="Pause video" tabindex="-1"><svg class="reel-play-toggle__icon reel-play-toggle__icon--pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg><svg class="reel-play-toggle__icon reel-play-toggle__icon--play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7Z"/></svg></button></div>` : '<div class="reel-media"><div class="reel-video reel-video-main reel-video--empty" style="background:#111"></div></div>'}
         <button type="button" class="reel-sound-hint" hidden aria-label="Tap for sound">Tap for sound</button>
         <div class="reel-vignette" aria-hidden="true"></div>
         <div class="reel-gradient"></div>
@@ -3669,44 +3727,63 @@ function renderFeed() {
           </div>
         </div>
       </article>`;
-  }).join('');
+}
 
-  els.feedList.querySelectorAll('.unlock-btn').forEach((btn) => {
+function bindRenderedReelInteractions(container = els.feedList) {
+  if (!container) return;
+  container.querySelectorAll('.unlock-btn').forEach((btn) => {
     btn.onclick = (e) => {
       e.stopPropagation();
       openPaywall(btn.dataset.id, btn.dataset.price);
     };
   });
-
-  els.feedList.querySelectorAll('.guest-gate').forEach((el) => {
+  container.querySelectorAll('.guest-gate').forEach((el) => {
     el.addEventListener('click', (e) => {
       if (el.dataset.action && gateGuest()) e.stopPropagation();
     });
   });
-
-  els.feedList.querySelectorAll('[data-action="follow"]').forEach((btn) => {
+  container.querySelectorAll('[data-action="follow"]').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (gateGuest()) return;
       dlFeatures?.followCreator(btn.dataset.userId);
     });
   });
-
   const postsById = new Map(state.feed.map((p) => [Number(p.id), p]));
-  dlSocial?.bindReelInteractions(els.feedList, postsById, (userId) => dlProfile?.openProfile(userId));
+  dlSocial?.bindReelInteractions(container, postsById, (userId) => dlProfile?.openProfile(userId));
   if (state.token) {
     dlSocial?.syncLikedIds(state.feed.map((p) => p.id));
   }
+}
 
-  attachReelGamificationCards();
-  state.feed.forEach((post) => {
-    const reel = els.feedList.querySelector(`.reel[data-id="${post.id}"]`);
-    if (!reel) return;
-    hintReelOrientationFromPost(post, reel);
-    const video = getReelMainVideo(reel);
-    if (video?.tagName === 'VIDEO') wireReelVideoFit(video);
-  });
-  setupReelPlayback();
+function renderFeed() {
+  pauseAllReelVideos();
+  if (reelObserver) {
+    reelObserver.disconnect();
+    reelObserver = null;
+  }
+  activeReelPlaybackId = null;
+
+  if (!state.feed.length) {
+    els.feedList.classList.remove('reels-feed--virtual');
+    const hint = state.feedError
+      || (DEV_ALLOW_BROWSER ? 'Make sure the API is running on port 8080.' : 'The API may need a moment to wake up on Render free tier.');
+    els.feedList.innerHTML = `
+      <div class="empty-feed">
+        <div class="empty-feed-logo-wrap dl-logo-stage dl-logo-stage--feed">
+          <img src="/assets/logo.png" alt="Dreamland" width="140" height="140" class="empty-feed-logo dreamland-logo-img" />
+        </div>
+        <p>No reels loaded yet</p>
+        <p class="muted">${escapeHtml(hint)}</p>
+        <button type="button" id="feed-retry" class="btn-primary">Reload feed</button>
+      </div>`;
+    document.getElementById('feed-retry')?.addEventListener('click', () => loadFeed(true));
+    return;
+  }
+
+  const keepIndex = fastReels?.getActiveIndex?.() ?? 0;
+  initFastReels();
+  fastReels.setPosts(state.feed, { index: keepIndex });
   scrollToReelFromUrl();
 }
 
@@ -3796,25 +3873,10 @@ function scheduleReelPlaybackSync() {
 function syncActiveReelPlayback() {
   if (!els.feedList || state.feedMode !== 'reels') return;
 
-  const container = els.feedList.getBoundingClientRect();
-  let bestReel = null;
-  let bestVisible = 0;
+  const activeIndex = fastReels?.getActiveIndex?.() ?? 0;
+  const activeId = String(state.feed[activeIndex]?.id || '');
+  if (!activeId) return;
 
-  els.feedList.querySelectorAll('.reel').forEach((reel) => {
-    const rect = reel.getBoundingClientRect();
-    const top = Math.max(rect.top, container.top);
-    const bottom = Math.min(rect.bottom, container.bottom);
-    const visible = Math.max(0, bottom - top);
-    if (visible > bestVisible) {
-      bestVisible = visible;
-      bestReel = reel;
-    }
-  });
-
-  const minVisible = container.height * 0.38;
-  if (!bestReel || bestVisible < minVisible) return;
-
-  const activeId = String(bestReel.dataset.id);
   const activeChanged = activeReelPlaybackId !== activeId;
 
   els.feedList.querySelectorAll('.reel').forEach((reel) => {
@@ -3827,6 +3889,7 @@ function syncActiveReelPlayback() {
       userPausedReels.delete(String(reel.dataset.id));
       reel.classList.remove('reel--user-paused', 'reel--show-play-icon');
       if (!video.paused) video.pause();
+      destroyVideoHls(video);
       syncReelVideoBackdrop(video);
       dlSocial?.stopWatchTracking?.(reel.dataset.id);
       if (reel.classList.contains('reel--previewing') && !reel.classList.contains('reel--preview-ended')) {
@@ -3841,7 +3904,10 @@ function syncActiveReelPlayback() {
     }
 
     const post = state.feed.find((item) => String(item.id) === activeId);
-    if (post) bindReelVideoFallback(video, post);
+    if (post) {
+      bindReelVideoFallback(video, post);
+      fastReels?.attachVideoSources?.(reel, post, true);
+    }
     if (reel.classList.contains('reel--previewing')) {
       const countEl = reel.querySelector('.reel-preview-count');
       const progressFill = reel.querySelector('.reel-preview-progress__fill');
@@ -3871,9 +3937,7 @@ function syncActiveReelPlayback() {
   activeReelPlaybackId = activeId;
 
   dlSocial?.applySoundToActive?.(els.feedList);
-
-  const activeIndex = [...els.feedList.querySelectorAll('.reel')].findIndex((r) => r.dataset.id === activeId);
-  if (activeIndex >= 0) prefetchReelVideos(activeIndex);
+  fastReels?.prefetchAround?.(activeIndex);
 }
 
 function bindFeedGestureAudioUnlock() {
@@ -3895,15 +3959,6 @@ function setupReelPlayback() {
   activeReelPlaybackId = null;
 
   els.feedList.querySelectorAll('.reel--locked.reel--previewing').forEach(setupLockedReelPreview);
-
-  reelObserver = new IntersectionObserver(() => {
-    scheduleReelPlaybackSync();
-  }, {
-    root: els.feedList,
-    threshold: [0.55, 0.75],
-  });
-
-  els.feedList.querySelectorAll('.reel').forEach((reel) => reelObserver.observe(reel));
   scheduleReelPlaybackSync();
 }
 
@@ -4234,6 +4289,10 @@ async function maybeRankFeedClient() {
 }
 
 function scrollToReel(postId) {
+  if (fastReels?.scrollToPostId?.(postId)) {
+    scheduleReelPlaybackSync();
+    return;
+  }
   const reel = els.feedList?.querySelector(`.reel[data-id="${postId}"]`);
   if (reel) {
     reel.scrollIntoView({ behavior: 'smooth', block: 'start' });

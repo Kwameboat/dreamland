@@ -7,6 +7,7 @@ use api\modules\v1\models\PostGallary;
 use api\modules\v1\models\User;
 use api\modules\v1\models\UserLiveHistory;
 use common\components\DreamlandContentReview;
+use common\components\DreamlandVideoProcessor;
 use common\helpers\DreamlandCreatorApproval;
 use common\helpers\DreamlandMediaUrl;
 use common\helpers\DreamlandUploadLimits;
@@ -305,6 +306,33 @@ class CreatorController extends ActiveController
             $post->delete();
 
             return ['statusCode' => 422, 'message' => 'Video could not be attached to your reel. Try again.'];
+        }
+
+        $transcode = DreamlandVideoProcessor::processUploadedReel($storedFilename, (int) $post->id);
+        if ($transcode['status'] !== DreamlandVideoProcessor::STATUS_SKIPPED) {
+            $galleryRow = PostGallary::find()
+                ->where(['post_id' => (int) $post->id, 'media_type' => PostGallary::MEDIA_TYPE_VIDEO])
+                ->orderBy(['is_default' => SORT_DESC, 'id' => SORT_ASC])
+                ->one();
+            if ($galleryRow) {
+                if (!empty($transcode['poster'])) {
+                    $galleryRow->video_thumb = (string) $transcode['poster'];
+                }
+                if (!empty($transcode['optimized'])) {
+                    $galleryRow->optimized_filename = (string) $transcode['optimized'];
+                }
+                if (!empty($transcode['hls_playlist'])) {
+                    $galleryRow->hls_playlist = (string) $transcode['hls_playlist'];
+                }
+                if ((int) ($transcode['width'] ?? 0) > 0) {
+                    $galleryRow->width = (int) $transcode['width'];
+                }
+                if ((int) ($transcode['height'] ?? 0) > 0) {
+                    $galleryRow->height = (int) $transcode['height'];
+                }
+                $galleryRow->transcode_status = (string) ($transcode['status'] ?? DreamlandVideoProcessor::STATUS_FAILED);
+                $galleryRow->save(false);
+            }
         }
 
         $publishMessage = $isPaid

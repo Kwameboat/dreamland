@@ -11,6 +11,79 @@ use Yii;
  */
 class DreamlandMediaUrl
 {
+    public static function cdnBase(): ?string
+    {
+        foreach (['DREAMLAND_CDN_BASE_URL', 'DREAMLAND_UPLOADS_URL', 'DREAMLAND_WASABI_PUBLIC_URL'] as $key) {
+            $value = getenv($key);
+            if (!is_string($value) || trim($value) === '') {
+                continue;
+            }
+            $base = rtrim(trim($value), '/');
+            if ($key === 'DREAMLAND_UPLOADS_URL' && substr($base, -6) === '/image') {
+                $base = substr($base, 0, -6);
+            }
+            return $base;
+        }
+
+        return null;
+    }
+
+    public static function applyCdn(?string $url): ?string
+    {
+        if ($url === null || $url === '') {
+            return $url;
+        }
+        $cdn = self::cdnBase();
+        if ($cdn === null) {
+            return $url;
+        }
+
+        $parts = parse_url($url);
+        if (!is_array($parts) || empty($parts['path'])) {
+            return $url;
+        }
+
+        $path = $parts['path'];
+        if (str_contains($path, '/uploads/')) {
+            $suffix = substr($path, strpos($path, '/uploads/') + strlen('/uploads/'));
+            return $cdn . '/' . ltrim($suffix, '/');
+        }
+        if (preg_match('#/(image|hls)/#', $path)) {
+            return $cdn . $path;
+        }
+
+        return $url;
+    }
+
+    public static function folderPublicBase(string $folder): string
+    {
+        $folder = trim($folder, '/');
+        $cdn = self::cdnBase();
+        if ($cdn !== null) {
+            return $cdn . '/' . $folder;
+        }
+
+        if ($folder === 'image' || $folder === '') {
+            return self::publicUploadsBase('image');
+        }
+
+        if (!DreamlandStorageMode::useLocalDisk() && DreamlandWasabiStorage::isConfigured()) {
+            return DreamlandWasabiStorage::publicFolderUrl($folder);
+        }
+
+        return self::siteBase() . self::apiPublicPath() . '/frontend/web/uploads/' . $folder;
+    }
+
+    public static function fileUrlForFolderFilename(string $folder, string $filename): string
+    {
+        $filename = ltrim(trim($filename), '/');
+        if ($filename === '') {
+            return '';
+        }
+
+        return self::applyCdn(self::folderPublicBase($folder) . '/' . $filename) ?? '';
+    }
+
     public static function apiPublicPath(): string
     {
         $fromEnv = getenv('DREAMLAND_API_PUBLIC_PATH');
@@ -63,6 +136,14 @@ class DreamlandMediaUrl
             return null;
         }
 
+        $gallery = self::defaultVideoGallery($post);
+        if ($gallery && !empty($gallery->optimized_filename)) {
+            $optimized = self::fileUrlForPostFilename((string) $gallery->optimized_filename);
+            if ($optimized !== '') {
+                return $optimized;
+            }
+        }
+
         foreach (self::filenameCandidatesForPost($post) as $filename) {
             $url = self::fileUrlForPostFilename($filename);
             if ($url !== '') {
@@ -71,6 +152,60 @@ class DreamlandMediaUrl
         }
 
         return null;
+    }
+
+    /**
+     * @param \api\modules\v1\models\Post|\common\models\Post|int $post
+     */
+    public static function resolvePostHlsUrl($post): ?string
+    {
+        if (is_numeric($post)) {
+            $post = \api\modules\v1\models\Post::findOne((int) $post);
+        }
+        $gallery = self::defaultVideoGallery($post);
+        if (!$gallery || empty($gallery->hls_playlist)) {
+            return null;
+        }
+
+        $playlist = ltrim((string) $gallery->hls_playlist, '/');
+        $folder = dirname($playlist);
+        $file = basename($playlist);
+        if ($folder === '.' || $folder === '') {
+            return self::fileUrlForFolderFilename('hls', $file);
+        }
+
+        return self::fileUrlForFolderFilename($folder, $file);
+    }
+
+    /**
+     * @param \api\modules\v1\models\Post|\common\models\Post|int $post
+     */
+    public static function resolvePostPosterUrl($post): ?string
+    {
+        if (is_numeric($post)) {
+            $post = \api\modules\v1\models\Post::findOne((int) $post);
+        }
+        $gallery = self::defaultVideoGallery($post);
+        if (!$gallery || empty($gallery->video_thumb)) {
+            return null;
+        }
+
+        return self::fileUrlForPostFilename((string) $gallery->video_thumb);
+    }
+
+    /**
+     * @param \api\modules\v1\models\Post|\common\models\Post|null $post
+     */
+    public static function defaultVideoGallery($post): ?PostGallary
+    {
+        if (!$post) {
+            return null;
+        }
+
+        return PostGallary::find()
+            ->where(['post_id' => (int) $post->id, 'media_type' => PostGallary::MEDIA_TYPE_VIDEO])
+            ->orderBy(['is_default' => SORT_DESC, 'id' => SORT_ASC])
+            ->one();
     }
 
     /**
@@ -89,6 +224,9 @@ class DreamlandMediaUrl
             ->all();
 
         foreach ($galleries as $gallery) {
+            if (!empty($gallery->optimized_filename)) {
+                $names[] = (string) $gallery->optimized_filename;
+            }
             if (!empty($gallery->filename)) {
                 $names[] = (string) $gallery->filename;
             }
@@ -126,14 +264,14 @@ class DreamlandMediaUrl
         }
 
         if (self::localFileExists($filename)) {
-            return self::localPublicUploadsBase('image') . '/' . $filename;
+            return self::applyCdn(self::localPublicUploadsBase('image') . '/' . $filename) ?? '';
         }
 
         if (Yii::$app->has('fileUpload')) {
-            return (string) Yii::$app->fileUpload->getFileUrl(FileUpload::TYPE_POST, $filename);
+            return self::applyCdn((string) Yii::$app->fileUpload->getFileUrl(FileUpload::TYPE_POST, $filename)) ?? '';
         }
 
-        return self::localPublicUploadsBase('image') . '/' . $filename;
+        return self::applyCdn(self::localPublicUploadsBase('image') . '/' . $filename) ?? '';
     }
 
     public static function mediaFileReachable(string $filename): bool

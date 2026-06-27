@@ -35,7 +35,7 @@ class PostGallary extends \yii\db\ActiveRecord
         return [
 
             [['post_id', 'status', 'id', 'type', 'media_type','is_default','width','height'], 'integer'],
-            [['filename','video_thumb'], 'string', 'max' => 256],
+            [['filename','video_thumb','optimized_filename','hls_playlist','transcode_status'], 'string', 'max' => 512],
             [['filename'], 'file', 'skipOnEmpty' => false, 'on' => 'uploadFile'],
             //[['filename'], 'file', 'skipOnEmpty' => false, 'extensions' => 'mp4', 'maxSize' => '2048000', 'on' => 'uploadVideo'],
         ];
@@ -59,6 +59,8 @@ class PostGallary extends \yii\db\ActiveRecord
         $fields = parent::fields();
         $fields[] = "filenameUrl";
         $fields[] = "videoThumbUrl";
+        $fields[] = "optimizedFilenameUrl";
+        $fields[] = "hlsUrl";
 
 
         return $fields;
@@ -69,22 +71,32 @@ class PostGallary extends \yii\db\ActiveRecord
         if($this->filename){
             if($this->media_type == PostGallary::MEDIA_TYPE_GIF){
                 return $this->filename;
-            }else{
-                
-                return Yii::$app->fileUpload->getFileUrl(Yii::$app->fileUpload::TYPE_POST,$this->filename);
             }
-            
+            return \common\helpers\DreamlandMediaUrl::fileUrlForPostFilename($this->filename);
         }
      }
 
      public function getVideoThumbUrl(){
         if($this->video_thumb){
-            
-            
-            return Yii::$app->fileUpload->getFileUrl(Yii::$app->fileUpload::TYPE_POST,$this->video_thumb);
-
-            //return Yii::$app->params['pathUploadImage'] ."/".$this->video_thumb;
+            return \common\helpers\DreamlandMediaUrl::fileUrlForPostFilename($this->video_thumb);
         }
+     }
+
+     public function getOptimizedFilenameUrl(){
+        if($this->optimized_filename){
+            return \common\helpers\DreamlandMediaUrl::fileUrlForPostFilename($this->optimized_filename);
+        }
+     }
+
+     public function getHlsUrl(){
+        if(!$this->hls_playlist){
+            return null;
+        }
+        $playlist = ltrim((string) $this->hls_playlist, '/');
+        $parts = explode('/', $playlist);
+        $file = array_pop($parts);
+        $folder = $parts ? implode('/', $parts) : 'hls';
+        return \common\helpers\DreamlandMediaUrl::fileUrlForFolderFilename($folder, $file);
      }
 
    
@@ -110,6 +122,9 @@ class PostGallary extends \yii\db\ActiveRecord
             $dataInner['media_type'] = $image['media_type'];
             $dataInner['filename'] = $image['filename'];
             $dataInner['video_thumb'] = $image['video_thumb'] ?? '';
+            $dataInner['optimized_filename'] = $image['optimized_filename'] ?? '';
+            $dataInner['hls_playlist'] = $image['hls_playlist'] ?? '';
+            $dataInner['transcode_status'] = $image['transcode_status'] ?? 'pending';
 
             if (!empty($image['is_default']) && !$isDefaultSet) {
                 $isDefaultSet = true;
@@ -133,7 +148,7 @@ class PostGallary extends \yii\db\ActiveRecord
 
             Yii::$app->db
                 ->createCommand()
-                ->batchInsert('post_gallary', ['post_id','type', 'media_type', 'filename','video_thumb','is_default', 'created_at','status','width','height'], $values)
+                ->batchInsert('post_gallary', ['post_id','type', 'media_type', 'filename','video_thumb','optimized_filename','hls_playlist','transcode_status','is_default', 'created_at','status','width','height'], $values)
                 ->execute();
         }
     }

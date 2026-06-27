@@ -18,7 +18,8 @@
   <link rel="dns-prefetch" href="https://dreamlandgh.app" />
   <link rel="preconnect" href="https://dreamland-t1ck.onrender.com" />
   <link rel="dns-prefetch" href="https://dreamland-t1ck.onrender.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js" defer></script>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" /></noscript>
   <link rel="preload" href="/css/app.css?v=69" as="style" />
@@ -45,6 +46,7 @@
       }
       addPreconnect(env.api, false);
       addPreconnect(env.uploads, true);
+      addPreconnect(env.cdn || env.uploads, true);
 
       function resolveApiBase() {
         if (window.__DL_API__) return String(window.__DL_API__).replace(/\/$/, '');
@@ -892,13 +894,13 @@
     </div>
   </div>
 
-  <script>window.__DL_BUILD__ = 'build-178244';</script>
+  <script>window.__DL_BUILD__ = 'build-178245';</script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Glide.js/3.6.0/glide.min.js"></script>
   <script type="module">
     (async function () {
       try {
         if (window.__DL_BOOT_PROMISE__) await window.__DL_BOOT_PROMISE__;
-        await import('/js/app.js?v=build-178244');
+        await import('/js/app.js?v=build-178245');
       } catch (err) {
         console.error('Dreamland module load failed:', err);
         window.__DL_LAST_ERROR__ = err.message || String(err);

@@ -164,6 +164,12 @@ class Post extends \yii\db\ActiveRecord
         $fields['reel_video_url'] = static function ($model) {
             return DreamlandMediaUrl::resolvePostVideoUrl($model);
         };
+        $fields['reel_hls_url'] = static function ($model) {
+            return DreamlandMediaUrl::resolvePostHlsUrl($model);
+        };
+        $fields['reel_poster_url'] = static function ($model) {
+            return DreamlandMediaUrl::resolvePostPosterUrl($model);
+        };
         $fields['is_like'] = (function ($model) {
             return self::safeFlagRelation($model, 'isLike');
         });
