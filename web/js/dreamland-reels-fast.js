@@ -50,6 +50,7 @@ export function createFastReelsEngine(ctx) {
       const firstKey = prefetchVideos.keys().next().value;
       const old = prefetchVideos.get(firstKey);
       try {
+        old?._playGen = (old?._playGen || 0) + 1;
         old?.pause?.();
         old?.removeAttribute?.('src');
         old?.load?.();
@@ -61,6 +62,7 @@ export function createFastReelsEngine(ctx) {
     const video = document.createElement('video');
     video.preload = 'auto';
     video.muted = true;
+    video.setAttribute('muted', '');
     video.playsInline = true;
     video.setAttribute('playsinline', '');
     video.src = url;
@@ -131,6 +133,7 @@ export function createFastReelsEngine(ctx) {
     const prevScroll = feedList.scrollTop;
 
     rendering = true;
+    ctx.onBeforeWindowRender?.();
     const parts = [];
     parts.push(`<div class="reels-v-spacer reels-v-spacer--top" style="height:${startIndex * h}px" aria-hidden="true"></div>`);
 

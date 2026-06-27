@@ -82,11 +82,18 @@ export function createDreamlandSocial(ctx) {
   }
 
   function applySoundToActive(container) {
-    container?.querySelectorAll('.reel-video-main, .reel-video:not(.reel-video-backdrop)').forEach((video) => {
-      if (video.tagName !== 'VIDEO') return;
-      const reel = video.closest('.reel');
-      const active = reel?.classList.contains('reel--active');
-      const shouldMute = feedMuted || !active || !audioUnlocked;
+    container?.querySelectorAll('.reel').forEach((reel) => {
+      const video = reel.querySelector('.reel-video-main, .reel-video:not(.reel-video-backdrop)');
+      if (video?.tagName !== 'VIDEO') return;
+      const active = reel.classList.contains('reel--active');
+      if (!active) {
+        if (!video.paused) {
+          try { video.pause(); } catch { /* ignore */ }
+        }
+        setVideoMuted(video, true);
+        return;
+      }
+      const shouldMute = feedMuted || !audioUnlocked;
       setVideoMuted(video, shouldMute);
     });
     syncSoundHints(container);

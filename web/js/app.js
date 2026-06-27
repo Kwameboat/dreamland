@@ -430,15 +430,43 @@ function cleanupWarmReelVideos() {
   fastReels?.cleanupWarm?.();
 }
 
-function pauseAllReelVideos(root = els.feedList) {
-  root?.querySelectorAll('.reel-video-main, .reel-video-backdrop, .reel-video').forEach((video) => {
-    if (video.tagName !== 'VIDEO') return;
-    destroyVideoHls(video);
+function stopReelVideo(video, { resetPreview = false } = {}) {
+  if (!video || video.tagName !== 'VIDEO') return;
+  video._playGen = (video._playGen || 0) + 1;
+  destroyVideoHls(video);
+  try {
+    video.pause();
+  } catch {
+    /* ignore */
+  }
+  video.muted = true;
+  video.setAttribute('muted', '');
+  const reel = video.closest('.reel');
+  const backdrop = reel?.querySelector('.reel-video-backdrop');
+  if (backdrop?.tagName === 'VIDEO') {
     try {
-      video.pause();
+      backdrop.pause();
     } catch {
       /* ignore */
     }
+    backdrop.muted = true;
+    backdrop.setAttribute('muted', '');
+  }
+  if (resetPreview && reel?.classList.contains('reel--previewing') && !reel.classList.contains('reel--preview-ended')) {
+    try {
+      video.currentTime = 0;
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function pauseAllReelVideos(root = els.feedList) {
+  const seen = new Set();
+  root?.querySelectorAll('.reel-video-main, .reel-video-backdrop, .reel-video').forEach((video) => {
+    if (video.tagName !== 'VIDEO' || seen.has(video)) return;
+    seen.add(video);
+    stopReelVideo(video);
   });
 }
 
@@ -978,6 +1006,10 @@ function initFastReels() {
     posterUrl,
     hlsUrl,
     getSlotHeight: () => els.feedList?.clientHeight || window.innerHeight,
+    onBeforeWindowRender: () => {
+      pauseAllReelVideos();
+      cleanupWarmReelVideos();
+    },
     onAfterWindowRender: (container, activeIndex) => {
       bindRenderedReelInteractions(container);
       container.querySelectorAll('.reel').forEach((reel) => {
@@ -3889,10 +3921,18 @@ function scheduleReelPlaybackSync() {
   });
 }
 
+function getEffectiveActiveReelIndex() {
+  if (!els.feedList || !state.feed.length) return fastReels?.getActiveIndex?.() ?? 0;
+  const h = els.feedList.clientHeight || window.innerHeight;
+  if (!h) return fastReels?.getActiveIndex?.() ?? 0;
+  const idx = Math.round(els.feedList.scrollTop / h);
+  return Math.max(0, Math.min(state.feed.length - 1, idx));
+}
+
 function syncActiveReelPlayback() {
   if (!els.feedList || state.feedMode !== 'reels') return;
 
-  const activeIndex = fastReels?.getActiveIndex?.() ?? 0;
+  const activeIndex = getEffectiveActiveReelIndex();
   const activeId = String(state.feed[activeIndex]?.id || '');
   if (!activeId) return;
 
@@ -3907,12 +3947,10 @@ function syncActiveReelPlayback() {
     if (!active) {
       userPausedReels.delete(String(reel.dataset.id));
       reel.classList.remove('reel--user-paused', 'reel--show-play-icon');
-      if (!video.paused) video.pause();
-      destroyVideoHls(video);
+      stopReelVideo(video, { resetPreview: true });
       syncReelVideoBackdrop(video);
       dlSocial?.stopWatchTracking?.(reel.dataset.id);
       if (reel.classList.contains('reel--previewing') && !reel.classList.contains('reel--preview-ended')) {
-        video.currentTime = 0;
         const countEl = reel.querySelector('.reel-preview-count');
         const progressFill = reel.querySelector('.reel-preview-progress__fill');
         const seconds = Number(video.dataset.preview) || dlFeatures?.getPreviewSeconds?.() || PREVIEW_SECONDS;
@@ -3935,7 +3973,7 @@ function syncActiveReelPlayback() {
       if (progressFill) progressFill.style.width = '0%';
     }
     if (isReelUserPaused(reel)) {
-      if (!video.paused) video.pause();
+      stopReelVideo(video);
       syncReelVideoBackdrop(video);
       updateReelPlayPauseUi(reel, true);
       return;
