@@ -395,6 +395,42 @@ const FEED_CACHE_MAX_ITEMS = 30;
 const prefetchedReelUrls = new Set();
 const warmReelVideoEls = [];
 
+function cleanupWarmReelVideos() {
+  warmReelVideoEls.forEach((video) => {
+    try {
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+      video.remove();
+    } catch {
+      /* ignore */
+    }
+  });
+  warmReelVideoEls.length = 0;
+}
+
+function pauseAllReelVideos(root = els.feedList) {
+  root?.querySelectorAll('.reel-video-main, .reel-video-backdrop, .reel-video').forEach((video) => {
+    if (video.tagName !== 'VIDEO') return;
+    try {
+      video.pause();
+    } catch {
+      /* ignore */
+    }
+  });
+}
+
+function resetReelPlaybackSession() {
+  userPausedReels.clear();
+  activeReelPlaybackId = null;
+  dlSocial?.stopAllWatchTracking?.();
+  pauseAllReelVideos();
+  if (reelObserver) {
+    reelObserver.disconnect();
+    reelObserver = null;
+  }
+}
+
 function warmReelMediaUrls(posts, limit = 3) {
   if (!Array.isArray(posts) || !posts.length) return;
   posts.slice(0, limit).forEach((post) => {
@@ -433,6 +469,8 @@ function isLockedPremiumPost(post) {
 }
 let reelObserver = null;
 let reelScrollRaf = 0;
+let activeReelPlaybackId = null;
+const userPausedReels = new Set();
 let feedGestureBound = false;
 let toastTimer = null;
 let authMode = 'signin';
@@ -1007,8 +1045,6 @@ function hintReelOrientationFromPost(post, reel) {
   if (orientation) setReelOrientation(reel, orientation);
 }
 
-const userPausedReels = new Set();
-
 function isReelUserPaused(reel) {
   return Boolean(reel?.dataset?.id && userPausedReels.has(String(reel.dataset.id)));
 }
@@ -1049,7 +1085,7 @@ function toggleActiveReelPlayback(reel) {
 
   if (isReelUserPaused(reel) || video.paused) {
     setReelUserPaused(reel, false);
-    playReelVideo(video);
+    playReelVideo(video, { force: true });
     dlSocial?.startWatchTracking?.(reel, reel.dataset.id);
     flashReelPlayIcon(reel);
     return;
@@ -1062,16 +1098,25 @@ function toggleActiveReelPlayback(reel) {
   flashReelPlayIcon(reel);
 }
 
-function playReelVideo(video) {
+function playReelVideo(video, { force = false } = {}) {
   if (!video || video.tagName !== 'VIDEO') return;
   video.playsInline = true;
   video.setAttribute('playsinline', '');
   video.setAttribute('webkit-playsinline', '');
 
+  if (!force && !video.paused && !video.ended) {
+    syncReelVideoBackdrop(video);
+    return;
+  }
+
+  video._playGen = (video._playGen || 0) + 1;
+  const gen = video._playGen;
+
   const wantSound = !(dlSocial?.isMuted?.() ?? false);
   const canPlaySound = wantSound && (dlSocial?.isAudioUnlocked?.() ?? false);
 
   const attempt = (forceMuted = false) => {
+    if (gen !== video._playGen) return;
     const muted = forceMuted || !canPlaySound;
     video.muted = muted;
     if (muted) {
@@ -1082,8 +1127,13 @@ function playReelVideo(video) {
     }
 
     video.play().then(() => {
+      if (gen !== video._playGen) {
+        video.pause();
+        return;
+      }
       syncReelVideoBackdrop(video);
     }).catch((err) => {
+      if (gen !== video._playGen) return;
       if (!forceMuted) {
         attempt(true);
         return;
@@ -1097,8 +1147,11 @@ function playReelVideo(video) {
     return;
   }
 
-  video.addEventListener('loadeddata', () => attempt(), { once: true });
-  video.addEventListener('canplay', () => attempt(), { once: true });
+  const onReady = () => {
+    if (gen !== video._playGen) return;
+    attempt();
+  };
+  video.addEventListener('canplay', onReady, { once: true });
   video.addEventListener('error', () => {
     console.warn('Reel video failed to load:', video.currentSrc || video.src);
   }, { once: true });
@@ -1109,8 +1162,6 @@ function playReelVideo(video) {
     } catch {
       attempt();
     }
-  } else {
-    attempt();
   }
 }
 
@@ -3515,6 +3566,13 @@ const RAIL_ICONS = {
 };
 
 function renderFeed() {
+  pauseAllReelVideos();
+  if (reelObserver) {
+    reelObserver.disconnect();
+    reelObserver = null;
+  }
+  activeReelPlaybackId = null;
+
   if (!state.feed.length) {
     const hint = state.feedError
       || (DEV_ALLOW_BROWSER ? 'Make sure the API is running on port 8080.' : 'The API may need a moment to wake up on Render free tier.');
@@ -3756,37 +3814,20 @@ function syncActiveReelPlayback() {
   const minVisible = container.height * 0.38;
   if (!bestReel || bestVisible < minVisible) return;
 
-  const activeId = bestReel.dataset.id;
+  const activeId = String(bestReel.dataset.id);
+  const activeChanged = activeReelPlaybackId !== activeId;
+
   els.feedList.querySelectorAll('.reel').forEach((reel) => {
     const video = getReelMainVideo(reel);
-    const active = reel === bestReel;
+    const active = String(reel.dataset.id) === activeId;
     reel.classList.toggle('reel--active', active);
     if (!video || video.tagName !== 'VIDEO') return;
 
-    if (active) {
-      const post = state.feed.find((item) => String(item.id) === String(reel.dataset.id));
-      if (post) bindReelVideoFallback(video, post);
-      if (reel.classList.contains('reel--previewing')) {
-        const countEl = reel.querySelector('.reel-preview-count');
-        const progressFill = reel.querySelector('.reel-preview-progress__fill');
-        const seconds = Number(video.dataset.preview) || dlFeatures?.getPreviewSeconds?.() || PREVIEW_SECONDS;
-        if (countEl) countEl.textContent = String(seconds);
-        if (progressFill) progressFill.style.width = '0%';
-      }
-      if (isReelUserPaused(reel)) {
-        video.pause();
-        syncReelVideoBackdrop(video);
-        updateReelPlayPauseUi(reel, true);
-      } else {
-        playReelVideo(video);
-        updateReelPlayPauseUi(reel, false);
-        dlSocial?.recordView?.(reel.dataset.id);
-        dlSocial?.startWatchTracking?.(reel, reel.dataset.id);
-      }
-    } else {
+    if (!active) {
       userPausedReels.delete(String(reel.dataset.id));
       reel.classList.remove('reel--user-paused', 'reel--show-play-icon');
-      video.pause();
+      if (!video.paused) video.pause();
+      syncReelVideoBackdrop(video);
       dlSocial?.stopWatchTracking?.(reel.dataset.id);
       if (reel.classList.contains('reel--previewing') && !reel.classList.contains('reel--preview-ended')) {
         video.currentTime = 0;
@@ -3796,13 +3837,40 @@ function syncActiveReelPlayback() {
         if (countEl) countEl.textContent = String(seconds);
         if (progressFill) progressFill.style.width = '0%';
       }
+      return;
+    }
+
+    const post = state.feed.find((item) => String(item.id) === activeId);
+    if (post) bindReelVideoFallback(video, post);
+    if (reel.classList.contains('reel--previewing')) {
+      const countEl = reel.querySelector('.reel-preview-count');
+      const progressFill = reel.querySelector('.reel-preview-progress__fill');
+      const seconds = Number(video.dataset.preview) || dlFeatures?.getPreviewSeconds?.() || PREVIEW_SECONDS;
+      if (countEl) countEl.textContent = String(seconds);
+      if (progressFill) progressFill.style.width = '0%';
+    }
+    if (isReelUserPaused(reel)) {
+      if (!video.paused) video.pause();
+      syncReelVideoBackdrop(video);
+      updateReelPlayPauseUi(reel, true);
+      return;
+    }
+
+    updateReelPlayPauseUi(reel, false);
+    if (activeChanged || video.paused) {
+      playReelVideo(video);
+      if (activeChanged) {
+        dlSocial?.recordView?.(reel.dataset.id);
+        dlSocial?.startWatchTracking?.(reel, reel.dataset.id);
+      }
+    } else {
+      syncReelVideoBackdrop(video);
     }
   });
 
+  activeReelPlaybackId = activeId;
+
   dlSocial?.applySoundToActive?.(els.feedList);
-  if (!dlSocial?.isMuted?.() && dlSocial?.isAudioUnlocked?.()) {
-    dlSocial?.resumeActiveReelAudio?.(els.feedList);
-  }
 
   const activeIndex = [...els.feedList.querySelectorAll('.reel')].findIndex((r) => r.dataset.id === activeId);
   if (activeIndex >= 0) prefetchReelVideos(activeIndex);
@@ -3824,6 +3892,7 @@ function bindFeedGestureAudioUnlock() {
 function setupReelPlayback() {
   if (reelObserver) reelObserver.disconnect();
   dlSocial?.stopAllWatchTracking?.();
+  activeReelPlaybackId = null;
 
   els.feedList.querySelectorAll('.reel--locked.reel--previewing').forEach(setupLockedReelPreview);
 
@@ -3831,7 +3900,7 @@ function setupReelPlayback() {
     scheduleReelPlaybackSync();
   }, {
     root: els.feedList,
-    threshold: [0.35, 0.55, 0.75, 1],
+    threshold: [0.55, 0.75],
   });
 
   els.feedList.querySelectorAll('.reel').forEach((reel) => reelObserver.observe(reel));
@@ -4112,9 +4181,9 @@ async function loadFeed(force = false, append = false, opts = {}) {
       if (!append) warmReelMediaUrls(items, 3);
     }
 
-    if (state.feedSource === 'foryou' && state.feed.length > 1 && dlAi?.isEnabled?.()) {
-      void maybeRankFeedClient().then(() => {
-        if (state.feed.length) renderFeed();
+    if (state.feedSource === 'foryou' && state.feed.length > 1 && dlAi?.isEnabled?.() && !opts.skipAiRank) {
+      void maybeRankFeedClient().then((reordered) => {
+        if (reordered && state.feed.length) renderFeed();
       });
     }
 
@@ -4132,8 +4201,9 @@ async function loadFeed(force = false, append = false, opts = {}) {
 }
 
 async function maybeRankFeedClient() {
-  if (!state.token || state.feed.length < 2) return;
+  if (!state.token || state.feed.length < 2) return false;
   try {
+    const before = state.feed.slice(0, 20).map((p) => Number(p.id)).join(',');
     const res = await api(API_ROUTES.aiRankFeed, {
       method: 'POST',
       body: JSON.stringify({
@@ -4156,8 +4226,11 @@ async function maybeRankFeedClient() {
       const byId = new Map(state.feed.map((p) => [Number(p.id), p]));
       const head = ranked.map((r) => byId.get(Number(r.id))).filter(Boolean);
       state.feed = [...head, ...tail];
+      const after = state.feed.slice(0, 20).map((p) => Number(p.id)).join(',');
+      return before !== after;
     }
   } catch { /* SQL order fallback */ }
+  return false;
 }
 
 function scrollToReel(postId) {
@@ -4914,6 +4987,8 @@ function bindLiveBroadcastUi() {
 async function refreshAppFromPull() {
   window.__DL_FEED_PREFETCH__ = null;
   const feedList = els.feedList || document.getElementById('feed-list');
+  resetReelPlaybackSession();
+  cleanupWarmReelVideos();
   if (feedList) feedList.scrollTop = 0;
 
   try {
@@ -4944,7 +5019,7 @@ async function refreshAppFromPull() {
   while (state.feedLoading) {
     await new Promise((resolve) => window.setTimeout(resolve, 80));
   }
-  await loadFeed(true, false, { usePrefetch: false });
+  await loadFeed(true, false, { usePrefetch: false, skipAiRank: true });
   showToast('Feed updated');
 }
 
