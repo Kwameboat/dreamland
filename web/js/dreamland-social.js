@@ -4,6 +4,7 @@
 export function createDreamlandSocial(ctx) {
   const {
     api, API_ROUTES, state, showToast, gateGuest, formatCount, escapeHtml, UPLOADS_BASE,
+    toggleReelPlayback,
   } = ctx;
 
   const LIKED_KEY = 'dl_liked_posts';
@@ -324,7 +325,7 @@ export function createDreamlandSocial(ctx) {
       });
 
       let lastTap = 0;
-      const video = reel.querySelector('.reel-video');
+      let singleTapTimer = 0;
       const feedRoot = reel.closest('#feed-list') || reel.parentElement;
       reel.querySelector('.reel-sound-hint')?.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -332,18 +333,38 @@ export function createDreamlandSocial(ctx) {
         unlockAudio(feedRoot);
         showToast('Sound on');
       });
-      video?.addEventListener('click', (e) => {
+
+      reel.querySelector('.reel-play-toggle')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleReelPlayback?.(reel);
+      });
+
+      const media = reel.querySelector('.reel-media');
+      media?.addEventListener('click', (e) => {
+        if (e.target.closest('.reel-rail, .reel-unlock, .unlock-btn, .reel-play-toggle')) return;
         const now = Date.now();
         if (now - lastTap < 320) {
           e.preventDefault();
+          clearTimeout(singleTapTimer);
           showHeartBurst(reel, e.clientX, e.clientY);
           if (!isLiked(postId)) toggleLike(postId, likeBtn, likeCount);
-        } else if (reel.classList.contains('reel--active') && (feedMuted || !audioUnlocked || video.muted)) {
-          if (feedMuted) setMuted(false);
-          unlockAudio(feedRoot);
-          showToast('Sound on');
+          lastTap = 0;
+          return;
         }
         lastTap = now;
+        clearTimeout(singleTapTimer);
+        singleTapTimer = window.setTimeout(() => {
+          if (lastTap !== now) return;
+          if (!reel.classList.contains('reel--active')) return;
+          const mainVideo = reel.querySelector('.reel-video-main, .reel-video:not(.reel-video-backdrop)');
+          if (feedMuted || !audioUnlocked || mainVideo?.muted) {
+            if (feedMuted) setMuted(false);
+            unlockAudio(feedRoot);
+            showToast('Sound on');
+            return;
+          }
+          toggleReelPlayback?.(reel);
+        }, 320);
       });
 
       reel.addEventListener('contextmenu', (e) => {

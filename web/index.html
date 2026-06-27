@@ -294,6 +294,10 @@
 
     <main id="views" class="dl-main">
       <section id="feed-view" class="view view-feed active">
+        <div id="feed-pull-indicator" class="feed-pull-indicator" hidden aria-hidden="true">
+          <span class="feed-pull-indicator__spinner" aria-hidden="true"></span>
+          <span class="feed-pull-indicator__label">Pull to refresh</span>
+        </div>
         <div id="feed-list" class="reels-feed feed-mode-panel feed-mode-panel--active" data-feed-mode="reels" aria-live="polite">
           <div class="live-loading glass-card" style="margin:16px;padding:16px">
             <p class="eyebrow">Watch</p>
@@ -888,12 +892,13 @@
     </div>
   </div>
 
+  <script>window.__DL_BUILD__ = 'build-178243';</script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Glide.js/3.6.0/glide.min.js"></script>
   <script type="module">
     (async function () {
       try {
         if (window.__DL_BOOT_PROMISE__) await window.__DL_BOOT_PROMISE__;
-        await import('/js/app.js?v=build-178242');
+        await import('/js/app.js?v=build-178243');
       } catch (err) {
         console.error('Dreamland module load failed:', err);
         window.__DL_LAST_ERROR__ = err.message || String(err);

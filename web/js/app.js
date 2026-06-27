@@ -457,6 +457,8 @@ let dlSearch = null;
 let dlAccount = null;
 let dreamlandLive = null;
 let feedScrollBound = false;
+let pullRefreshBound = false;
+let pullRefreshing = false;
 
 async function ensureDreamlandLive() {
   if (dreamlandLive) return dreamlandLive;
@@ -1003,6 +1005,61 @@ function wireReelVideoFit(video) {
 function hintReelOrientationFromPost(post, reel) {
   const orientation = classifyReelAspect(reelAspectFromPost(post));
   if (orientation) setReelOrientation(reel, orientation);
+}
+
+const userPausedReels = new Set();
+
+function isReelUserPaused(reel) {
+  return Boolean(reel?.dataset?.id && userPausedReels.has(String(reel.dataset.id)));
+}
+
+function flashReelPlayIcon(reel) {
+  if (!reel) return;
+  reel.classList.add('reel--show-play-icon');
+  clearTimeout(reel._playIconTimer);
+  reel._playIconTimer = window.setTimeout(() => {
+    reel.classList.remove('reel--show-play-icon');
+  }, 750);
+}
+
+function updateReelPlayPauseUi(reel, paused) {
+  if (!reel) return;
+  reel.classList.toggle('reel--user-paused', paused);
+  const btn = reel.querySelector('.reel-play-toggle');
+  if (btn) {
+    btn.setAttribute('aria-label', paused ? 'Play video' : 'Pause video');
+  }
+  if (paused && reel.classList.contains('reel--active')) {
+    flashReelPlayIcon(reel);
+  }
+}
+
+function setReelUserPaused(reel, paused) {
+  if (!reel?.dataset?.id) return;
+  const id = String(reel.dataset.id);
+  if (paused) userPausedReels.add(id);
+  else userPausedReels.delete(id);
+  updateReelPlayPauseUi(reel, paused);
+}
+
+function toggleActiveReelPlayback(reel) {
+  if (!reel?.classList.contains('reel--active')) return;
+  const video = getReelMainVideo(reel);
+  if (!video || video.tagName !== 'VIDEO') return;
+
+  if (isReelUserPaused(reel) || video.paused) {
+    setReelUserPaused(reel, false);
+    playReelVideo(video);
+    dlSocial?.startWatchTracking?.(reel, reel.dataset.id);
+    flashReelPlayIcon(reel);
+    return;
+  }
+
+  video.pause();
+  syncReelVideoBackdrop(video);
+  setReelUserPaused(reel, true);
+  dlSocial?.stopWatchTracking?.(reel.dataset.id);
+  flashReelPlayIcon(reel);
 }
 
 function playReelVideo(video) {
@@ -3247,6 +3304,7 @@ function bootMainApp() {
     dlAi = createDreamlandAi({ api, API_ROUTES, state, showToast, escapeHtml });
     dlSocial = createDreamlandSocial({
       api, API_ROUTES, state, showToast, gateGuest, formatCount, escapeHtml, UPLOADS_BASE,
+      toggleReelPlayback: toggleActiveReelPlayback,
     });
     dlProfile = createDreamlandProfile({
       api, API_ROUTES, state, showToast, gateGuest, escapeHtml, formatCount, mediaUrl, openPaywall, switchView, UPLOADS_BASE,
@@ -3276,6 +3334,7 @@ function bootMainApp() {
     els.appShell?.classList.add('app-shell--feed-nav');
     updateAuthUi();
     bindFeedScroll();
+    bindFeedPullRefresh();
     bindFeedGestureAudioUnlock();
     loadReferralFromUrl();
     updateFeedHeaderUi();
@@ -3492,7 +3551,7 @@ function renderFeed() {
 
     return `
       <article class="reel ${locked ? 'reel--locked reel--previewing' : ''}" data-id="${post.id}" data-price="${price}" data-preview="${previewSec}">
-        ${src ? `<div class="reel-media"><video class="reel-video reel-video-main" src="${escapeHtml(src)}" ${videoAttrs}></video></div>` : '<div class="reel-media"><div class="reel-video reel-video-main reel-video--empty" style="background:#111"></div></div>'}
+        ${src ? `<div class="reel-media"><video class="reel-video reel-video-main" src="${escapeHtml(src)}" ${videoAttrs}></video><button type="button" class="reel-play-toggle" aria-label="Pause video" tabindex="-1"><svg class="reel-play-toggle__icon reel-play-toggle__icon--pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg><svg class="reel-play-toggle__icon reel-play-toggle__icon--play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7Z"/></svg></button></div>` : '<div class="reel-media"><div class="reel-video reel-video-main reel-video--empty" style="background:#111"></div></div>'}
         <button type="button" class="reel-sound-hint" hidden aria-label="Tap for sound">Tap for sound</button>
         <div class="reel-vignette" aria-hidden="true"></div>
         <div class="reel-gradient"></div>
@@ -3714,10 +3773,19 @@ function syncActiveReelPlayback() {
         if (countEl) countEl.textContent = String(seconds);
         if (progressFill) progressFill.style.width = '0%';
       }
-      playReelVideo(video);
-      dlSocial?.recordView?.(reel.dataset.id);
-      dlSocial?.startWatchTracking?.(reel, reel.dataset.id);
+      if (isReelUserPaused(reel)) {
+        video.pause();
+        syncReelVideoBackdrop(video);
+        updateReelPlayPauseUi(reel, true);
+      } else {
+        playReelVideo(video);
+        updateReelPlayPauseUi(reel, false);
+        dlSocial?.recordView?.(reel.dataset.id);
+        dlSocial?.startWatchTracking?.(reel, reel.dataset.id);
+      }
     } else {
+      userPausedReels.delete(String(reel.dataset.id));
+      reel.classList.remove('reel--user-paused', 'reel--show-play-icon');
       video.pause();
       dlSocial?.stopWatchTracking?.(reel.dataset.id);
       if (reel.classList.contains('reel--previewing') && !reel.classList.contains('reel--preview-ended')) {
@@ -4116,6 +4184,85 @@ function bindFeedScroll() {
     const nearBottom = els.feedList.scrollTop + els.feedList.clientHeight >= els.feedList.scrollHeight - 320;
     if (nearBottom) loadFeed(false, true);
   }, { passive: true });
+}
+
+function setFeedPullVisual(distance, refreshing) {
+  const indicator = document.getElementById('feed-pull-indicator');
+  if (!indicator) return;
+  const label = indicator.querySelector('.feed-pull-indicator__label');
+  const threshold = 88;
+  const progress = Math.min(1, distance / threshold);
+  const show = distance > 4 || refreshing;
+  indicator.hidden = !show;
+  indicator.classList.toggle('feed-pull-indicator--ready', distance >= threshold && !refreshing);
+  indicator.classList.toggle('feed-pull-indicator--loading', refreshing);
+  indicator.style.setProperty('--pull-progress', String(progress));
+  indicator.style.setProperty('--pull-y', `${Math.min(120, distance)}px`);
+  if (label) {
+    label.textContent = refreshing
+      ? 'Refreshing…'
+      : distance >= threshold
+        ? 'Release to refresh'
+        : 'Pull to refresh';
+  }
+}
+
+function bindFeedPullRefresh() {
+  if (pullRefreshBound || !els.feedList) return;
+  pullRefreshBound = true;
+
+  const threshold = 88;
+  let pullStartY = 0;
+  let pullDistance = 0;
+
+  const resetPull = () => {
+    pullStartY = 0;
+    pullDistance = 0;
+    if (!pullRefreshing) setFeedPullVisual(0, false);
+  };
+
+  els.feedList.addEventListener('touchstart', (e) => {
+    if (pullRefreshing || state.feedMode !== 'reels') return;
+    if (els.feedList.scrollTop > 2) return;
+    pullStartY = e.touches[0]?.clientY || 0;
+    pullDistance = 0;
+  }, { passive: true });
+
+  els.feedList.addEventListener('touchmove', (e) => {
+    if (!pullStartY || pullRefreshing || state.feedMode !== 'reels') return;
+    if (els.feedList.scrollTop > 2) {
+      resetPull();
+      return;
+    }
+    const y = e.touches[0]?.clientY || 0;
+    pullDistance = Math.max(0, Math.min(120, y - pullStartY));
+    if (pullDistance > 6) setFeedPullVisual(pullDistance, false);
+  }, { passive: true });
+
+  const finishPull = async () => {
+    if (!pullStartY || pullRefreshing) {
+      resetPull();
+      return;
+    }
+    const shouldRefresh = pullDistance >= threshold;
+    pullStartY = 0;
+    pullDistance = 0;
+    if (!shouldRefresh) {
+      setFeedPullVisual(0, false);
+      return;
+    }
+    pullRefreshing = true;
+    setFeedPullVisual(threshold, true);
+    try {
+      await refreshAppFromPull();
+    } finally {
+      pullRefreshing = false;
+      setFeedPullVisual(0, false);
+    }
+  };
+
+  els.feedList.addEventListener('touchend', () => { void finishPull(); }, { passive: true });
+  els.feedList.addEventListener('touchcancel', resetPull, { passive: true });
 }
 
 function switchFeedSource(source) {
@@ -4764,11 +4911,45 @@ function bindLiveBroadcastUi() {
   });
 }
 
-function refreshReelsFeed() {
+async function refreshAppFromPull() {
+  window.__DL_FEED_PREFETCH__ = null;
   const feedList = els.feedList || document.getElementById('feed-list');
   if (feedList) feedList.scrollTop = 0;
-  window.__DL_FEED_PREFETCH__ = null;
-  loadFeed(true, false, { usePrefetch: false });
+
+  try {
+    if ('serviceWorker' in navigator && !DEV_ALLOW_BROWSER) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) {
+        await reg.update();
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          window.location.reload();
+          return;
+        }
+      }
+      const res = await fetch('/build-version.json', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        const current = window.__DL_BUILD__ || '';
+        if (data.version && current && data.version !== current) {
+          window.location.reload();
+          return;
+        }
+      }
+    }
+  } catch {
+    /* continue with feed refresh */
+  }
+
+  while (state.feedLoading) {
+    await new Promise((resolve) => window.setTimeout(resolve, 80));
+  }
+  await loadFeed(true, false, { usePrefetch: false });
+  showToast('Feed updated');
+}
+
+function refreshReelsFeed() {
+  void refreshAppFromPull();
 }
 
 function bindUi() {
@@ -4798,8 +4979,8 @@ function bindUi() {
   });
 
   document.getElementById('feed-refresh-btn')?.addEventListener('click', () => {
-    refreshReelsFeed();
-    showToast('Refreshing reels…');
+    showToast('Refreshing…');
+    void refreshAppFromPull();
   });
 
   document.getElementById('auth-btn')?.addEventListener('click', () => {
@@ -4854,6 +5035,13 @@ function bindUi() {
   });
   document.getElementById('live-watch-close')?.addEventListener('click', closeLiveWatchRoom);
   document.getElementById('live-watch-leave')?.addEventListener('click', closeLiveWatchRoom);
+  document.getElementById('live-watch-visual')?.addEventListener('click', (e) => {
+    if (e.target.closest('.live-room__top, .live-room__dock, .live-room__chat')) return;
+    const video = document.getElementById('live-watch-video');
+    if (!video) return;
+    if (video.paused) video.play().catch(() => {});
+    else video.pause();
+  });
   document.getElementById('live-watch-share')?.addEventListener('click', async () => {
     const live = state.activeLiveWatch;
     if (!live?.id) return;
