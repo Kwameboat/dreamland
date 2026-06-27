@@ -84,7 +84,12 @@
       });
 
       var feedUrl = resolveApiBase() + '/posts/search-post?is_reel=1&expand=dreamland,user,postGallary&page=1&is_ai_feed=1';
-      window.__DL_FEED_PREFETCH__ = fetch(feedUrl, { credentials: 'omit', cache: 'default' })
+      var feedHeaders = {};
+      try {
+        var feedToken = localStorage.getItem('dreamland_token');
+        if (feedToken) feedHeaders.Authorization = 'Bearer ' + feedToken;
+      } catch (e) { /* ignore */ }
+      window.__DL_FEED_PREFETCH__ = fetch(feedUrl, { credentials: 'omit', cache: 'default', headers: feedHeaders })
         .then(function (res) { return res.ok ? res.json() : null; })
         .then(function (json) {
           var items = parseFeedPayload(json);

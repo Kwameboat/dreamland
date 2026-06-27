@@ -61,7 +61,9 @@ class PostController extends ActiveController
         $behaviors = parent::behaviors();
         $behaviors['authenticator'] = [
             'class' => CompositeAuth::className(),
-            'except' => ['ad-search', 'search-post', 'view-by-unique-id'],
+            'except' => ['ad-search'],
+            // Optional auth: guests can browse reels; logged-in users get purchase/unlock state.
+            'optional' => ['search-post', 'view-by-unique-id'],
             'authMethods' => [
                 HttpBearerAuth::className(),
             ],

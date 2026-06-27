@@ -63,7 +63,7 @@ class DreamlandWalletService extends Component
             'amount' => $amountKobo,
             'currency' => $package->currency,
             'reference' => $reference,
-            'callback_url' => Yii::$app->params['dreamlandPaystackCallbackUrl'] ?? null,
+            'callback_url' => $this->getPaystackCallbackUrl(),
             'metadata' => [
                 'user_id' => (int) $userId,
                 'credit_package_id' => $package->id,
@@ -100,7 +100,14 @@ class DreamlandWalletService extends Component
             return ['ok' => false, 'error' => 'Transaction not found.'];
         }
         if ($txRecord->status === CreditPackageTransaction::STATUS_COMPLETED) {
-            return ['ok' => true, 'already_completed' => true];
+            $user = User::findOne($txRecord->user_id);
+            return [
+                'ok' => true,
+                'already_completed' => true,
+                'credits_granted' => (int) $txRecord->credits_to_grant,
+                'available_coin' => $user ? (int) $user->available_coin : null,
+                'reference' => $reference,
+            ];
         }
 
         $keys = $this->getPaystackKeys();
@@ -139,6 +146,7 @@ class DreamlandWalletService extends Component
             return [
                 'ok' => true,
                 'credits_granted' => (int) $txRecord->credits_to_grant,
+                'available_coin' => (int) $user->available_coin,
                 'reference' => $reference,
             ];
         } catch (\Throwable $e) {
@@ -220,6 +228,21 @@ class DreamlandWalletService extends Component
             $dbTx->rollBack();
             return ['ok' => false, 'error' => $e->getMessage()];
         }
+    }
+
+    private function getPaystackCallbackUrl(): ?string
+    {
+        $configured = Yii::$app->params['dreamlandPaystackCallbackUrl'] ?? null;
+        if (is_string($configured) && $configured !== '') {
+            return $configured;
+        }
+
+        $pwa = getenv('DREAMLAND_PWA_URL') ?: getenv('PWA_URL');
+        if (is_string($pwa) && $pwa !== '') {
+            return rtrim($pwa, '/') . '/wallet/callback';
+        }
+
+        return null;
     }
 
     private function paystackRequest($method, $path, $body, $secretKey)

@@ -269,6 +269,25 @@ function saveFeedCache(items) {
   } catch { /* quota */ }
 }
 
+function clearFeedCache() {
+  try {
+    localStorage.removeItem(FEED_CACHE_KEY);
+  } catch { /* ignore */ }
+}
+
+function markFeedPostUnlocked(postId) {
+  const id = String(postId);
+  state.feed.forEach((post) => {
+    if (String(post.id) !== id) return;
+    post.dreamland = {
+      ...(post.dreamland || {}),
+      is_paid: true,
+      is_unlocked: true,
+      paywall: null,
+    };
+  });
+}
+
 function hydrateFeedFromCache() {
   const cached = loadFeedCache({ allowStale: true });
   if (!cached?.items?.length) return false;
@@ -4219,7 +4238,7 @@ async function loadFeed(force = false, append = false, opts = {}) {
   state.feedError = '';
   try {
     let items = null;
-    if (!append && opts.usePrefetch) {
+    if (!append && opts.usePrefetch && !state.token) {
       items = await consumePrefetchedFeed();
     }
     if (!items?.length) {
@@ -4609,10 +4628,11 @@ async function unlockPaywallContent() {
   }
 
   if (!state.currentPaywallVideo) return;
+  const unlockedVideoId = String(state.currentPaywallVideo);
   try {
     const res = await api(API_ROUTES.unlockVideo, {
       method: 'POST',
-      body: JSON.stringify({ video_id: Number(state.currentPaywallVideo) }),
+      body: JSON.stringify({ video_id: Number(unlockedVideoId) }),
     });
     els.paywallModal.classList.add('hidden');
     showToast(res.message || 'Video unlocked');
@@ -4624,7 +4644,15 @@ async function unlockPaywallContent() {
     } else if (state.user) {
       await validateSession();
     }
-    await loadFeed();
+    markFeedPostUnlocked(unlockedVideoId);
+    clearFeedCache();
+    state.currentPaywallVideo = null;
+    await loadFeed(true, false, { skipAiRank: true });
+    if (fastReels?.scrollToPostId?.(unlockedVideoId)) {
+      setupReelPlayback();
+    } else {
+      setupReelPlayback();
+    }
   } catch (err) {
     if (err.status === 401) {
       openAuthModal();
