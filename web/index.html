@@ -30,6 +30,7 @@
   <link rel="stylesheet" href="/css/app.css?v=69" />
   <title>Dreamland — Play, Watch, Earn</title>
   <script src="/env-config.js?v=2"></script>
+  <script>window.__DL_BUILD_EMBED__={"version":"build-178284","builtAt":"2026-06-30T19:21:29.899Z"};</script>
   <script>
     (function () {
       var env = window.__DL_ENV__ || {};
@@ -132,6 +133,28 @@
       window.__DL_LAST_ERROR__ = (event.reason && event.reason.message) || String(event.reason || 'Promise rejected');
     });
 
+    window.__DL_isLocalHost = function () {
+      var h = location.hostname;
+      return h === 'localhost' || h === '127.0.0.1' || location.port === '3000';
+    };
+
+    window.__DL_purgePwaState = async function () {
+      if ('serviceWorker' in navigator) {
+        var regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(function (r) { return r.unregister(); }));
+      }
+      if (window.caches) {
+        var keys = await caches.keys();
+        await Promise.all(keys.map(function (k) { return caches.delete(k); }));
+      }
+    };
+
+    window.__DL_recoverAndReload = async function () {
+      try { sessionStorage.setItem('dreamland_boot_recover', '1'); } catch (e) { /* ignore */ }
+      await window.__DL_purgePwaState();
+      location.reload();
+    };
+
     /** Minimal UI when the ES module fails — keeps dock/tabs/auth clickable in dev */
     window.__DL_bindEmergencyUi = function (fromTimeout) {
       if (window.__DL_APP_READY__) return;
@@ -139,13 +162,22 @@
       if (app) app.classList.remove('hidden');
       var feed = document.getElementById('feed-list');
       if (feed && fromTimeout) {
-        var errHint = window.__DL_LAST_ERROR__ ? '<p class="muted">Error: ' + window.__DL_LAST_ERROR__ + '</p>' : '';
+        var errHint = window.__DL_LAST_ERROR__ ? '<p class="muted">Error: ' + String(window.__DL_LAST_ERROR__).replace(/</g, '&lt;') + '</p>' : '';
+        var isLocal = window.__DL_isLocalHost();
+        var helpText = isLocal
+          ? '<p class="muted">Start services with <strong>start-walkthrough.ps1</strong>, then hard refresh (Ctrl+Shift+R).</p>'
+          : '<p class="muted">Tap <strong>Recover</strong> to clear cached scripts and reload. If this persists, hard refresh (Ctrl+Shift+R).</p>';
         feed.innerHTML = '<div class="boot-error glass-card" style="margin:16px;padding:20px;text-align:center">'
           + '<h2 style="margin:0 0 8px">Dreamland scripts did not load</h2>'
-          + '<p class="muted">Start services with <strong>start-walkthrough.ps1</strong>, then hard refresh (Ctrl+Shift+R).</p>'
+          + helpText
           + errHint
           + '<p class="muted">Check DevTools Console for red errors on <code>/js/app.js</code>.</p>'
-          + '<button type="button" class="btn-primary" onclick="location.reload()">Reload</button></div>';
+          + '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:12px">'
+          + '<button type="button" class="btn-primary" id="dl-boot-recover">Recover</button>'
+          + '<button type="button" class="btn-ghost" onclick="location.reload()">Reload</button>'
+          + '</div></div>';
+        var recoverBtn = document.getElementById('dl-boot-recover');
+        if (recoverBtn) recoverBtn.addEventListener('click', function () { window.__DL_recoverAndReload(); });
       }
       function switchView(viewId) {
         document.querySelectorAll('.view').forEach(function (v) { v.classList.remove('active'); });
@@ -978,28 +1010,120 @@
 
       window.__DL_CHECK_PWA_UPDATE__ = checkPwaUpdate;
       window.__DL_BUILD_STAMP__ = function (meta) { return buildStamp(meta); };
+      window.__DL_REGISTER_PWA_AFTER_BOOT__ = function (meta) {
+        if (isLocal || !meta) return Promise.resolve(false);
+        return checkPwaUpdate(meta);
+      };
     })();
   </script>
   <script type="module">
     (async function () {
+      var BOOT_FAIL_KEY = 'dreamland_boot_fail_count';
+      var BOOT_RECOVER_KEY = 'dreamland_boot_recover';
+
+      function sleep(ms) {
+        return new Promise(function (resolve) { setTimeout(resolve, ms); });
+      }
+
+      function defaultBuildVersion() {
+        if (window.__DL_BUILD_EMBED__?.version) return window.__DL_BUILD_EMBED__.version;
+        if (window.__DL_ENV__?.buildVersion) return window.__DL_ENV__.buildVersion;
+        return window.__DL_isLocalHost() ? 'build-dev' : 'build-unknown';
+      }
+
+      async function resolveBuildMeta() {
+        var fallback = {
+          version: defaultBuildVersion(),
+          builtAt: window.__DL_BUILD_EMBED__?.builtAt || '',
+        };
+        for (var attempt = 0; attempt < 3; attempt++) {
+          try {
+            var res = await fetch('/build-version.json?_=' + Date.now(), { cache: 'no-store' });
+            if (res.ok) {
+              var data = await res.json();
+              if (data && data.version) return data;
+            }
+          } catch (e) { /* retry */ }
+          await sleep(250 * (attempt + 1));
+        }
+        return fallback;
+      }
+
+      function looksLikeJavaScript(text) {
+        if (!text || text.length < 80) return false;
+        if (/<!DOCTYPE|<html[\s>]/i.test(text)) return false;
+        return /(?:^|\n)\s*(?:import |export |const |function |class )/.test(text);
+      }
+
+      async function scriptUrlIsValid(url) {
+        try {
+          var res = await fetch(url, { cache: 'no-store' });
+          if (!res.ok) return false;
+          var ct = (res.headers.get('content-type') || '').toLowerCase();
+          if (ct.includes('text/html')) return false;
+          var sample = await res.clone().text();
+          return looksLikeJavaScript(sample);
+        } catch (e) {
+          return false;
+        }
+      }
+
+      async function importAppModule(build) {
+        var urls = [
+          '/js/app.js?v=' + encodeURIComponent(build),
+          '/js/app.js?v=' + encodeURIComponent(build) + '&_=' + Date.now(),
+          '/js/app.js?_=' + Date.now(),
+          '/js/app.js',
+        ];
+        var lastErr = null;
+        for (var i = 0; i < urls.length; i++) {
+          var url = urls[i];
+          try {
+            if (!(await scriptUrlIsValid(url))) continue;
+            return await import(/* @vite-ignore */ url);
+          } catch (err) {
+            lastErr = err;
+            console.warn('Dreamland app import failed (' + url + '):', err.message || err);
+          }
+        }
+        throw lastErr || new Error('app.js unavailable');
+      }
+
       try {
         if (window.__DL_BOOT_PROMISE__) await window.__DL_BOOT_PROMISE__;
-        let build = 'build-dev';
-        let buildMeta = { version: build, builtAt: '' };
-        try {
-          const res = await fetch('/build-version.json', { cache: 'no-store' });
-          if (res.ok) {
-            buildMeta = await res.json();
-            if (buildMeta.version) build = buildMeta.version;
-          }
-        } catch { /* use fallback build */ }
-        if (window.__DL_CHECK_PWA_UPDATE__ && await window.__DL_CHECK_PWA_UPDATE__(buildMeta)) return;
+
+        var needsRecover = false;
+        try { needsRecover = sessionStorage.getItem(BOOT_RECOVER_KEY) === '1'; } catch (e) { /* ignore */ }
+        if (needsRecover) {
+          try { sessionStorage.removeItem(BOOT_RECOVER_KEY); } catch (e) { /* ignore */ }
+          await window.__DL_purgePwaState();
+        }
+
+        var failCount = 0;
+        try { failCount = parseInt(sessionStorage.getItem(BOOT_FAIL_KEY) || '0', 10) || 0; } catch (e) { /* ignore */ }
+        if (failCount > 0) await window.__DL_purgePwaState();
+
+        var buildMeta = await resolveBuildMeta();
+        var build = buildMeta.version || defaultBuildVersion();
         window.__DL_BUILD__ = build;
         window.__DL_BUILD_META__ = buildMeta;
-        await import(`/js/app.js?v=${encodeURIComponent(build)}`);
+
+        await importAppModule(build);
+
+        try { sessionStorage.removeItem(BOOT_FAIL_KEY); } catch (e) { /* ignore */ }
+        window.__DL_REGISTER_PWA_AFTER_BOOT__ && window.__DL_REGISTER_PWA_AFTER_BOOT__(buildMeta);
       } catch (err) {
         console.error('Dreamland module load failed:', err);
         window.__DL_LAST_ERROR__ = err.message || String(err);
+        try {
+          var nextFails = (parseInt(sessionStorage.getItem(BOOT_FAIL_KEY) || '0', 10) || 0) + 1;
+          sessionStorage.setItem(BOOT_FAIL_KEY, String(nextFails));
+          if (nextFails <= 2) {
+            await window.__DL_purgePwaState();
+            location.reload();
+            return;
+          }
+        } catch (e) { /* show emergency UI */ }
         window.__DL_bindEmergencyUi && window.__DL_bindEmergencyUi(true);
       }
     })();

@@ -1,5 +1,9 @@
 RewriteEngine On
 
+# Serve static assets directly — never fall through to index.html (prevents HTML served as JS)
+RewriteCond %{REQUEST_URI} \.(js|mjs|css|json|png|jpe?g|gif|webp|svg|ico|woff2?|map)$ [NC]
+RewriteRule ^ - [L]
+
 # Leave /admin and /api to the Yii PHP apps
 RewriteRule ^admin(/|$) - [L]
 RewriteRule ^api(/|$) - [L]

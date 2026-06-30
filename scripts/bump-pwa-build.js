@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Bumps PWA cache + build version on each Vercel deploy so clients fetch fresh assets.
+ * Bumps PWA cache + build version on each deploy so clients fetch fresh assets.
  */
 const fs = require('fs');
 const path = require('path');
@@ -13,14 +13,10 @@ const version = (
   || `build-${Date.now()}`
 ).toString().slice(0, 12);
 
-const swPath = path.join(web, 'sw.js');
-let sw = fs.readFileSync(swPath, 'utf8');
-sw = sw.replace(/const CACHE_NAME = '[^']+';/, `const CACHE_NAME = 'dreamland-${version}';`);
-fs.writeFileSync(swPath, sw, 'utf8');
-
+const builtAt = new Date().toISOString();
 const versionPayload = {
   version,
-  builtAt: new Date().toISOString(),
+  builtAt,
 };
 fs.writeFileSync(path.join(web, 'build-version.json'), `${JSON.stringify(versionPayload, null, 2)}\n`, 'utf8');
 
@@ -36,9 +32,14 @@ if (fs.existsSync(envPath)) {
   }
 }
 
+const embedPayload = JSON.stringify({ version, builtAt });
 const indexPath = path.join(web, 'index.html');
 if (fs.existsSync(indexPath)) {
   let html = fs.readFileSync(indexPath, 'utf8');
+  html = html.replace(
+    /window\.__DL_BUILD_EMBED__\s*=\s*\{[^}]+\};/,
+    `window.__DL_BUILD_EMBED__=${embedPayload};`,
+  );
   html = html.replace(/\/js\/app\.js\?v=[^'"]+/, `/js/app.js?v=${version}`);
   fs.writeFileSync(indexPath, html, 'utf8');
 }

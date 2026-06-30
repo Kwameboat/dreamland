@@ -1,5 +1,6 @@
 #!/bin/bash
-# Hardened PWA auto-update — deploy after every release.
+# Hardened PWA boot + auto-update — deploy after every release.
+# Fixes "scripts did not load" / stale SW serving bad app.js.
 # Run: curl -fsSL -A "DreamlandDeploy/1.0" https://raw.githubusercontent.com/Kwameboat/dreamland/main/deploy/cpanel/fix-pwa-updates.sh | bash
 set -euo pipefail
 
@@ -19,12 +20,16 @@ fetch "$TMP/index.html" "$GITHUB/web/index.html"
 fetch "$TMP/app.js" "$GITHUB/web/js/app.js"
 fetch "$TMP/sw.js" "$GITHUB/web/sw.js"
 fetch "$TMP/build-version.json" "$GITHUB/web/build-version.json"
+fetch "$TMP/env-config.js" "$GITHUB/web/env-config.js"
+fetch "$TMP/htaccess" "$GITHUB/web/.htaccess"
 
 if [ -d "$WEB" ]; then
   install "$TMP/index.html" "$WEB/index.html"
   install "$TMP/app.js" "$WEB/js/app.js"
   install "$TMP/sw.js" "$WEB/sw.js"
   install "$TMP/build-version.json" "$WEB/build-version.json"
+  install "$TMP/env-config.js" "$WEB/env-config.js"
+  install "$TMP/htaccess" "$WEB/.htaccess"
 fi
 
 BUILD="$(grep -o 'build-[0-9]*' "$TMP/build-version.json" | head -1 || echo unknown)"

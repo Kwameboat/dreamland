@@ -53,12 +53,21 @@ function isMutableAsset(pathname) {
     || pathname.endsWith('/env-config.js');
 }
 
+function isJavaScriptResponse(response) {
+  const ct = (response.headers.get('content-type') || '').toLowerCase();
+  return ct.includes('javascript') || ct.includes('ecmascript') || ct.includes('module');
+}
+
 async function networkFirst(request, cacheName) {
   try {
     const response = await fetch(request, { cache: 'no-store' });
     if (response.ok && cacheName) {
-      const cache = await caches.open(cacheName);
-      cache.put(request, response.clone()).catch(() => {});
+      const path = new URL(request.url).pathname;
+      const isJs = path.includes('/js/') && path.endsWith('.js');
+      if (!isJs || isJavaScriptResponse(response)) {
+        const cache = await caches.open(cacheName);
+        cache.put(request, response.clone()).catch(() => {});
+      }
     }
     return response;
   } catch {
@@ -150,6 +159,9 @@ self.addEventListener('fetch', (event) => {
       if (cached) return cached;
       return fetch(event.request).then((response) => {
         if (!response.ok) return response;
+        const path = url.pathname;
+        const isJs = path.includes('/js/') && path.endsWith('.js');
+        if (isJs && !isJavaScriptResponse(response)) return response;
         const clone = response.clone();
         caches.open(activeCacheName).then((cache) => cache.put(event.request, clone)).catch(() => {});
         return response;

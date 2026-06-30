@@ -5843,13 +5843,23 @@ function showBootError(message) {
   const app = document.getElementById('app');
   app?.classList.remove('hidden');
   const main = document.getElementById('views') || app;
+  const isLocal = DEV_ALLOW_BROWSER || /localhost|127\.0\.0\.1/.test(location.hostname) || location.port === '3000';
+  const help = isLocal
+    ? '<p class="muted">Hard refresh (Ctrl+Shift+R) then run .\\start-walkthrough.ps1</p>'
+    : '<p class="muted">Tap Recover to clear cached scripts, or hard refresh (Ctrl+Shift+R).</p>';
   if (main) {
     main.innerHTML = `<div class="boot-error glass-card" style="margin:24px;padding:24px;text-align:center">
       <h2>Dreamland could not start</h2>
       <p class="muted">${message}</p>
-      <p class="muted">Hard refresh (Ctrl+Shift+R) then run .\\start-walkthrough.ps1</p>
-      <button type="button" class="btn-primary" onclick="location.reload()">Reload</button>
+      ${help}
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:12px">
+        <button type="button" class="btn-primary" id="dl-app-boot-recover">Recover</button>
+        <button type="button" class="btn-ghost" onclick="location.reload()">Reload</button>
+      </div>
     </div>`;
+    document.getElementById('dl-app-boot-recover')?.addEventListener('click', () => {
+      window.__DL_recoverAndReload?.();
+    });
   }
 }
 

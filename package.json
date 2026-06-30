@@ -5,7 +5,8 @@
     "icons": "node scripts/generate-pwa-icons.js",
     "build:web": "node scripts/generate-pwa-icons.js && node scripts/generate-vercel-env.js && node scripts/bump-pwa-build.js",
     "build:cpanel": "node scripts/build-cpanel-package.js",
-    "deploy:cpanel": "node scripts/deploy-cpanel-ssh.js"
+    "deploy:cpanel": "node scripts/deploy-cpanel-ssh.js",
+    "deploy:pwa-hotfix": "node scripts/deploy-pwa-hotfix.js"
   },
   "devDependencies": {
     "sharp": "^0.33.5"
