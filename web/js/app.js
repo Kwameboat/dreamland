@@ -2534,6 +2534,7 @@ async function startLiveSession() {
   try {
     if (!(await ensureLiveServerReady())) return;
 
+    pauseMediaForLive();
     if (!cameraStream) await startLiveBroadcastCamera();
     const form = new FormData();
     form.append('title', title);
@@ -2587,13 +2588,29 @@ async function startLiveSession() {
     await loadCreatorDashboard(true);
   } catch (err) {
     if (apiLiveStarted) {
-      try { await endLiveSession(); } catch (_) { /* best-effort cleanup */ }
+      try { await abortPendingLiveStart(); } catch (_) { /* best-effort cleanup */ }
     }
     showToast(err.message || 'Could not go live');
     resumeFeedPlaybackIfNeeded();
   } finally {
     setStartBtn('Go live', false);
   }
+}
+
+async function abortPendingLiveStart() {
+  try {
+    if (dreamlandLive) await dreamlandLive.stopBroadcast();
+  } catch {
+    /* ignore */
+  }
+  try {
+    await api(API_ROUTES.creatorEndLive, { method: 'POST', body: JSON.stringify({}) });
+  } catch {
+    /* ignore */
+  }
+  liveBroadcastActive = false;
+  state.creatorDashboard = null;
+  await loadCreatorDashboard(true);
 }
 
 async function endLiveSession() {
@@ -3830,7 +3847,6 @@ function updateFeedHeaderUi() {
 
   document.querySelector('.header-mode-switch')?.toggleAttribute('hidden', !onFeed);
   document.getElementById('feed-back-btn')?.toggleAttribute('hidden', !onFeed || !isLive);
-  document.getElementById('feed-refresh-btn')?.toggleAttribute('hidden', !onFeed || !isReels);
   document.getElementById('brand-home')?.toggleAttribute('hidden', !onFeed ? false : isLive);
   document.getElementById('sound-toggle')?.toggleAttribute('hidden', !onFeed || isLive);
   document.getElementById('notif-btn')?.toggleAttribute('hidden', false);
@@ -5421,11 +5437,6 @@ function bindUi() {
     switchView('feed-view');
   });
 
-  document.getElementById('feed-refresh-btn')?.addEventListener('click', () => {
-    showToast('Refreshing…');
-    void refreshAppFromPull();
-  });
-
   document.getElementById('auth-btn')?.addEventListener('click', () => {
     if (state.user) dlAccount?.openAccount();
     else openAuthModal('signin');
@@ -5691,14 +5702,36 @@ function bindUi() {
   }
 }
 
+function pwaBuildStamp(meta) {
+  if (!meta) return `${window.__DL_BUILD__ || ''}|`;
+  return `${meta.version || window.__DL_BUILD__ || ''}|${meta.builtAt || ''}`;
+}
+
 function registerPwaUpdates() {
   if (!('serviceWorker' in navigator) || DEV_ALLOW_BROWSER) return;
 
   let refreshing = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
+  const PWA_BUILD_KEY = 'dreamland_pwa_build';
+
+  const reloadOnce = () => {
     if (refreshing) return;
     refreshing = true;
     window.location.reload();
+  };
+
+  navigator.serviceWorker.addEventListener('controllerchange', reloadOnce);
+
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (event.data?.type !== 'SW_ACTIVATED') return;
+    const stamp = pwaBuildStamp({
+      version: event.data.version,
+      builtAt: event.data.builtAt,
+    });
+    const prev = localStorage.getItem(PWA_BUILD_KEY);
+    if (prev && prev !== stamp) {
+      localStorage.setItem(PWA_BUILD_KEY, stamp);
+      reloadOnce();
+    }
   });
 
   const activateWaitingWorker = (worker) => {
@@ -5713,7 +5746,22 @@ function registerPwaUpdates() {
     return true;
   };
 
-  navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((registration) => {
+  const getRegistration = async () => {
+    if (window.__DL_SW_REGISTRATION__) {
+      await window.__DL_SW_REGISTRATION__.update().catch(() => {});
+      return window.__DL_SW_REGISTRATION__;
+    }
+    const build = window.__DL_BUILD__ || 'build-dev';
+    const reg = await navigator.serviceWorker.register(
+      `/sw.js?v=${encodeURIComponent(build)}`,
+      { scope: '/', updateViaCache: 'none' },
+    );
+    window.__DL_SW_REGISTRATION__ = reg;
+    await reg.update().catch(() => {});
+    return reg;
+  };
+
+  getRegistration().then((registration) => {
     applyWaitingUpdate(registration);
 
     registration.addEventListener('updatefound', () => {
@@ -5722,7 +5770,7 @@ function registerPwaUpdates() {
       worker.addEventListener('statechange', () => {
         if (worker.state === 'installed' && navigator.serviceWorker.controller) {
           showToast('Updating Dreamland…');
-          activateWaitingWorker(worker);
+          activateWaitingWorker(registration.waiting || worker);
         }
       });
     });
@@ -5733,30 +5781,52 @@ function registerPwaUpdates() {
     };
 
     checkForUpdates();
-    window.setInterval(checkForUpdates, 5 * 60 * 1000);
+    window.setInterval(checkForUpdates, 2 * 60 * 1000);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') checkForUpdates();
     });
     window.addEventListener('focus', checkForUpdates);
+    window.addEventListener('online', checkForUpdates);
   }).catch(() => {});
 }
 
 async function checkBuildVersionMismatch() {
   if (DEV_ALLOW_BROWSER) return;
+  const PWA_BUILD_KEY = 'dreamland_pwa_build';
   try {
     const res = await fetch('/build-version.json', { cache: 'no-store' });
     if (!res.ok) return;
     const data = await res.json();
-    const current = window.__DL_BUILD__ || '';
-    if (!data.version || !current || data.version === current) return;
+    const stamp = pwaBuildStamp(data);
+    const stored = localStorage.getItem(PWA_BUILD_KEY) || pwaBuildStamp(window.__DL_BUILD_META__);
+    if (!data.version || stamp === stored) return;
+
     const reg = await navigator.serviceWorker.getRegistration();
     if (reg) {
       await reg.update();
       if (reg.waiting) {
+        localStorage.setItem(PWA_BUILD_KEY, stamp);
         reg.waiting.postMessage({ type: 'SKIP_WAITING' });
         return;
       }
+      if (reg.installing) {
+        await new Promise((resolve) => {
+          reg.installing.addEventListener('statechange', function onState() {
+            if (!reg.installing || reg.installing.state === 'installed' || reg.installing.state === 'activated') {
+              reg.installing.removeEventListener('statechange', onState);
+              resolve();
+            }
+          });
+        });
+        if (reg.waiting) {
+          localStorage.setItem(PWA_BUILD_KEY, stamp);
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          return;
+        }
+      }
     }
+
+    localStorage.setItem(PWA_BUILD_KEY, stamp);
     if ('caches' in window) {
       const keys = await caches.keys();
       await Promise.all(keys.map((k) => caches.delete(k)));

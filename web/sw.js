@@ -1,4 +1,15 @@
-const CACHE_NAME = 'dreamland-build-178254';
+/* Dreamland PWA service worker — cache version follows build-version.json */
+
+const CACHE_PREFIX = 'dreamland-';
+let activeCacheName = `${CACHE_PREFIX}boot`;
+
+async function fetchBuildMeta() {
+  const res = await fetch('/build-version.json', { cache: 'no-store' });
+  if (!res.ok) throw new Error('build-version unavailable');
+  const data = await res.json();
+  const version = String(data.version || 'build-unknown');
+  return { version, builtAt: String(data.builtAt || ''), cacheName: `${CACHE_PREFIX}${version}` };
+}
 
 const CORE_ASSETS = [
   '/',
@@ -24,24 +35,85 @@ const CORE_ASSETS = [
   '/icons/apple-touch-icon.png',
   '/icons/icon-512-maskable.png',
   '/assets/community-network.svg',
-  '/build-version.json',
 ];
 
-const NETWORK_FIRST_PATHS = ['/env-config.js', '/build-version.json', '/sw.js'];
+function isBypassPath(pathname) {
+  return pathname === '/sw.js'
+    || pathname.endsWith('/sw.js')
+    || pathname === '/build-version.json'
+    || pathname.endsWith('/build-version.json');
+}
+
+function isMutableAsset(pathname) {
+  return pathname === '/'
+    || pathname.endsWith('.html')
+    || pathname.includes('/js/')
+    || pathname.includes('/css/')
+    || pathname === '/env-config.js'
+    || pathname.endsWith('/env-config.js');
+}
+
+async function networkFirst(request, cacheName) {
+  try {
+    const response = await fetch(request, { cache: 'no-store' });
+    if (response.ok && cacheName) {
+      const cache = await caches.open(cacheName);
+      cache.put(request, response.clone()).catch(() => {});
+    }
+    return response;
+  } catch {
+    const cached = cacheName ? await caches.match(request) : null;
+    if (cached) return cached;
+    return new Response('Offline', { status: 503, statusText: 'Offline' });
+  }
+}
+
+async function purgeOldCaches(keepName) {
+  const keys = await caches.keys();
+  await Promise.all(
+    keys
+      .filter((key) => key.startsWith(CACHE_PREFIX) && key !== keepName)
+      .map((key) => caches.delete(key)),
+  );
+}
+
+async function notifyClients(meta) {
+  const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  clients.forEach((client) => {
+    client.postMessage({
+      type: 'SW_ACTIVATED',
+      version: meta.version,
+      builtAt: meta.builtAt,
+    });
+  });
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) =>
-      Promise.allSettled(CORE_ASSETS.map((asset) => cache.add(asset)))
-    ).then(() => self.skipWaiting())
+    fetchBuildMeta()
+      .then((meta) => {
+        activeCacheName = meta.cacheName;
+        return caches.open(activeCacheName).then((cache) =>
+          Promise.allSettled(CORE_ASSETS.map((asset) => cache.add(asset))),
+        );
+      })
+      .then(() => self.skipWaiting()),
   );
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    fetchBuildMeta()
+      .then(async (meta) => {
+        activeCacheName = meta.cacheName;
+        await purgeOldCaches(activeCacheName);
+        await self.clients.claim();
+        await notifyClients(meta);
+      })
+      .catch(async () => {
+        await purgeOldCaches(activeCacheName);
+        await self.clients.claim();
+      }),
   );
 });
 
@@ -51,32 +123,10 @@ self.addEventListener('message', (event) => {
   }
   if (event.data?.type === 'CLEAR_CACHES') {
     event.waitUntil(
-      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+      caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key)))),
     );
   }
 });
-
-function isMutableAsset(pathname) {
-  return pathname === '/'
-    || pathname.endsWith('.html')
-    || pathname.includes('/js/')
-    || pathname.includes('/css/')
-    || NETWORK_FIRST_PATHS.some((p) => pathname === p || pathname.endsWith(p));
-}
-
-async function networkFirst(request, cache) {
-  try {
-    const response = await fetch(request);
-    if (response.ok && cache) {
-      cache.put(request, response.clone()).catch(() => {});
-    }
-    return response;
-  } catch {
-    const cached = cache ? await cache.match(request) : null;
-    if (cached) return cached;
-    return new Response('Offline', { status: 503, statusText: 'Offline' });
-  }
-}
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
@@ -85,10 +135,13 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/v1') || url.pathname.includes('/api/')) return;
 
+  if (isBypassPath(url.pathname)) {
+    event.respondWith(fetch(event.request, { cache: 'no-store' }));
+    return;
+  }
+
   if (event.request.mode === 'navigate' || isMutableAsset(url.pathname)) {
-    event.respondWith(
-      caches.open(CACHE_NAME).then((cache) => networkFirst(event.request, cache))
-    );
+    event.respondWith(networkFirst(event.request, activeCacheName));
     return;
   }
 
@@ -98,10 +151,10 @@ self.addEventListener('fetch', (event) => {
       return fetch(event.request).then((response) => {
         if (!response.ok) return response;
         const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        caches.open(activeCacheName).then((cache) => cache.put(event.request, clone)).catch(() => {});
         return response;
       });
-    })
+    }),
   );
 });
 
@@ -120,7 +173,7 @@ self.addEventListener('push', (event) => {
       tag: 'dreamland-push',
       renotify: true,
       data: { url: data.url || '/' },
-    })
+    }),
   );
 });
 
@@ -139,6 +192,6 @@ self.addEventListener('notificationclick', (event) => {
         return clients.openWindow(targetUrl);
       }
       return undefined;
-    })
+    }),
   );
 });

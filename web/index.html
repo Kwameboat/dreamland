@@ -280,7 +280,6 @@
         </div>
       </div>
       <div class="dl-header-actions">
-        <button type="button" id="feed-refresh-btn" class="dl-icon-btn dl-header-action feed-refresh-btn" aria-label="Refresh reels" title="Refresh reels" hidden>↻</button>
         <button type="button" id="search-open-btn" class="dl-icon-btn dl-header-action" aria-label="Search">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         </button>
@@ -906,6 +905,10 @@
       var PWA_BUILD_KEY = 'dreamland_pwa_build';
       var isLocal = /localhost|127\.0\.0\.1/.test(location.hostname) || location.port === '3000';
 
+      function buildStamp(meta) {
+        return String(meta.version || 'build-unknown') + '|' + String(meta.builtAt || '');
+      }
+
       function activateWaiting(reg) {
         if (!reg || !reg.waiting) return false;
         reg.waiting.postMessage({ type: 'SKIP_WAITING' });
@@ -918,30 +921,63 @@
         await Promise.all(keys.map(function (k) { return caches.delete(k); }));
       }
 
-      async function checkPwaUpdate(build) {
+      async function registerServiceWorker(build) {
+        var url = '/sw.js?v=' + encodeURIComponent(build);
+        var reg = await navigator.serviceWorker.register(url, { scope: '/', updateViaCache: 'none' });
+        window.__DL_SW_REGISTRATION__ = reg;
+        window.__DL_SW_URL__ = url;
+        await reg.update();
+        return reg;
+      }
+
+      async function waitForInstalling(reg) {
+        if (!reg.installing) return reg;
+        await new Promise(function (resolve) {
+          reg.installing.addEventListener('statechange', function onState() {
+            if (!reg.installing || reg.installing.state === 'installed' || reg.installing.state === 'activated') {
+              reg.installing.removeEventListener('statechange', onState);
+              resolve();
+            }
+          });
+        });
+        return reg;
+      }
+
+      async function applyWaitingUpdate(reg) {
+        if (!reg) return false;
+        await waitForInstalling(reg);
+        return activateWaiting(reg);
+      }
+
+      async function checkPwaUpdate(meta) {
         if (isLocal || !('serviceWorker' in navigator)) return false;
+        var stamp = buildStamp(meta);
         var prev = localStorage.getItem(PWA_BUILD_KEY);
-        if (prev && prev !== build) {
-          localStorage.setItem(PWA_BUILD_KEY, build);
-          try {
-            var reg = await navigator.serviceWorker.getRegistration();
-            if (reg) await reg.update();
-            activateWaiting(reg);
-            await clearPwaCaches();
-          } catch (e) { /* ignore */ }
-          location.replace(location.pathname + location.search + location.hash);
-          return true;
-        }
-        localStorage.setItem(PWA_BUILD_KEY, build);
+
         try {
-          var registration = await navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });
-          await registration.update();
-          if (activateWaiting(registration)) return true;
-        } catch (e) { /* ignore */ }
+          var reg = await registerServiceWorker(meta.version || 'build-unknown');
+
+          if (prev && prev !== stamp) {
+            localStorage.setItem(PWA_BUILD_KEY, stamp);
+            await applyWaitingUpdate(reg);
+            await clearPwaCaches();
+            location.replace(location.pathname + location.search + location.hash);
+            return true;
+          }
+
+          localStorage.setItem(PWA_BUILD_KEY, stamp);
+
+          if (navigator.serviceWorker.controller) {
+            await applyWaitingUpdate(reg);
+          }
+        } catch (e) {
+          console.warn('PWA update check failed:', e);
+        }
         return false;
       }
 
       window.__DL_CHECK_PWA_UPDATE__ = checkPwaUpdate;
+      window.__DL_BUILD_STAMP__ = function (meta) { return buildStamp(meta); };
     })();
   </script>
   <script type="module">
@@ -949,15 +985,17 @@
       try {
         if (window.__DL_BOOT_PROMISE__) await window.__DL_BOOT_PROMISE__;
         let build = 'build-dev';
+        let buildMeta = { version: build, builtAt: '' };
         try {
           const res = await fetch('/build-version.json', { cache: 'no-store' });
           if (res.ok) {
-            const data = await res.json();
-            if (data.version) build = data.version;
+            buildMeta = await res.json();
+            if (buildMeta.version) build = buildMeta.version;
           }
         } catch { /* use fallback build */ }
-        if (window.__DL_CHECK_PWA_UPDATE__ && await window.__DL_CHECK_PWA_UPDATE__(build)) return;
+        if (window.__DL_CHECK_PWA_UPDATE__ && await window.__DL_CHECK_PWA_UPDATE__(buildMeta)) return;
         window.__DL_BUILD__ = build;
+        window.__DL_BUILD_META__ = buildMeta;
         await import(`/js/app.js?v=${encodeURIComponent(build)}`);
       } catch (err) {
         console.error('Dreamland module load failed:', err);
