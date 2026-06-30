@@ -1,5 +1,5 @@
 #!/bin/bash
-# Fix live viewer stuck on "Connecting" — self-host libs + room re-register.
+# Fix go-live stuck on Starting + reels not previewing.
 # Run: curl -fsSL -A "DreamlandDeploy/1.0" https://raw.githubusercontent.com/Kwameboat/dreamland/main/deploy/cpanel/fix-live-watch.sh | bash
 set -euo pipefail
 
@@ -15,7 +15,7 @@ trap 'rm -rf "$TMP"' EXIT
 fetch() { curl -fsSL -A "DreamlandDeploy/1.0" -o "$1" "$2"; }
 install() { cp -f "$1" "$2"; chmod u+rw "$2" 2>/dev/null || true; echo "OK: $2"; }
 
-echo "=== Dreamland live viewer fix ==="
+echo "=== Dreamland go-live + viewer fix ==="
 
 fetch "$TMP/app.js" "$GITHUB/web/js/app.js"
 fetch "$TMP/dreamland-live.js" "$GITHUB/web/js/dreamland-live.js"
@@ -45,5 +45,4 @@ rm -rf "$DL/api/runtime/cache/"* 2>/dev/null || true
 
 BUILD="$(grep -o 'build-[0-9]*' "$TMP/build-version.json" | head -1 || echo unknown)"
 echo ""
-echo "Done ($BUILD). Open Live tab, wait for status messages, then watch."
-echo "Creator must tap Go live and keep the broadcast screen open."
+echo "Done ($BUILD). Reels play until you tap Go live. Button shows each connect step."

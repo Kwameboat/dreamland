@@ -462,11 +462,16 @@ function stopReelVideo(video, { resetPreview = false } = {}) {
 }
 
 function isLiveUiActive() {
-  return liveBroadcastOpen
-    || liveBroadcastActive
+  return liveBroadcastActive
     || Boolean(state.activeLiveWatch)
-    || document.body.classList.contains('live-room-open')
-    || document.body.classList.contains('live-broadcast-open');
+    || document.body.classList.contains('live-room-open');
+}
+
+function resumeFeedPlaybackIfNeeded() {
+  if (isLiveUiActive()) return;
+  if (state.feedMode === 'reels' && document.getElementById('feed-view')?.classList.contains('active')) {
+    setupReelPlayback();
+  }
 }
 
 function pauseMediaForLive() {
@@ -2428,9 +2433,10 @@ async function resumeLiveBroadcast() {
 
 async function openLiveBroadcast() {
   if (!requireApprovedCreator('go live')) return;
-  pauseMediaForLive();
   const overlay = document.getElementById('live-broadcast');
   if (!overlay) return;
+
+  void import('./dreamland-live.js').then((m) => m.preloadLiveLibs?.());
 
   const live = state.creatorDashboard?.live;
   liveBroadcastActive = Boolean(live && Number(live.status) === 1);
@@ -2485,9 +2491,7 @@ async function closeLiveBroadcast(forceEnd = false) {
     cameraStream = null;
   }
   setLiveBroadcastUiStage(false);
-  if (state.feedMode === 'reels' && document.getElementById('feed-view')?.classList.contains('active')) {
-    setupReelPlayback();
-  }
+  resumeFeedPlaybackIfNeeded();
 }
 
 async function ensureLiveServerReady() {
@@ -2518,40 +2522,53 @@ async function startLiveSession() {
   const price = document.getElementById('live-price')?.value || '15';
   const startBtn = document.getElementById('live-broadcast-start');
 
-  if (startBtn) {
-    startBtn.disabled = true;
-    startBtn.textContent = 'Starting…';
-  }
+  const setStartBtn = (label, disabled = true) => {
+    if (!startBtn) return;
+    startBtn.disabled = disabled;
+    startBtn.textContent = label;
+  };
+
+  setStartBtn('Starting…');
 
   let apiLiveStarted = false;
   try {
     if (!(await ensureLiveServerReady())) return;
 
-    pauseMediaForLive();
     if (!cameraStream) await startLiveBroadcastCamera();
     const form = new FormData();
     form.append('title', title);
     form.append('is_monetized', isMonetized);
     form.append('price_credits', price);
 
+    setStartBtn('Creating live room…');
     const res = await apiUpload(API_ROUTES.creatorStartLive, form, { timeoutMs: 45000 });
     const live = res.data?.live;
     apiLiveStarted = Boolean(live?.id);
     if (!live?.rtc?.signaling_url) {
       throw new Error('Live server did not return a signaling URL');
     }
-    if (live?.rtc) {
-      const liveClient = await ensureDreamlandLive();
-      await liveClient.startBroadcast({
-        rtc: live.rtc,
-        userId: state.user?.id,
-        localStream: cameraStream,
-        onStats: (stats) => {
-          if (stats?.viewerCount != null) updateLiveBroadcastViewerCount(stats.viewerCount);
-        },
-        onChat: (msg) => appendLiveChatMessage(msg, 'live-broadcast-chat-list'),
-      });
-    }
+
+    const liveClient = await ensureDreamlandLive();
+    setStartBtn('Connecting camera…');
+    const broadcastPromise = liveClient.startBroadcast({
+      rtc: live.rtc,
+      userId: state.user?.id,
+      localStream: cameraStream,
+      onStatus: (msg) => {
+        if (msg) setStartBtn(msg.length > 26 ? `${msg.slice(0, 24)}…` : msg);
+      },
+      onStats: (stats) => {
+        if (stats?.viewerCount != null) updateLiveBroadcastViewerCount(stats.viewerCount);
+      },
+      onChat: (msg) => appendLiveChatMessage(msg, 'live-broadcast-chat-list'),
+    });
+
+    await Promise.race([
+      broadcastPromise,
+      new Promise((_, reject) => {
+        window.setTimeout(() => reject(new Error('Going live timed out — try again')), 55000);
+      }),
+    ]);
 
     liveBroadcastActive = true;
     setLiveBroadcastUiStage(true);
@@ -2573,11 +2590,9 @@ async function startLiveSession() {
       try { await endLiveSession(); } catch (_) { /* best-effort cleanup */ }
     }
     showToast(err.message || 'Could not go live');
+    resumeFeedPlaybackIfNeeded();
   } finally {
-    if (startBtn) {
-      startBtn.disabled = false;
-      startBtn.textContent = 'Go live';
-    }
+    setStartBtn('Go live', false);
   }
 }
 

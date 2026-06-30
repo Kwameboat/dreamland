@@ -58,11 +58,24 @@ function resolveMediasoupModule(mod) {
   return { Device, types: root };
 }
 
+async function vendorModuleExists(url) {
+  try {
+    const res = await withTimeout(fetch(url, { method: 'HEAD', cache: 'no-store' }), 4000, 'vendor check');
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 async function importLiveModule(urls, label) {
   let lastErr = null;
   for (const url of urls) {
+    const timeout = url.startsWith('/') ? 8000 : 20000;
     try {
-      const mod = await withTimeout(import(/* @vite-ignore */ url), 22000, `${label} timed out`);
+      if (url.startsWith('/') && !(await vendorModuleExists(url))) {
+        continue;
+      }
+      const mod = await withTimeout(import(/* @vite-ignore */ url), timeout, `${label} timed out`);
       return mod;
     } catch (err) {
       lastErr = err;
@@ -96,8 +109,8 @@ async function loadMediasoupClient() {
   if (mediasoupPromise) return mediasoupPromise;
   mediasoupPromise = importLiveModule([
     '/js/vendor/mediasoup-client.esm.js',
-    'https://esm.sh/mediasoup-client@3.7.17?bundle',
     'https://cdn.jsdelivr.net/npm/mediasoup-client@3.7.17/+esm',
+    'https://esm.sh/mediasoup-client@3.7.17?bundle',
   ], 'Live video player').then(resolveMediasoupModule).catch((err) => {
     mediasoupPromise = null;
     throw err;
@@ -115,7 +128,7 @@ export async function wakeLiveServer(signalingUrl) {
   try {
     await withTimeout(
       fetch(`${base}/health`, { cache: 'no-store', mode: 'cors' }),
-      25000,
+      12000,
       'Live server wake timeout',
     );
   } catch {
@@ -152,7 +165,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     const { io } = await loadSocketIo();
 
     onStatus?.('Connecting to live stream…');
-    const connectTimeout = /onrender\.com/i.test(signalingUrl) ? 45000 : 15000;
+    const connectTimeout = /onrender\.com/i.test(signalingUrl) ? 35000 : 15000;
     const socket = io(signalingUrl, {
       transports: ['websocket', 'polling'],
       reconnection: true,
@@ -239,7 +252,11 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       if (track.kind === 'video') {
         params.encodings = [{ maxBitrate: 1_500_000 }];
       }
-      tracks.push(await transport.produce(params));
+      tracks.push(await withTimeout(
+        transport.produce(params),
+        20000,
+        `Failed to publish ${track.kind}`,
+      ));
     }
     return tracks;
   }
@@ -387,7 +404,6 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       throw new Error('Live RTC config missing');
     }
 
-    const { Device } = await loadMediasoupClient();
     let stream = localStream;
     if (!stream) {
       stream = await navigator.mediaDevices.getUserMedia({
@@ -396,13 +412,19 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       });
     }
 
-    const { socket, join } = await connectSocket(rtc, 'host', userId, onStatus);
+    onStatus?.('Preparing live video…');
+    const [{ Device }, { socket, join }] = await Promise.all([
+      loadMediasoupClient(),
+      connectSocket(rtc, 'host', userId, onStatus),
+    ]);
+
+    onStatus?.('Publishing camera…');
     const device = new Device();
     await device.load({ routerRtpCapabilities: join.rtpCapabilities });
 
     const sendTransport = await createSendTransport(socket, device);
     await produceTracks(sendTransport, stream);
-    await waitForTransportConnection(sendTransport).catch((err) => {
+    void waitForTransportConnection(sendTransport).catch((err) => {
       console.warn('Host transport connect:', err.message);
     });
 
