@@ -4888,6 +4888,11 @@ body.live-broadcast-open .live-broadcast:not(.hidden) {
   display: block !important;
 }
 
+body.live-broadcast-open #app video:not(#live-broadcast-video),
+body.live-room-open #app video:not(#live-watch-video) {
+  display: none !important;
+}
+
 .signup-page {
   padding: 16px 16px 100px;
   max-width: 420px;

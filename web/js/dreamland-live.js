@@ -22,6 +22,32 @@ function withTimeout(promise, ms, message) {
   ]);
 }
 
+function waitForTransportConnection(transport, timeoutMs = 22000) {
+  if (transport.connectionState === 'connected') return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      cleanup();
+      reject(new Error('Live video connection timed out'));
+    }, timeoutMs);
+    const onState = () => {
+      const state = transport.connectionState;
+      if (state === 'connected') {
+        cleanup();
+        resolve();
+      } else if (state === 'failed' || state === 'closed') {
+        cleanup();
+        reject(new Error('Live video connection failed'));
+      }
+    };
+    const cleanup = () => {
+      window.clearTimeout(timer);
+      transport.off('connectionstatechange', onState);
+    };
+    transport.on('connectionstatechange', onState);
+    onState();
+  });
+}
+
 let libsPromise = null;
 
 async function loadLiveLibs() {
@@ -46,6 +72,14 @@ async function loadLiveLibs() {
 export function createDreamlandLive({ showToast, formatCount } = {}) {
   let broadcastSession = null;
   let watchSession = null;
+  let producerPollTimer = null;
+
+  function clearProducerPoll() {
+    if (producerPollTimer) {
+      window.clearInterval(producerPollTimer);
+      producerPollTimer = null;
+    }
+  }
 
   async function connectSocket(rtc, role, userId) {
     const { io } = await loadLiveLibs();
@@ -147,40 +181,140 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     return tracks;
   }
 
-  async function consumeAll(socket, device, transport, videoEl) {
-    const list = await emitAck(socket, 'live:getProducers');
-    const remoteStream = new MediaStream();
-
-    for (const item of list.items || []) {
-      const res = await emitAck(socket, 'live:consume', {
+  async function consumeProducer(socket, device, transport, producerId, remoteStream) {
+    const res = await withTimeout(
+      emitAck(socket, 'live:consume', {
         transportId: transport.id,
-        producerId: item.producerId,
+        producerId,
         rtpCapabilities: device.rtpCapabilities,
-      });
+      }),
+      12000,
+      'Live consume timed out',
+    );
 
-      const consumer = await transport.consume({
+    const consumer = await withTimeout(
+      transport.consume({
         id: res.id,
         producerId: res.producerId,
         kind: res.kind,
         rtpParameters: res.rtpParameters,
-      });
+      }),
+      12000,
+      'Live media attach timed out',
+    );
 
-      await emitAck(socket, 'live:resumeConsumer', { consumerId: consumer.id });
-      remoteStream.addTrack(consumer.track);
-    }
+    await emitAck(socket, 'live:resumeConsumer', { consumerId: consumer.id });
+    remoteStream.addTrack(consumer.track);
+    return consumer;
+  }
 
-    if (videoEl) {
+  async function attachRemoteStreamToVideo(videoEl, remoteStream) {
+    if (!videoEl || !remoteStream) return;
+    if (videoEl.srcObject !== remoteStream) {
       videoEl.srcObject = remoteStream;
-      videoEl.muted = true;
-      videoEl.setAttribute('muted', '');
-      videoEl.playsInline = true;
-      await videoEl.play().catch(() => {});
-      if (remoteStream.getTracks().length) {
-        videoEl.closest('.live-watch-visual')?.classList.add('live-watch-visual--playing');
+    }
+    videoEl.muted = true;
+    videoEl.setAttribute('muted', '');
+    videoEl.playsInline = true;
+    await videoEl.play().catch(() => {});
+    if (remoteStream.getTracks().length) {
+      videoEl.closest('.live-watch-visual')?.classList.add('live-watch-visual--playing');
+    }
+  }
+
+  async function consumeAll(socket, device, transport, videoEl) {
+    const list = await emitAck(socket, 'live:getProducers');
+    const remoteStream = new MediaStream();
+    const consumedProducerIds = new Set();
+    const items = list.items || [];
+    let consumeAttempted = false;
+
+    for (const item of items) {
+      consumeAttempted = true;
+      try {
+        await consumeProducer(socket, device, transport, item.producerId, remoteStream);
+        consumedProducerIds.add(item.producerId);
+      } catch (err) {
+        console.warn('Consume producer failed:', item.producerId, err.message);
       }
     }
 
-    return { remoteStream, transport, device };
+    if (consumeAttempted) {
+      await waitForTransportConnection(transport).catch((err) => {
+        if (!remoteStream.getTracks().length) throw err;
+        console.warn('Transport not fully connected:', err.message);
+      });
+    }
+
+    if (videoEl) {
+      await attachRemoteStreamToVideo(videoEl, remoteStream);
+    }
+
+    return { remoteStream, transport, device, consumedProducerIds };
+  }
+
+  async function syncProducers(session, callbacks = {}) {
+    const { socket, device, recvTransport, videoEl, remoteStream, consumedProducerIds } = session;
+    const list = await emitAck(socket, 'live:getProducers');
+    let added = false;
+
+    for (const item of list.items || []) {
+      if (consumedProducerIds.has(item.producerId)) continue;
+      try {
+        await consumeProducer(socket, device, recvTransport, item.producerId, remoteStream);
+        consumedProducerIds.add(item.producerId);
+        added = true;
+      } catch (err) {
+        console.warn('Sync producer failed:', item.producerId, err.message);
+      }
+    }
+
+    if (added && videoEl) {
+      await attachRemoteStreamToVideo(videoEl, remoteStream);
+      callbacks.onStreamReady?.(remoteStream);
+    }
+
+    return added;
+  }
+
+  function startProducerPolling(session, callbacks = {}) {
+    clearProducerPoll();
+    let attempts = 0;
+    producerPollTimer = window.setInterval(async () => {
+      if (!watchSession || watchSession !== session) {
+        clearProducerPoll();
+        return;
+      }
+      attempts += 1;
+      if (attempts > 20) {
+        clearProducerPoll();
+        if (!session.remoteStream?.getTracks().length) {
+          callbacks.onWaiting?.('Still waiting for the host camera…');
+        }
+        return;
+      }
+      try {
+        const added = await syncProducers(session, callbacks);
+        if (added) clearProducerPoll();
+        else if (!session.remoteStream?.getTracks().length) {
+          callbacks.onWaiting?.('Waiting for host to start broadcasting…');
+        }
+      } catch (err) {
+        console.warn('Producer poll failed:', err.message);
+      }
+    }, 2000);
+  }
+
+  function clearRemoteStreamTracks(remoteStream) {
+    if (!remoteStream) return;
+    remoteStream.getTracks().forEach((track) => {
+      remoteStream.removeTrack(track);
+      try {
+        track.stop();
+      } catch {
+        /* noop */
+      }
+    });
   }
 
   async function startBroadcast({ rtc, userId, localStream, onStats, onChat }) {
@@ -205,6 +339,9 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
 
     const sendTransport = await createSendTransport(socket, device);
     await produceTracks(sendTransport, stream);
+    await waitForTransportConnection(sendTransport).catch((err) => {
+      console.warn('Host transport connect:', err.message);
+    });
 
     socket.on('live:stats', (stats) => {
       if (typeof onStats === 'function') onStats(stats);
@@ -232,7 +369,16 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     broadcastSession = null;
   }
 
-  async function startWatching({ rtc, userId, videoEl, onStats, onChat, onStreamReady, onWaiting }) {
+  async function startWatching({
+    rtc,
+    userId,
+    videoEl,
+    onStats,
+    onChat,
+    onStreamReady,
+    onWaiting,
+    onConnected,
+  }) {
     await stopWatching();
 
     if (!rtc?.signaling_url) {
@@ -241,50 +387,59 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
 
     const { mediasoupClient } = await loadLiveLibs();
     const { socket, join } = await connectSocket(rtc, 'viewer', userId);
+    onConnected?.();
+
     const device = new mediasoupClient.Device();
     await device.load({ routerRtpCapabilities: join.rtpCapabilities });
     const recvTransport = await createRecvTransport(socket, device);
 
+    const remoteStream = new MediaStream();
     const session = {
       socket,
       device,
       recvTransport,
       videoEl,
-      remoteStream: null,
+      remoteStream,
+      consumedProducerIds: new Set(),
     };
 
     const consumed = await consumeAll(socket, device, recvTransport, videoEl);
     session.remoteStream = consumed.remoteStream;
+    consumed.consumedProducerIds.forEach((id) => session.consumedProducerIds.add(id));
+
+    const callbacks = { onStreamReady, onWaiting };
 
     if (!session.remoteStream.getTracks().length) {
       onWaiting?.('Waiting for host to start broadcasting…');
+      startProducerPolling(session, callbacks);
     } else {
       onStreamReady?.(session.remoteStream);
     }
 
     socket.on('live:newProducer', async ({ producerId }) => {
+      if (!producerId || session.consumedProducerIds.has(producerId)) return;
       try {
-        const res = await emitAck(socket, 'live:consume', {
-          transportId: recvTransport.id,
-          producerId,
-          rtpCapabilities: device.rtpCapabilities,
-        });
-        const consumer = await recvTransport.consume({
-          id: res.id,
-          producerId: res.producerId,
-          kind: res.kind,
-          rtpParameters: res.rtpParameters,
-        });
-        await emitAck(socket, 'live:resumeConsumer', { consumerId: consumer.id });
-        session.remoteStream.addTrack(consumer.track);
+        await consumeProducer(socket, device, recvTransport, producerId, session.remoteStream);
+        session.consumedProducerIds.add(producerId);
         if (videoEl) {
-          await videoEl.play().catch(() => {});
-          videoEl.closest('.live-watch-visual')?.classList.add('live-watch-visual--playing');
+          await attachRemoteStreamToVideo(videoEl, session.remoteStream);
         }
         onStreamReady?.(session.remoteStream);
+        clearProducerPoll();
       } catch (err) {
         console.warn('Consume new producer failed:', err.message);
       }
+    });
+
+    socket.on('live:hostReconnecting', () => {
+      clearRemoteStreamTracks(session.remoteStream);
+      session.consumedProducerIds.clear();
+      if (videoEl) {
+        videoEl.srcObject = session.remoteStream;
+        videoEl.closest('.live-watch-visual')?.classList.remove('live-watch-visual--playing');
+      }
+      onWaiting?.('Host reconnecting — video will resume shortly…');
+      startProducerPolling(session, callbacks);
     });
 
     socket.on('live:stats', (stats) => {
@@ -310,10 +465,12 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
   }
 
   async function stopWatching() {
+    clearProducerPoll();
     if (!watchSession) return;
-    const { socket, recvTransport, videoEl } = watchSession;
+    const { socket, recvTransport, videoEl, remoteStream } = watchSession;
     try { recvTransport.close(); } catch (_) { /* noop */ }
     try { socket.disconnect(); } catch (_) { /* noop */ }
+    clearRemoteStreamTracks(remoteStream);
     if (videoEl) {
       videoEl.srcObject = null;
       videoEl.closest('.live-watch-visual')?.classList.remove('live-watch-visual--playing');

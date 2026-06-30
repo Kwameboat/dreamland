@@ -461,9 +461,30 @@ function stopReelVideo(video, { resetPreview = false } = {}) {
   }
 }
 
+function isLiveUiActive() {
+  return liveBroadcastOpen
+    || liveBroadcastActive
+    || Boolean(state.activeLiveWatch)
+    || document.body.classList.contains('live-room-open')
+    || document.body.classList.contains('live-broadcast-open');
+}
+
 function pauseMediaForLive() {
   resetReelPlaybackSession();
   cleanupWarmReelVideos();
+  const liveIds = new Set(['live-watch-video', 'live-broadcast-video']);
+  document.querySelectorAll('video').forEach((video) => {
+    if (liveIds.has(video.id)) return;
+    destroyVideoHls(video);
+    stopReelVideo(video);
+    try {
+      video.pause();
+    } catch {
+      /* ignore */
+    }
+    video.muted = true;
+    video.setAttribute('muted', '');
+  });
 }
 
 function pauseAllReelVideos(root = els.feedList) {
@@ -1016,6 +1037,7 @@ function initFastReels() {
       cleanupWarmReelVideos();
     },
     onAfterWindowRender: (container, activeIndex) => {
+      if (isLiveUiActive()) return;
       bindRenderedReelInteractions(container);
       container.querySelectorAll('.reel').forEach((reel) => {
         const post = state.feed[Number(reel.dataset.index)];
@@ -2405,6 +2427,7 @@ async function resumeLiveBroadcast() {
 
 async function openLiveBroadcast() {
   if (!requireApprovedCreator('go live')) return;
+  pauseMediaForLive();
   const overlay = document.getElementById('live-broadcast');
   if (!overlay) return;
 
@@ -2461,6 +2484,9 @@ async function closeLiveBroadcast(forceEnd = false) {
     cameraStream = null;
   }
   setLiveBroadcastUiStage(false);
+  if (state.feedMode === 'reels' && document.getElementById('feed-view')?.classList.contains('active')) {
+    setupReelPlayback();
+  }
 }
 
 async function ensureLiveServerReady() {
@@ -2500,6 +2526,7 @@ async function startLiveSession() {
   try {
     if (!(await ensureLiveServerReady())) return;
 
+    pauseMediaForLive();
     if (!cameraStream) await startLiveBroadcastCamera();
     const form = new FormData();
     form.append('title', title);
@@ -4056,6 +4083,7 @@ function prefetchReelVideos(startIndex = 0) {
 }
 
 function scheduleReelPlaybackSync() {
+  if (isLiveUiActive()) return;
   if (reelScrollRaf) return;
   reelScrollRaf = requestAnimationFrame(() => {
     reelScrollRaf = 0;
@@ -4072,7 +4100,7 @@ function getEffectiveActiveReelIndex() {
 }
 
 function syncActiveReelPlayback() {
-  if (!els.feedList || state.feedMode !== 'reels') return;
+  if (!els.feedList || state.feedMode !== 'reels' || isLiveUiActive()) return;
 
   const activeIndex = getEffectiveActiveReelIndex();
   const activeId = String(state.feed[activeIndex]?.id || '');
@@ -4153,6 +4181,7 @@ function bindFeedGestureAudioUnlock() {
 }
 
 function setupReelPlayback() {
+  if (isLiveUiActive()) return;
   if (reelObserver) reelObserver.disconnect();
   dlSocial?.stopAllWatchTracking?.();
   activeReelPlaybackId = null;
@@ -4370,6 +4399,7 @@ async function openLiveWatchRoom(live) {
       rtc,
       userId: state.user?.id,
       videoEl,
+      onConnected: () => setLiveWatchStatus('Loading live video…'),
       onChat: (msg) => appendLiveChatMessage(msg, 'live-chat-list'),
       onStreamReady: () => {
         setLiveWatchStatus('');
@@ -4389,6 +4419,14 @@ async function openLiveWatchRoom(live) {
     setLiveWatchStatus(err.message || 'Could not connect to live video', true);
     showToast(err.message || 'Could not connect to live video');
   }
+
+  videoEl?.addEventListener('click', () => {
+    if (!videoEl?.srcObject) return;
+    videoEl.muted = false;
+    videoEl.removeAttribute('muted');
+    videoEl.play().catch(() => {});
+    setLiveWatchStatus('');
+  }, { once: true });
 }
 
 async function closeLiveWatchRoom() {

@@ -396,7 +396,20 @@ async function boot() {
       if (!meta) return;
       const room = rooms.get(meta.liveId);
       if (room) {
-        if (room.hostSocketId === socket.id) room.hostSocketId = null;
+        if (room.hostSocketId === socket.id) {
+          room.hostSocketId = null;
+          for (const [producerId, producer] of room.producers) {
+            try {
+              producer.close();
+            } catch (_) {
+              /* noop */
+            }
+            room.producers.delete(producerId);
+          }
+          io.to(`live:${meta.liveId}`).emit('live:hostReconnecting', {
+            liveId: meta.liveId,
+          });
+        }
         room.viewers.delete(socket.id);
         io.to(`live:${meta.liveId}`).emit('live:stats', {
           liveId: meta.liveId,
