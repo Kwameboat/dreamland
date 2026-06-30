@@ -5317,19 +5317,11 @@ async function refreshAppFromPull() {
         await reg.update();
         if (reg.waiting) {
           reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-          window.location.reload();
           return;
         }
       }
-      const res = await fetch('/build-version.json', { cache: 'no-store' });
-      if (res.ok) {
-        const data = await res.json();
-        const current = window.__DL_BUILD__ || '';
-        if (data.version && current && data.version !== current) {
-          window.location.reload();
-          return;
-        }
-      }
+      await checkBuildVersionMismatch();
+      if (document.hidden) return;
     }
   } catch {
     /* continue with feed refresh */
@@ -5645,39 +5637,77 @@ function bindUi() {
 function registerPwaUpdates() {
   if (!('serviceWorker' in navigator) || DEV_ALLOW_BROWSER) return;
 
-  navigator.serviceWorker.register('/sw.js').then((registration) => {
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
+
+  const activateWaitingWorker = (worker) => {
+    if (!worker) return;
+    worker.postMessage({ type: 'SKIP_WAITING' });
+  };
+
+  const applyWaitingUpdate = (registration) => {
+    if (!registration?.waiting) return false;
+    showToast('Updating Dreamland…');
+    activateWaitingWorker(registration.waiting);
+    return true;
+  };
+
+  navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((registration) => {
+    applyWaitingUpdate(registration);
+
     registration.addEventListener('updatefound', () => {
       const worker = registration.installing;
       if (!worker) return;
       worker.addEventListener('statechange', () => {
         if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-          showPwaUpdatePrompt(worker);
+          showToast('Updating Dreamland…');
+          activateWaitingWorker(worker);
         }
       });
     });
 
-    if (registration.waiting) {
-      showPwaUpdatePrompt(registration.waiting);
-    }
+    const checkForUpdates = () => {
+      registration.update().catch(() => {});
+      void checkBuildVersionMismatch();
+    };
+
+    checkForUpdates();
+    window.setInterval(checkForUpdates, 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') checkForUpdates();
+    });
+    window.addEventListener('focus', checkForUpdates);
   }).catch(() => {});
 }
 
-function showPwaUpdatePrompt(worker) {
-  if (document.getElementById('pwa-update-toast')) return;
-  const el = document.createElement('div');
-  el.id = 'pwa-update-toast';
-  el.className = 'pwa-update-toast';
-  el.innerHTML = `
-    <span>Dreamland update ready</span>
-    <button type="button" class="btn-primary" id="pwa-update-apply">Refresh</button>
-    <button type="button" class="btn-ghost" id="pwa-update-dismiss">Later</button>`;
-  document.body.appendChild(el);
-  document.getElementById('pwa-update-apply')?.addEventListener('click', () => {
-    worker.postMessage({ type: 'SKIP_WAITING' });
-    el.remove();
-    window.setTimeout(() => window.location.reload(), 300);
-  });
-  document.getElementById('pwa-update-dismiss')?.addEventListener('click', () => el.remove());
+async function checkBuildVersionMismatch() {
+  if (DEV_ALLOW_BROWSER) return;
+  try {
+    const res = await fetch('/build-version.json', { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    const current = window.__DL_BUILD__ || '';
+    if (!data.version || !current || data.version === current) return;
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (reg) {
+      await reg.update();
+      if (reg.waiting) {
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        return;
+      }
+    }
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+    window.location.reload();
+  } catch {
+    /* ignore */
+  }
 }
 
 registerPwaUpdates();

@@ -901,6 +901,49 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Glide.js/3.6.0/glide.min.js"></script>
+  <script>
+    (function () {
+      var PWA_BUILD_KEY = 'dreamland_pwa_build';
+      var isLocal = /localhost|127\.0\.0\.1/.test(location.hostname) || location.port === '3000';
+
+      function activateWaiting(reg) {
+        if (!reg || !reg.waiting) return false;
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        return true;
+      }
+
+      async function clearPwaCaches() {
+        if (!('caches' in window)) return;
+        var keys = await caches.keys();
+        await Promise.all(keys.map(function (k) { return caches.delete(k); }));
+      }
+
+      async function checkPwaUpdate(build) {
+        if (isLocal || !('serviceWorker' in navigator)) return false;
+        var prev = localStorage.getItem(PWA_BUILD_KEY);
+        if (prev && prev !== build) {
+          localStorage.setItem(PWA_BUILD_KEY, build);
+          try {
+            var reg = await navigator.serviceWorker.getRegistration();
+            if (reg) await reg.update();
+            activateWaiting(reg);
+            await clearPwaCaches();
+          } catch (e) { /* ignore */ }
+          location.replace(location.pathname + location.search + location.hash);
+          return true;
+        }
+        localStorage.setItem(PWA_BUILD_KEY, build);
+        try {
+          var registration = await navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });
+          await registration.update();
+          if (activateWaiting(registration)) return true;
+        } catch (e) { /* ignore */ }
+        return false;
+      }
+
+      window.__DL_CHECK_PWA_UPDATE__ = checkPwaUpdate;
+    })();
+  </script>
   <script type="module">
     (async function () {
       try {
@@ -913,6 +956,7 @@
             if (data.version) build = data.version;
           }
         } catch { /* use fallback build */ }
+        if (window.__DL_CHECK_PWA_UPDATE__ && await window.__DL_CHECK_PWA_UPDATE__(build)) return;
         window.__DL_BUILD__ = build;
         await import(`/js/app.js?v=${encodeURIComponent(build)}`);
       } catch (err) {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dreamland-build-178250';
+const CACHE_NAME = 'dreamland-build-178251';
 
 const CORE_ASSETS = [
   '/',
@@ -47,6 +47,11 @@ self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
+  if (event.data?.type === 'CLEAR_CACHES') {
+    event.waitUntil(
+      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+    );
+  }
 });
 
 function isMutableAsset(pathname) {
@@ -57,45 +62,30 @@ function isMutableAsset(pathname) {
     || NETWORK_FIRST_PATHS.some((p) => pathname === p || pathname.endsWith(p));
 }
 
+async function networkFirst(request, cache) {
+  try {
+    const response = await fetch(request);
+    if (response.ok && cache) {
+      cache.put(request, response.clone()).catch(() => {});
+    }
+    return response;
+  } catch {
+    const cached = cache ? await cache.match(request) : null;
+    if (cached) return cached;
+    return new Response('Offline', { status: 503, statusText: 'Offline' });
+  }
+}
+
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/v1') || url.pathname.includes('/api/')) return;
 
-  if (NETWORK_FIRST_PATHS.some((path) => url.pathname === path || url.pathname.endsWith(path))) {
+  if (event.request.mode === 'navigate' || isMutableAsset(url.pathname)) {
     event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          if (response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          }
-          return response;
-        })
-        .catch(() => caches.match(event.request))
-    );
-    return;
-  }
-
-  if (isMutableAsset(url.pathname)) {
-    event.respondWith(
-      caches.open(CACHE_NAME).then(async (cache) => {
-        const cached = await cache.match(event.request);
-        const networkFetch = fetch(event.request)
-          .then((response) => {
-            if (response.ok) cache.put(event.request, response.clone());
-            return response;
-          })
-          .catch(() => null);
-        if (cached) {
-          networkFetch.catch(() => {});
-          return cached;
-        }
-        const response = await networkFetch;
-        if (response) return response;
-        return new Response('Offline', { status: 503, statusText: 'Offline' });
-      })
+      caches.open(CACHE_NAME).then((cache) => networkFirst(event.request, cache))
     );
     return;
   }
