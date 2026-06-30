@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dreamland-build-178252';
+const CACHE_NAME = 'dreamland-build-178253';
 
 const CORE_ASSETS = [
   '/',
@@ -9,6 +9,8 @@ const CORE_ASSETS = [
   '/js/app.js',
   '/js/dreamland-features.js',
   '/js/dreamland-live.js',
+  '/js/vendor/socket.io.esm.min.js',
+  '/js/vendor/mediasoup-client.esm.js',
   '/js/dreamland-ai.js',
   '/js/dreamland-reels-fast.js',
   '/js/dreamland-social.js',

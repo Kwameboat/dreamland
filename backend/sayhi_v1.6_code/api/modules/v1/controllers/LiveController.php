@@ -96,6 +96,8 @@ class LiveController extends ActiveController
 
         $viewerCount = (int) LiveCallViewer::find()->where(['live_call_id' => $live->id])->count();
 
+        $this->ensureLiveRoomRegistered($live);
+
         return [
             'message' => 'Live stream ready.',
             'live' => $this->serializeLiveWatch($live, $dreamland, $viewerCount),
@@ -159,6 +161,8 @@ class LiveController extends ActiveController
 
         $viewerCount = (int) LiveCallViewer::find()->where(['live_call_id' => $liveId])->count();
 
+        $this->ensureLiveRoomRegistered($live);
+
         $rtc = null;
         if (Yii::$app->has('dreamlandLive')) {
             $rtc = Yii::$app->dreamlandLive->clientConfig($live, 'viewer');
@@ -196,6 +200,7 @@ class LiveController extends ActiveController
 
     private function serializeLiveWatch(UserLiveHistory $live, array $dreamland, int $viewerCount): array
     {
+        $this->ensureLiveRoomRegistered($live);
         $card = $this->serializeLiveCard($live, $dreamland);
         $card['viewer_count'] = $viewerCount;
         $card['token'] = $live->token;
@@ -204,5 +209,22 @@ class LiveController extends ActiveController
             $card['rtc'] = Yii::$app->dreamlandLive->clientConfig($live, 'viewer');
         }
         return $card;
+    }
+
+    private function ensureLiveRoomRegistered(UserLiveHistory $live): void
+    {
+        if (!Yii::$app->has('dreamlandLive')) {
+            return;
+        }
+
+        /** @var \common\components\DreamlandLiveRtcService $rtc */
+        $rtc = Yii::$app->dreamlandLive;
+        $liveId = (int) $live->id;
+        $status = $rtc->roomStatus($liveId);
+        if (is_array($status) && !empty($status['active'])) {
+            return;
+        }
+
+        $rtc->registerRoom($liveId, (int) $live->user_id, (string) $live->token);
     }
 }

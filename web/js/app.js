@@ -580,7 +580,8 @@ const hlsPlayers = new WeakMap();
 
 async function ensureDreamlandLive() {
   if (dreamlandLive) return dreamlandLive;
-  const { createDreamlandLive } = await import('./dreamland-live.js');
+  const { createDreamlandLive, preloadLiveLibs } = await import('./dreamland-live.js');
+  void preloadLiveLibs();
   dreamlandLive = createDreamlandLive({ showToast, formatCount });
   return dreamlandLive;
 }
@@ -4227,6 +4228,7 @@ function switchFeedMode(mode) {
   updateFeedHeaderUi();
   if (mode === 'live') {
     pauseMediaForLive();
+    void import('./dreamland-live.js').then((m) => m.preloadLiveLibs?.());
     loadLives(true);
   } else {
     setupReelPlayback();
@@ -4392,14 +4394,16 @@ async function openLiveWatchRoom(live) {
     return;
   }
 
-  setLiveWatchStatus('Connecting to live stream…');
+  setLiveWatchStatus('Starting live connection…');
   try {
     const liveClient = await ensureDreamlandLive();
     await liveClient.startWatching({
       rtc,
       userId: state.user?.id,
       videoEl,
-      onConnected: () => setLiveWatchStatus('Loading live video…'),
+      onStatus: (msg) => {
+        if (msg) setLiveWatchStatus(msg);
+      },
       onChat: (msg) => appendLiveChatMessage(msg, 'live-chat-list'),
       onStreamReady: () => {
         setLiveWatchStatus('');
@@ -4413,7 +4417,7 @@ async function openLiveWatchRoom(live) {
           });
         }
       },
-      onWaiting: (msg) => setLiveWatchStatus(msg || 'Waiting for host to broadcast…'),
+      onWaiting: (msg) => setLiveWatchStatus(msg || 'Waiting for host camera…'),
     });
   } catch (err) {
     setLiveWatchStatus(err.message || 'Could not connect to live video', true);

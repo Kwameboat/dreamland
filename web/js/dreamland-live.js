@@ -1,5 +1,5 @@
 /**
- * Dreamland live WebRTC client — CDN libs load only when going live / watching.
+ * Dreamland live WebRTC client — libs load from same-origin vendor first (CDN fallback).
  */
 
 function emitAck(socket, event, payload = {}, timeoutMs = 15000) {
@@ -22,19 +22,20 @@ function withTimeout(promise, ms, message) {
   ]);
 }
 
-function waitForTransportConnection(transport, timeoutMs = 22000) {
-  if (transport.connectionState === 'connected') return Promise.resolve();
+function waitForTransportConnection(transport, timeoutMs = 18000) {
+  const state = transport.connectionState;
+  if (state === 'connected' || state === 'completed') return Promise.resolve();
   return new Promise((resolve, reject) => {
     const timer = window.setTimeout(() => {
       cleanup();
       reject(new Error('Live video connection timed out'));
     }, timeoutMs);
     const onState = () => {
-      const state = transport.connectionState;
-      if (state === 'connected') {
+      const next = transport.connectionState;
+      if (next === 'connected' || next === 'completed') {
         cleanup();
         resolve();
-      } else if (state === 'failed' || state === 'closed') {
+      } else if (next === 'failed' || next === 'closed') {
         cleanup();
         reject(new Error('Live video connection failed'));
       }
@@ -48,25 +49,78 @@ function waitForTransportConnection(transport, timeoutMs = 22000) {
   });
 }
 
-let libsPromise = null;
+function resolveMediasoupModule(mod) {
+  const root = mod?.default ?? mod;
+  const Device = root?.Device ?? mod?.Device;
+  if (!Device) {
+    throw new Error('Live video player failed to load');
+  }
+  return { Device, types: root };
+}
 
-async function loadLiveLibs() {
-  if (libsPromise) return libsPromise;
-  libsPromise = withTimeout(
-    Promise.all([
-      import('https://cdn.socket.io/4.8.1/socket.io.esm.min.js'),
-      import('https://esm.sh/mediasoup-client@3.7.17'),
-    ]).then(([socketMod, mediasoupMod]) => ({
-      io: socketMod.io,
-      mediasoupClient: mediasoupMod,
-    })),
-    25000,
-    'Live libraries failed to load — check your connection',
-  ).catch((err) => {
-    libsPromise = null;
+async function importLiveModule(urls, label) {
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      const mod = await withTimeout(import(/* @vite-ignore */ url), 22000, `${label} timed out`);
+      return mod;
+    } catch (err) {
+      lastErr = err;
+      console.warn(`${label} import failed (${url}):`, err.message);
+    }
+  }
+  throw lastErr || new Error(`${label} unavailable`);
+}
+
+let socketIoPromise = null;
+let mediasoupPromise = null;
+
+async function loadSocketIo() {
+  if (socketIoPromise) return socketIoPromise;
+  socketIoPromise = importLiveModule([
+    '/js/vendor/socket.io.esm.min.js',
+    'https://cdn.socket.io/4.8.1/socket.io.esm.min.js',
+    'https://cdn.jsdelivr.net/npm/socket.io-client@4.8.1/+esm',
+  ], 'Socket.IO').then((mod) => {
+    const io = mod.io ?? mod.default?.io ?? mod.default;
+    if (!io) throw new Error('Socket.IO client missing');
+    return { io };
+  }).catch((err) => {
+    socketIoPromise = null;
     throw err;
   });
-  return libsPromise;
+  return socketIoPromise;
+}
+
+async function loadMediasoupClient() {
+  if (mediasoupPromise) return mediasoupPromise;
+  mediasoupPromise = importLiveModule([
+    '/js/vendor/mediasoup-client.esm.js',
+    'https://esm.sh/mediasoup-client@3.7.17?bundle',
+    'https://cdn.jsdelivr.net/npm/mediasoup-client@3.7.17/+esm',
+  ], 'Live video player').then(resolveMediasoupModule).catch((err) => {
+    mediasoupPromise = null;
+    throw err;
+  });
+  return mediasoupPromise;
+}
+
+export async function preloadLiveLibs() {
+  await Promise.allSettled([loadSocketIo(), loadMediasoupClient()]);
+}
+
+export async function wakeLiveServer(signalingUrl) {
+  const base = String(signalingUrl || '').replace(/\/$/, '');
+  if (!base) return;
+  try {
+    await withTimeout(
+      fetch(`${base}/health`, { cache: 'no-store', mode: 'cors' }),
+      25000,
+      'Live server wake timeout',
+    );
+  } catch {
+    /* cold start may still succeed via socket */
+  }
 }
 
 export function createDreamlandLive({ showToast, formatCount } = {}) {
@@ -81,8 +135,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     }
   }
 
-  async function connectSocket(rtc, role, userId) {
-    const { io } = await loadLiveLibs();
+  async function connectSocket(rtc, role, userId, onStatus) {
     const signalingUrl = String(rtc.signaling_url || '').replace(/\/$/, '');
     if (!signalingUrl) {
       throw new Error('Live signaling URL is missing');
@@ -92,30 +145,40 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       throw new Error('Live signaling is not configured for this site');
     }
 
+    onStatus?.('Waking live video server…');
+    await wakeLiveServer(signalingUrl);
+
+    onStatus?.('Loading live player…');
+    const { io } = await loadSocketIo();
+
+    onStatus?.('Connecting to live stream…');
+    const connectTimeout = /onrender\.com/i.test(signalingUrl) ? 45000 : 15000;
     const socket = io(signalingUrl, {
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: 8,
+      reconnectionAttempts: 6,
+      timeout: connectTimeout,
     });
 
     await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('Live signaling timeout')), 12000);
+      const timer = setTimeout(() => reject(new Error('Live signaling timeout — try again in a moment')), connectTimeout);
       socket.once('connect', () => {
         clearTimeout(timer);
         resolve();
       });
       socket.once('connect_error', (err) => {
         clearTimeout(timer);
-        reject(err);
+        reject(err instanceof Error ? err : new Error(err?.message || 'Live signaling connection failed'));
       });
     });
 
+    onStatus?.('Joining live room…');
     const join = await emitAck(socket, 'live:join', {
       liveId: rtc.live_id,
       token: rtc.token,
       role,
       userId: userId || 0,
-    });
+    }, 20000);
 
     return { socket, join };
   }
@@ -188,7 +251,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
         producerId,
         rtpCapabilities: device.rtpCapabilities,
       }),
-      12000,
+      15000,
       'Live consume timed out',
     );
 
@@ -199,7 +262,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
         kind: res.kind,
         rtpParameters: res.rtpParameters,
       }),
-      12000,
+      15000,
       'Live media attach timed out',
     );
 
@@ -216,6 +279,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     videoEl.muted = true;
     videoEl.setAttribute('muted', '');
     videoEl.playsInline = true;
+    videoEl.setAttribute('playsinline', '');
     await videoEl.play().catch(() => {});
     if (remoteStream.getTracks().length) {
       videoEl.closest('.live-watch-visual')?.classList.add('live-watch-visual--playing');
@@ -239,10 +303,9 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       }
     }
 
-    if (consumeAttempted) {
+    if (consumeAttempted && remoteStream.getTracks().length) {
       await waitForTransportConnection(transport).catch((err) => {
-        if (!remoteStream.getTracks().length) throw err;
-        console.warn('Transport not fully connected:', err.message);
+        console.warn('Transport connect:', err.message);
       });
     }
 
@@ -286,10 +349,10 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
         return;
       }
       attempts += 1;
-      if (attempts > 20) {
+      if (attempts > 25) {
         clearProducerPoll();
         if (!session.remoteStream?.getTracks().length) {
-          callbacks.onWaiting?.('Still waiting for the host camera…');
+          callbacks.onWaiting?.('Host camera not detected — ask them to restart the broadcast.');
         }
         return;
       }
@@ -297,7 +360,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
         const added = await syncProducers(session, callbacks);
         if (added) clearProducerPoll();
         else if (!session.remoteStream?.getTracks().length) {
-          callbacks.onWaiting?.('Waiting for host to start broadcasting…');
+          callbacks.onWaiting?.('Waiting for host camera…');
         }
       } catch (err) {
         console.warn('Producer poll failed:', err.message);
@@ -317,14 +380,14 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     });
   }
 
-  async function startBroadcast({ rtc, userId, localStream, onStats, onChat }) {
+  async function startBroadcast({ rtc, userId, localStream, onStats, onChat, onStatus }) {
     await stopBroadcast();
 
     if (!rtc?.signaling_url) {
       throw new Error('Live RTC config missing');
     }
 
-    const { mediasoupClient } = await loadLiveLibs();
+    const { Device } = await loadMediasoupClient();
     let stream = localStream;
     if (!stream) {
       stream = await navigator.mediaDevices.getUserMedia({
@@ -333,8 +396,8 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       });
     }
 
-    const { socket, join } = await connectSocket(rtc, 'host', userId);
-    const device = new mediasoupClient.Device();
+    const { socket, join } = await connectSocket(rtc, 'host', userId, onStatus);
+    const device = new Device();
     await device.load({ routerRtpCapabilities: join.rtpCapabilities });
 
     const sendTransport = await createSendTransport(socket, device);
@@ -378,6 +441,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     onStreamReady,
     onWaiting,
     onConnected,
+    onStatus,
   }) {
     await stopWatching();
 
@@ -385,11 +449,17 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       throw new Error('Live RTC config missing');
     }
 
-    const { mediasoupClient } = await loadLiveLibs();
-    const { socket, join } = await connectSocket(rtc, 'viewer', userId);
+    const status = (msg) => {
+      if (msg) onStatus?.(msg);
+      else onConnected?.();
+    };
+
+    const { socket, join } = await connectSocket(rtc, 'viewer', userId, status);
     onConnected?.();
 
-    const device = new mediasoupClient.Device();
+    onStatus?.('Starting video…');
+    const { Device } = await loadMediasoupClient();
+    const device = new Device();
     await device.load({ routerRtpCapabilities: join.rtpCapabilities });
     const recvTransport = await createRecvTransport(socket, device);
 
@@ -403,6 +473,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       consumedProducerIds: new Set(),
     };
 
+    onStatus?.('Loading live video…');
     const consumed = await consumeAll(socket, device, recvTransport, videoEl);
     session.remoteStream = consumed.remoteStream;
     consumed.consumedProducerIds.forEach((id) => session.consumedProducerIds.add(id));
@@ -410,9 +481,10 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     const callbacks = { onStreamReady, onWaiting };
 
     if (!session.remoteStream.getTracks().length) {
-      onWaiting?.('Waiting for host to start broadcasting…');
+      onWaiting?.('Waiting for host camera…');
       startProducerPolling(session, callbacks);
     } else {
+      onStatus?.('');
       onStreamReady?.(session.remoteStream);
     }
 
@@ -424,6 +496,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
         if (videoEl) {
           await attachRemoteStreamToVideo(videoEl, session.remoteStream);
         }
+        onStatus?.('');
         onStreamReady?.(session.remoteStream);
         clearProducerPoll();
       } catch (err) {
