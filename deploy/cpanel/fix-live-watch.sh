@@ -1,5 +1,5 @@
 #!/bin/bash
-# Fix go-live stuck on Starting + reels not previewing.
+# Fix live viewer stuck on Connecting — WebRTC consume + room registration.
 # Run: curl -fsSL -A "DreamlandDeploy/1.0" https://raw.githubusercontent.com/Kwameboat/dreamland/main/deploy/cpanel/fix-live-watch.sh | bash
 set -euo pipefail
 
@@ -15,13 +15,16 @@ trap 'rm -rf "$TMP"' EXIT
 fetch() { curl -fsSL -A "DreamlandDeploy/1.0" -o "$1" "$2"; }
 install() { cp -f "$1" "$2"; chmod u+rw "$2" 2>/dev/null || true; echo "OK: $2"; }
 
-echo "=== Dreamland go-live + viewer fix ==="
+echo "=== Dreamland live viewer fix ==="
 
 fetch "$TMP/app.js" "$GITHUB/web/js/app.js"
 fetch "$TMP/dreamland-live.js" "$GITHUB/web/js/dreamland-live.js"
+fetch "$TMP/index.html" "$GITHUB/web/index.html"
 fetch "$TMP/app.css" "$GITHUB/web/css/app.css"
 fetch "$TMP/build-version.json" "$GITHUB/web/build-version.json"
+fetch "$TMP/env-config.js" "$GITHUB/web/env-config.js"
 fetch "$TMP/sw.js" "$GITHUB/web/sw.js"
+fetch "$TMP/htaccess" "$GITHUB/web/.htaccess"
 fetch "$TMP/LiveController.php" "$BASE/api/modules/v1/controllers/LiveController.php"
 
 mkdir -p "$TMP/vendor"
@@ -34,9 +37,12 @@ if [ -d "$WEB" ]; then
   mkdir -p "$WEB/js/vendor" "$WEB/js" "$WEB/css"
   install "$TMP/app.js" "$WEB/js/app.js"
   install "$TMP/dreamland-live.js" "$WEB/js/dreamland-live.js"
+  install "$TMP/index.html" "$WEB/index.html"
   install "$TMP/app.css" "$WEB/css/app.css"
   install "$TMP/build-version.json" "$WEB/build-version.json"
+  install "$TMP/env-config.js" "$WEB/env-config.js"
   install "$TMP/sw.js" "$WEB/sw.js"
+  install "$TMP/htaccess" "$WEB/.htaccess"
   install "$TMP/vendor/socket.io.esm.min.js" "$WEB/js/vendor/socket.io.esm.min.js"
   install "$TMP/vendor/mediasoup-client.esm.js" "$WEB/js/vendor/mediasoup-client.esm.js"
 fi
@@ -45,4 +51,7 @@ rm -rf "$DL/api/runtime/cache/"* 2>/dev/null || true
 
 BUILD="$(grep -o 'build-[0-9]*' "$TMP/build-version.json" | head -1 || echo unknown)"
 echo ""
-echo "Done ($BUILD). Reels play until you tap Go live. Button shows each connect step."
+echo "Done ($BUILD). Hard-refresh PWA (Ctrl+Shift+R)."
+echo "Redeploy Render live-server from GitHub for full WebRTC ICE fix:"
+echo "  Render dashboard → dreamland-live → Manual Deploy"
+echo "https://dreamlandgh.app"

@@ -3,6 +3,7 @@
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
+const dns = require('dns').promises;
 const mediasoup = require('mediasoup');
 const { Server } = require('socket.io');
 const config = require('./config');
@@ -73,22 +74,41 @@ async function createWorker() {
   console.log('Mediasoup worker started');
 }
 
-function listenOptions() {
-  const listenIp = config.mediasoup.listenIp;
-  const announcedIp = config.mediasoup.announcedIp;
-  if (announcedIp) {
-    return [{ ip: listenIp, announcedIp }];
+async function resolveAnnouncedIp(value) {
+  if (!value) return undefined;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) return value;
+  try {
+    const { address } = await dns.lookup(value, { family: 4 });
+    return address;
+  } catch (err) {
+    console.warn('Could not resolve announced IP for', value, err.message);
+    return value;
   }
-  return [{ ip: listenIp }];
+}
+
+let resolvedListenOptions = null;
+
+async function getListenOptions() {
+  if (resolvedListenOptions) return resolvedListenOptions;
+  const listenIp = config.mediasoup.listenIp;
+  const announced = await resolveAnnouncedIp(config.mediasoup.announcedIp);
+  resolvedListenOptions = announced
+    ? [{ ip: listenIp, announcedIp: announced }]
+    : [{ ip: listenIp }];
+  if (announced) {
+    console.log('WebRTC announced IP:', announced);
+  }
+  return resolvedListenOptions;
 }
 
 function transportOptions() {
   const onRender = config.deployTarget === 'render';
   return {
-    listenIps: listenOptions(),
+    listenIps: resolvedListenOptions || [{ ip: config.mediasoup.listenIp }],
     enableUdp: !onRender,
     enableTcp: true,
     preferUdp: !onRender,
+    initialAvailableOutgoingBitrate: 1_000_000,
   };
 }
 
@@ -130,6 +150,7 @@ async function closeRoom(liveId) {
 
 async function boot() {
   await createWorker();
+  await getListenOptions();
 
   const app = express();
   app.use(cors({ origin: config.corsOrigins, credentials: true }));
@@ -227,11 +248,17 @@ async function boot() {
         });
 
         if (typeof ack === 'function') {
+          const producers = [];
+          room.producers.forEach((producer, id) => {
+            producers.push({ producerId: id, kind: producer.kind });
+          });
           ack({
             ok: true,
             rtpCapabilities: room.router.rtpCapabilities,
             iceServers: config.iceServers,
             viewerCount: room.viewerCount(),
+            hasHost: Boolean(room.hostSocketId),
+            producers,
             chat: room.chat.slice(-30),
           });
         }

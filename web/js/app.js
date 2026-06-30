@@ -4362,6 +4362,8 @@ function openLivePaywall(liveId, price, title) {
 
 async function enterLiveRoom(liveId) {
   try {
+    if (!(await ensureLiveServerReady())) return;
+
     const res = await api(`${API_ROUTES.liveWatch}?live_id=${encodeURIComponent(liveId)}`);
     if (Number(res.data?.statusCode) === 402) {
       const live = res.data?.live || state.lives.find((item) => String(item.id) === String(liveId));
@@ -4376,6 +4378,7 @@ async function enterLiveRoom(liveId) {
       body: JSON.stringify({ live_id: Number(liveId) }),
     });
     if (joinRes.data?.rtc) live.rtc = joinRes.data.rtc;
+    if (joinRes.data?.token) live.token = joinRes.data.token;
     if (joinRes.data?.viewer_count != null) live.viewer_count = joinRes.data.viewer_count;
     await openLiveWatchRoom(live);
     loadLives(true);
@@ -4428,8 +4431,11 @@ async function openLiveWatchRoom(live) {
   setLiveWatchStatus('Starting live connection…');
   try {
     const liveClient = await ensureDreamlandLive();
+    const { preloadLiveLibs } = await import('./dreamland-live.js');
+    await preloadLiveLibs();
     await liveClient.startWatching({
-      rtc,
+      rtc: live.rtc,
+      live,
       userId: state.user?.id,
       videoEl,
       onStatus: (msg) => {
@@ -4438,6 +4444,7 @@ async function openLiveWatchRoom(live) {
       onChat: (msg) => appendLiveChatMessage(msg, 'live-chat-list'),
       onStreamReady: () => {
         setLiveWatchStatus('');
+        document.getElementById('live-watch-visual')?.classList.add('live-watch-visual--playing');
         if (videoEl) {
           videoEl.muted = false;
           videoEl.removeAttribute('muted');
@@ -4451,8 +4458,12 @@ async function openLiveWatchRoom(live) {
       onWaiting: (msg) => setLiveWatchStatus(msg || 'Waiting for host camera…'),
     });
   } catch (err) {
-    setLiveWatchStatus(err.message || 'Could not connect to live video', true);
-    showToast(err.message || 'Could not connect to live video');
+    const msg = err.message || 'Could not connect to live video';
+    const hint = /timeout|connection|consume|transport/i.test(msg)
+      ? `${msg} — tap Reload or try again in a moment.`
+      : msg;
+    setLiveWatchStatus(hint, true);
+    showToast(msg);
   }
 
   videoEl?.addEventListener('click', () => {

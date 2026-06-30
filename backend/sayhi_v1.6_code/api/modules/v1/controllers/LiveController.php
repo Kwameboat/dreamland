@@ -221,7 +221,7 @@ class LiveController extends ActiveController
         $rtc = Yii::$app->dreamlandLive;
         $liveId = (int) $live->id;
         $status = $rtc->roomStatus($liveId);
-        if (is_array($status) && !empty($status['active'])) {
+        if (is_array($status) && !empty($status['active']) && !empty($status['hasHost'])) {
             return;
         }
 

@@ -2,6 +2,16 @@
  * Dreamland live WebRTC client — libs load from same-origin vendor first (CDN fallback).
  */
 
+function normalizeRtcConfig(rtc, live = {}) {
+  const base = rtc && typeof rtc === 'object' ? { ...rtc } : {};
+  return {
+    ...base,
+    signaling_url: String(base.signaling_url || '').replace(/\/$/, ''),
+    live_id: Number(base.live_id || live.id || 0),
+    token: String(base.token || live.token || ''),
+    ice_servers: base.ice_servers || base.iceServers || [],
+  };
+}
 function emitAck(socket, event, payload = {}, timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`${event} timed out`)), timeoutMs);
@@ -149,9 +159,13 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
   }
 
   async function connectSocket(rtc, role, userId, onStatus) {
-    const signalingUrl = String(rtc.signaling_url || '').replace(/\/$/, '');
+    const cfg = normalizeRtcConfig(rtc);
+    const signalingUrl = cfg.signaling_url;
     if (!signalingUrl) {
       throw new Error('Live signaling URL is missing');
+    }
+    if (!cfg.live_id || !cfg.token) {
+      throw new Error('Live room credentials are missing — refresh and try again');
     }
     const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     if (!isLocalHost && /localhost|127\.0\.0\.1/i.test(signalingUrl)) {
@@ -165,11 +179,11 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     const { io } = await loadSocketIo();
 
     onStatus?.('Connecting to live stream…');
-    const connectTimeout = /onrender\.com/i.test(signalingUrl) ? 35000 : 15000;
+    const connectTimeout = /onrender\.com/i.test(signalingUrl) ? 45000 : 20000;
     const socket = io(signalingUrl, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       reconnection: true,
-      reconnectionAttempts: 6,
+      reconnectionAttempts: 8,
       timeout: connectTimeout,
     });
 
@@ -187,13 +201,13 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
 
     onStatus?.('Joining live room…');
     const join = await emitAck(socket, 'live:join', {
-      liveId: rtc.live_id,
-      token: rtc.token,
+      liveId: cfg.live_id,
+      token: cfg.token,
       role,
       userId: userId || 0,
-    }, 20000);
+    }, 25000);
 
-    return { socket, join };
+    return { socket, join, rtc: cfg };
   }
 
   async function createSendTransport(socket, device) {
@@ -209,7 +223,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       emitAck(socket, 'live:connectTransport', {
         transportId: transport.id,
         dtlsParameters,
-      }).then(callback).catch(errback);
+      }).then(() => callback()).catch(errback);
     });
 
     transport.on('produce', ({ kind, rtpParameters }, callback, errback) => {
@@ -238,7 +252,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       emitAck(socket, 'live:connectTransport', {
         transportId: transport.id,
         dtlsParameters,
-      }).then(callback).catch(errback);
+      }).then(() => callback()).catch(errback);
     });
 
     return transport;
@@ -303,27 +317,36 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     }
   }
 
-  async function consumeAll(socket, device, transport, videoEl) {
-    const list = await emitAck(socket, 'live:getProducers');
+  async function consumeAll(socket, device, transport, videoEl, seedProducers = []) {
     const remoteStream = new MediaStream();
     const consumedProducerIds = new Set();
-    const items = list.items || [];
+    const items = seedProducers.length
+      ? seedProducers
+      : ((await emitAck(socket, 'live:getProducers')).items || []);
+    const consumeErrors = [];
     let consumeAttempted = false;
 
     for (const item of items) {
+      if (!item?.producerId || consumedProducerIds.has(item.producerId)) continue;
       consumeAttempted = true;
       try {
         await consumeProducer(socket, device, transport, item.producerId, remoteStream);
         consumedProducerIds.add(item.producerId);
       } catch (err) {
+        consumeErrors.push(err.message || String(err));
         console.warn('Consume producer failed:', item.producerId, err.message);
       }
     }
 
-    if (consumeAttempted && remoteStream.getTracks().length) {
-      await waitForTransportConnection(transport).catch((err) => {
+    if (consumeAttempted) {
+      await waitForTransportConnection(transport, 25000).catch((err) => {
+        consumeErrors.push(err.message || String(err));
         console.warn('Transport connect:', err.message);
       });
+    }
+
+    if (consumeAttempted && !remoteStream.getTracks().length && consumeErrors.length) {
+      throw new Error(consumeErrors[0] || 'Could not receive live video');
     }
 
     if (videoEl) {
@@ -423,7 +446,10 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     await device.load({ routerRtpCapabilities: join.rtpCapabilities });
 
     const sendTransport = await createSendTransport(socket, device);
-    await produceTracks(sendTransport, stream);
+    const published = await produceTracks(sendTransport, stream);
+    if (!published.length) {
+      throw new Error('Camera or microphone not ready — allow permissions and try again');
+    }
     void waitForTransportConnection(sendTransport).catch((err) => {
       console.warn('Host transport connect:', err.message);
     });
@@ -464,23 +490,23 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     onWaiting,
     onConnected,
     onStatus,
+    live,
   }) {
     await stopWatching();
 
-    if (!rtc?.signaling_url) {
+    const rtcConfig = normalizeRtcConfig(rtc, live);
+    if (!rtcConfig.signaling_url) {
       throw new Error('Live RTC config missing');
     }
 
-    const status = (msg) => {
-      if (msg) onStatus?.(msg);
-      else onConnected?.();
-    };
-
-    const { socket, join } = await connectSocket(rtc, 'viewer', userId, status);
+    onStatus?.('Connecting to live stream…');
+    const [{ Device }, { socket, join }] = await Promise.all([
+      loadMediasoupClient(),
+      connectSocket(rtcConfig, 'viewer', userId, onStatus),
+    ]);
     onConnected?.();
 
     onStatus?.('Starting video…');
-    const { Device } = await loadMediasoupClient();
     const device = new Device();
     await device.load({ routerRtpCapabilities: join.rtpCapabilities });
     const recvTransport = await createRecvTransport(socket, device);
@@ -495,15 +521,20 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       consumedProducerIds: new Set(),
     };
 
+    const callbacks = { onStreamReady, onWaiting };
+    const seedProducers = Array.isArray(join.producers) ? join.producers : [];
+
     onStatus?.('Loading live video…');
-    const consumed = await consumeAll(socket, device, recvTransport, videoEl);
+    const consumed = await consumeAll(socket, device, recvTransport, videoEl, seedProducers);
     session.remoteStream = consumed.remoteStream;
     consumed.consumedProducerIds.forEach((id) => session.consumedProducerIds.add(id));
 
-    const callbacks = { onStreamReady, onWaiting };
-
     if (!session.remoteStream.getTracks().length) {
-      onWaiting?.('Waiting for host camera…');
+      if (join.hasHost === false) {
+        onWaiting?.('Waiting for host to connect…');
+      } else {
+        onWaiting?.('Waiting for host camera…');
+      }
       startProducerPolling(session, callbacks);
     } else {
       onStatus?.('');
@@ -515,6 +546,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       try {
         await consumeProducer(socket, device, recvTransport, producerId, session.remoteStream);
         session.consumedProducerIds.add(producerId);
+        await waitForTransportConnection(recvTransport, 20000).catch(() => {});
         if (videoEl) {
           await attachRemoteStreamToVideo(videoEl, session.remoteStream);
         }
@@ -523,6 +555,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
         clearProducerPoll();
       } catch (err) {
         console.warn('Consume new producer failed:', err.message);
+        onWaiting?.('Receiving host video…');
       }
     });
 
@@ -584,6 +617,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     startWatching,
     stopWatching,
     sendChat,
+    normalizeRtcConfig,
     isBroadcasting: () => Boolean(broadcastSession),
     isWatching: () => Boolean(watchSession),
   };
