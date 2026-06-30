@@ -461,6 +461,11 @@ function stopReelVideo(video, { resetPreview = false } = {}) {
   }
 }
 
+function pauseMediaForLive() {
+  resetReelPlaybackSession();
+  cleanupWarmReelVideos();
+}
+
 function pauseAllReelVideos(root = els.feedList) {
   const seen = new Set();
   root?.querySelectorAll('.reel-video-main, .reel-video-backdrop, .reel-video').forEach((video) => {
@@ -1562,6 +1567,7 @@ function renderCreatorDashboard(data) {
   const reels = data.reels || [];
   const live = data.live || null;
   const liveActive = live && Number(live.status) === 1;
+  const payout = data.payout || {};
   const approved = canPublishReels(creator);
   const approvalStatus = creatorApprovalStatus(creator);
 
@@ -1634,6 +1640,7 @@ function renderCreatorDashboard(data) {
         ${state.studioDraft ? '<button type="button" class="studio-tab studio-tab--accent" data-studio-panel="edit" role="tab" aria-selected="false">Edit</button>' : ''}
         <button type="button" class="studio-tab" data-studio-panel="record" role="tab" aria-selected="false">Record</button>
         <button type="button" class="studio-tab" data-studio-panel="live" role="tab" aria-selected="false">Go live</button>
+        <button type="button" class="studio-tab" data-studio-panel="payouts" role="tab" aria-selected="false">Payouts</button>
       </nav>
 
       <div class="studio-panels">
@@ -1834,6 +1841,36 @@ function renderCreatorDashboard(data) {
             <button type="button" class="btn-primary full studio-cta${approved ? '' : ' studio-cta--locked'}" id="creator-open-live">${liveActive ? 'Return to broadcast' : 'Open broadcast studio'}</button>
           </div>
         </section>
+
+        <section id="studio-panel-payouts" class="studio-panel glass-card" role="tabpanel" hidden>
+          <div class="studio-panel-head">
+            <h3>Revenue &amp; payouts</h3>
+            <p class="muted">Redeem earned credits to cash balance, then request a payout to your PayPal or mobile money ID.</p>
+          </div>
+          <div class="studio-payout-stats">
+            <div class="studio-stat studio-stat--accent">
+              <strong id="payout-credits">${formatCount(payout.available_coin ?? creator.available_coin ?? 0)}</strong>
+              <span>Earned credits</span>
+            </div>
+            <div class="studio-stat">
+              <strong id="payout-balance">GHS ${Number(payout.available_balance ?? 0).toFixed(2)}</strong>
+              <span>Cash balance</span>
+            </div>
+          </div>
+          <p class="muted studio-payout-rate">Rate: 1 credit = GHS ${Number(payout.per_coin_value ?? 0).toFixed(2)} · Min redeem: ${formatCount(payout.min_coin_redeem ?? 0)} credits · Min withdraw: GHS ${Number(payout.min_withdraw ?? 0).toFixed(2)}</p>
+          <label class="studio-field">
+            <span>Payout destination (PayPal email or MoMo number)</span>
+            <input type="text" class="studio-input" id="payout-destination" value="${escapeHtml(payout.paypal_id || '')}" placeholder="name@email.com or 024XXXXXXX" />
+          </label>
+          <button type="button" class="btn-ghost full" id="payout-save-destination">Save payout details</button>
+          <label class="studio-field">
+            <span>Redeem credits to cash</span>
+            <input type="number" class="studio-input" id="payout-redeem-amount" min="${Number(payout.min_coin_redeem ?? 1)}" placeholder="${formatCount(payout.min_coin_redeem ?? 50)} credits minimum" />
+          </label>
+          <button type="button" class="btn-primary full" id="payout-redeem-btn">Redeem credits</button>
+          <button type="button" class="btn-primary full" id="payout-withdraw-btn">Withdraw full cash balance</button>
+          <div id="payout-history" class="studio-payout-history muted"><p>Loading payout history…</p></div>
+        </section>
       </div>
 
       <div class="studio-quick glass-card">
@@ -1874,6 +1911,7 @@ function renderCreatorDashboard(data) {
     </div>`;
 
   bindCreatorStudioEvents();
+  void loadCreatorPayoutHistory();
   dlFeatures?.renderCategorySelect(document.getElementById('upload-category'));
   if (state.studioDraft) {
     dlFeatures?.renderCategorySelect(document.getElementById('studio-edit-category'));
@@ -1902,12 +1940,18 @@ function bindCreatorStudioEvents() {
       if (panelId === 'live') {
         openLiveBroadcast();
       }
+      if (panelId === 'payouts') {
+        void loadCreatorPayoutHistory();
+      }
     });
   });
 
   document.getElementById('creator-open-record')?.addEventListener('click', openRecordCapture);
   document.getElementById('creator-open-live')?.addEventListener('click', openLiveBroadcast);
   document.getElementById('creator-open-account')?.addEventListener('click', () => dlAccount?.openAccount());
+  document.getElementById('payout-save-destination')?.addEventListener('click', saveCreatorPayoutDestination);
+  document.getElementById('payout-redeem-btn')?.addEventListener('click', redeemCreatorCredits);
+  document.getElementById('payout-withdraw-btn')?.addEventListener('click', requestCreatorWithdrawal);
   document.getElementById('studio-live-banner')?.addEventListener('click', openLiveBroadcast);
   document.getElementById('studio-live-banner')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -3412,6 +3456,97 @@ async function uploadReelBlob(blob, filename, title, description, isPaid, catego
   }
 }
 
+function updateCreatorPayoutUi(payout = {}) {
+  const creditsEl = document.getElementById('payout-credits');
+  const balanceEl = document.getElementById('payout-balance');
+  if (creditsEl) creditsEl.textContent = formatCount(payout.available_coin ?? state.user?.available_coin ?? 0);
+  if (balanceEl) balanceEl.textContent = `GHS ${Number(payout.available_balance ?? state.user?.available_balance ?? 0).toFixed(2)}`;
+}
+
+async function saveCreatorPayoutDestination() {
+  if (gateGuest()) return;
+  const paypalId = document.getElementById('payout-destination')?.value?.trim();
+  if (!paypalId) {
+    showToast('Enter your PayPal email or mobile money number');
+    return;
+  }
+  try {
+    await api(API_ROUTES.updatePaymentDetail, {
+      method: 'POST',
+      body: JSON.stringify({ paypal_id: paypalId }),
+    });
+    if (state.user) {
+      state.user.paypal_id = paypalId;
+      localStorage.setItem('dreamland_user', JSON.stringify(state.user));
+    }
+    showToast('Payout details saved');
+  } catch (err) {
+    showToast(err.message || 'Could not save payout details');
+  }
+}
+
+async function redeemCreatorCredits() {
+  if (gateGuest()) return;
+  const amount = Number(document.getElementById('payout-redeem-amount')?.value || 0);
+  if (!amount || amount <= 0) {
+    showToast('Enter credits to redeem');
+    return;
+  }
+  try {
+    const res = await api(API_ROUTES.redeemCoin, {
+      method: 'POST',
+      body: JSON.stringify({ redeem_coin: amount }),
+    });
+    showToast(res.message || 'Credits redeemed to cash balance');
+    await validateSession();
+    await loadCreatorDashboard(true);
+  } catch (err) {
+    showToast(err.message || 'Redeem failed');
+  }
+}
+
+async function requestCreatorWithdrawal() {
+  if (gateGuest()) return;
+  const payout = state.creatorDashboard?.payout || {};
+  if (!payout.paypal_id && !state.user?.paypal_id) {
+    showToast('Save your payout destination first');
+    return;
+  }
+  if (Number(payout.available_balance ?? state.user?.available_balance ?? 0) <= 0) {
+    showToast('No cash balance to withdraw — redeem credits first');
+    return;
+  }
+  try {
+    const res = await api(API_ROUTES.withdrawal, { method: 'POST', body: '{}' });
+    showToast(res.message || 'Withdrawal request submitted');
+    await validateSession();
+    await loadCreatorDashboard(true);
+    void loadCreatorPayoutHistory();
+  } catch (err) {
+    showToast(err.message || 'Withdrawal request failed');
+  }
+}
+
+async function loadCreatorPayoutHistory() {
+  const box = document.getElementById('payout-history');
+  if (!box || !state.token) return;
+  try {
+    const res = await api(API_ROUTES.withdrawalHistory);
+    const items = res.data?.payment?.items || res.data?.items || res.data?.payment || [];
+    const rows = Array.isArray(items) ? items : [];
+    if (!rows.length) {
+      box.innerHTML = '<p class="muted">No withdrawal requests yet.</p>';
+      return;
+    }
+    box.innerHTML = rows.slice(0, 8).map((row) => {
+      const status = Number(row.status) === 10 ? 'Completed' : Number(row.status) === 2 ? 'Rejected' : 'Pending';
+      return `<div class="studio-payout-row"><span>GHS ${Number(row.amount || 0).toFixed(2)}</span><span>${escapeHtml(status)}</span></div>`;
+    }).join('');
+  } catch {
+    box.innerHTML = '<p class="muted">Could not load payout history.</p>';
+  }
+}
+
 async function loadCreatorDashboard(force = false) {
   if (!state.token || !isCreator()) return;
   if (!force && state.creatorDashboard) {
@@ -3427,6 +3562,7 @@ async function loadCreatorDashboard(force = false) {
       localStorage.setItem('dreamland_user', JSON.stringify(state.user));
     }
     renderCreatorDashboard(state.creatorDashboard);
+    updateCreatorPayoutUi(state.creatorDashboard?.payout);
     updateWalletBalance();
     touchDashboardRefreshHint();
   } catch (err) {
@@ -3671,7 +3807,10 @@ function switchView(viewId) {
   document.getElementById(viewId)?.classList.add('active');
   document.querySelectorAll('.dock-item').forEach((n) => n.classList.toggle('active', n.dataset.view === viewId));
   if (viewId === 'feed-view' && state.feedMode === 'reels') setupReelPlayback();
-  if (viewId === 'feed-view' && state.feedMode === 'live') loadLives(true);
+  if (viewId === 'feed-view' && state.feedMode === 'live') {
+    pauseMediaForLive();
+    loadLives(true);
+  }
   if (viewId === 'creator-view') {
     loadCreatorDashboard();
     startDashboardAutoRefresh('creator-view');
@@ -3687,7 +3826,10 @@ function switchView(viewId) {
     closeRecordCapture();
     stopCameraStream();
   }
-  if (viewId !== 'feed-view') dlSocial?.stopAllWatchTracking?.();
+  if (viewId !== 'feed-view') {
+    dlSocial?.stopAllWatchTracking?.();
+    pauseMediaForLive();
+  }
   updateFeedHeaderUi();
 }
 
@@ -4031,6 +4173,14 @@ function openPaywall(videoId, price) {
   els.paywallModal.classList.remove('hidden');
 }
 
+function setLiveWatchStatus(message = '', isError = false) {
+  const el = document.getElementById('live-watch-status');
+  if (!el) return;
+  el.hidden = !message;
+  el.classList.toggle('live-watch-status--error', Boolean(isError));
+  el.textContent = message;
+}
+
 function switchFeedMode(mode) {
   state.feedMode = mode;
   document.querySelectorAll('.feed-mode-tab').forEach((tab) => {
@@ -4046,8 +4196,12 @@ function switchFeedMode(mode) {
   const chrome = document.querySelector('.watch-chrome');
   if (chrome) chrome.hidden = mode !== 'reels';
   updateFeedHeaderUi();
-  if (mode === 'live') loadLives(true);
-  else setupReelPlayback();
+  if (mode === 'live') {
+    pauseMediaForLive();
+    loadLives(true);
+  } else {
+    setupReelPlayback();
+  }
 }
 
 async function loadLives(force = false) {
@@ -4175,6 +4329,7 @@ async function enterLiveRoom(liveId) {
 }
 
 async function openLiveWatchRoom(live) {
+  pauseMediaForLive();
   state.activeLiveWatch = live;
   const creator = live.creator || {};
   const initial = (creator.username || creator.name || 'C').charAt(0).toUpperCase();
@@ -4191,30 +4346,69 @@ async function openLiveWatchRoom(live) {
   room?.setAttribute('aria-hidden', 'false');
   document.body.classList.add('live-room-open');
 
-  if (live.rtc) {
-    try {
-      const liveClient = await ensureDreamlandLive();
-      await liveClient.startWatching({
-        rtc: live.rtc,
-        userId: state.user?.id,
-        videoEl: document.getElementById('live-watch-video'),
-        onChat: (msg) => appendLiveChatMessage(msg, 'live-chat-list'),
-      });
-    } catch (err) {
-      showToast(err.message || 'Could not connect to live video');
-    }
+  const videoEl = document.getElementById('live-watch-video');
+  if (videoEl) {
+    try { videoEl.pause(); } catch { /* ignore */ }
+    videoEl.srcObject = null;
+    videoEl.removeAttribute('src');
+    videoEl.muted = true;
+    videoEl.setAttribute('muted', '');
+  }
+  document.getElementById('live-watch-visual')?.classList.remove('live-watch-visual--playing');
+
+  const rtc = live.rtc;
+  if (!rtc?.signaling_url) {
+    setLiveWatchStatus('Live video is not available right now. The host may still be connecting — try again shortly.', true);
+    showToast('Live video server unavailable');
+    return;
+  }
+
+  setLiveWatchStatus('Connecting to live stream…');
+  try {
+    const liveClient = await ensureDreamlandLive();
+    await liveClient.startWatching({
+      rtc,
+      userId: state.user?.id,
+      videoEl,
+      onChat: (msg) => appendLiveChatMessage(msg, 'live-chat-list'),
+      onStreamReady: () => {
+        setLiveWatchStatus('');
+        if (videoEl) {
+          videoEl.muted = false;
+          videoEl.removeAttribute('muted');
+          videoEl.play().catch(() => {
+            videoEl.muted = true;
+            videoEl.setAttribute('muted', '');
+            setLiveWatchStatus('Tap the video to enable sound', false);
+          });
+        }
+      },
+      onWaiting: (msg) => setLiveWatchStatus(msg || 'Waiting for host to broadcast…'),
+    });
+  } catch (err) {
+    setLiveWatchStatus(err.message || 'Could not connect to live video', true);
+    showToast(err.message || 'Could not connect to live video');
   }
 }
 
 async function closeLiveWatchRoom() {
   if (dreamlandLive) await dreamlandLive.stopWatching();
   state.activeLiveWatch = null;
+  setLiveWatchStatus('');
+  const videoEl = document.getElementById('live-watch-video');
+  if (videoEl) {
+    try { videoEl.pause(); } catch { /* ignore */ }
+    videoEl.srcObject = null;
+  }
   const room = document.getElementById('live-watch');
   room?.classList.add('hidden');
   room?.setAttribute('aria-hidden', 'true');
   document.body.classList.remove('live-room-open');
   const chatList = document.getElementById('live-chat-list');
   if (chatList) chatList.innerHTML = '';
+  if (state.feedMode === 'reels' && document.getElementById('feed-view')?.classList.contains('active')) {
+    setupReelPlayback();
+  }
 }
 
 function appendLiveChatMessage(msg, listId = 'live-chat-list') {
@@ -5239,8 +5433,12 @@ function bindUi() {
     if (e.target.closest('.live-room__top, .live-room__dock, .live-room__chat')) return;
     const video = document.getElementById('live-watch-video');
     if (!video) return;
+    if (video.muted) {
+      video.muted = false;
+      video.removeAttribute('muted');
+      setLiveWatchStatus('');
+    }
     if (video.paused) video.play().catch(() => {});
-    else video.pause();
   });
   document.getElementById('live-watch-share')?.addEventListener('click', async () => {
     const live = state.activeLiveWatch;

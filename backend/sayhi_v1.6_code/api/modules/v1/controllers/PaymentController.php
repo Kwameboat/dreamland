@@ -213,7 +213,12 @@ class PaymentController extends ActiveController
         $userId = Yii::$app->user->identity->id;
         $modelUser = new User();
         $resultUer = $modelUser->findOne($userId);
-        $resultUer->available_balance;
+        if (empty(trim((string) ($resultUer->paypal_id ?? '')))) {
+            $response['statusCode'] = 422;
+            $errors['message'][] = 'Add your payout destination (PayPal or mobile money) before withdrawing.';
+            $response['errors'] = $errors;
+            return $response;
+        }
         if ($resultUer->available_balance <= 0) {
             $response['statusCode'] = 422;
             $errors['message'][] = Yii::$app->params['apiMessage']['payment']['amountNotAvailable'];
@@ -221,7 +226,15 @@ class PaymentController extends ActiveController
             return $response;
         }
         $withdrawalAmount = $resultUer->available_balance;
-        $resultUer->available_balance = 0; //$resultUer->available_balance - $model->amount;
+        $setting = \api\modules\v1\models\Setting::find()->one();
+        $minWithdraw = (float) ($setting->min_widhdraw_price ?? 0);
+        if ($minWithdraw > 0 && $withdrawalAmount < $minWithdraw) {
+            $response['statusCode'] = 422;
+            $errors['message'][] = 'Minimum withdrawal is ' . $minWithdraw . '.';
+            $response['errors'] = $errors;
+            return $response;
+        }
+        $resultUer->available_balance = 0;
         if ($resultUer->save(false)) {
             $modelWithdrawPayment = new WithdrawalPayment();
             $modelWithdrawPayment->user_id = $userId;

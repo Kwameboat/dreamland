@@ -171,10 +171,13 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
 
     if (videoEl) {
       videoEl.srcObject = remoteStream;
-      videoEl.muted = false;
+      videoEl.muted = true;
+      videoEl.setAttribute('muted', '');
       videoEl.playsInline = true;
       await videoEl.play().catch(() => {});
-      videoEl.closest('.live-watch-visual')?.classList.add('live-watch-visual--playing');
+      if (remoteStream.getTracks().length) {
+        videoEl.closest('.live-watch-visual')?.classList.add('live-watch-visual--playing');
+      }
     }
 
     return { remoteStream, transport, device };
@@ -229,7 +232,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     broadcastSession = null;
   }
 
-  async function startWatching({ rtc, userId, videoEl, onStats, onChat }) {
+  async function startWatching({ rtc, userId, videoEl, onStats, onChat, onStreamReady, onWaiting }) {
     await stopWatching();
 
     if (!rtc?.signaling_url) {
@@ -250,7 +253,14 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       remoteStream: null,
     };
 
-    session.remoteStream = (await consumeAll(socket, device, recvTransport, videoEl)).remoteStream;
+    const consumed = await consumeAll(socket, device, recvTransport, videoEl);
+    session.remoteStream = consumed.remoteStream;
+
+    if (!session.remoteStream.getTracks().length) {
+      onWaiting?.('Waiting for host to start broadcasting…');
+    } else {
+      onStreamReady?.(session.remoteStream);
+    }
 
     socket.on('live:newProducer', async ({ producerId }) => {
       try {
@@ -267,7 +277,11 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
         });
         await emitAck(socket, 'live:resumeConsumer', { consumerId: consumer.id });
         session.remoteStream.addTrack(consumer.track);
-        if (videoEl) await videoEl.play().catch(() => {});
+        if (videoEl) {
+          await videoEl.play().catch(() => {});
+          videoEl.closest('.live-watch-visual')?.classList.add('live-watch-visual--playing');
+        }
+        onStreamReady?.(session.remoteStream);
       } catch (err) {
         console.warn('Consume new producer failed:', err.message);
       }

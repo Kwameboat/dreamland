@@ -74,6 +74,7 @@
                     ]),
                     'items' => [
                         ['label' => 'Credit Packages', 'icon' => 'money', 'url' => ['/credit-package'], 'visible' => Yii::$app->authPermission->can(Yii::$app->authPermission::CREDIT_PACKAGE)],
+                        ['label' => 'Dreamland Revenue', 'icon' => 'bar-chart', 'url' => ['/dreamland-revenue'], 'visible' => Yii::$app->authPermission->can(Yii::$app->authPermission::PAYMENT)],
                         ['label' => 'Appraisal Workspace', 'icon' => 'balance-scale', 'url' => ['/dreamland-appraisal'], 'visible' => Yii::$app->authPermission->can(Yii::$app->authPermission::DREAMLAND_APPRAISAL)],
                         ['label' => 'AI Moderation Agent', 'icon' => 'android', 'url' => ['/dreamland-moderation'], 'visible' => Yii::$app->authPermission->can(Yii::$app->authPermission::DREAMLAND_MODERATION)],
                         ['label' => 'Safety Queue', 'icon' => 'shield', 'url' => ['/dreamland-safety'], 'visible' => Yii::$app->authPermission->can(Yii::$app->authPermission::DREAMLAND_SAFETY)],

@@ -4378,6 +4378,50 @@ body {
   z-index: 1;
 }
 
+.live-watch-status {
+  position: absolute;
+  inset: auto 16px 16px;
+  z-index: 4;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 0.9rem;
+  text-align: center;
+  pointer-events: none;
+}
+
+.live-watch-status--error {
+  background: rgba(120, 20, 40, 0.88);
+}
+
+.studio-payout-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.studio-payout-rate {
+  margin: 0 0 14px;
+  font-size: 0.86rem;
+}
+
+.studio-payout-history {
+  margin-top: 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.studio-payout-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .live-room__shade {
   position: absolute;
   inset: 0;

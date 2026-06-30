@@ -2,6 +2,7 @@
 
 namespace api\modules\v1\controllers;
 
+use api\modules\v1\models\Setting;
 use api\modules\v1\models\Post;
 use api\modules\v1\models\PostGallary;
 use api\modules\v1\models\User;
@@ -131,6 +132,7 @@ class CreatorController extends ActiveController
 
         $live = $this->findActiveLive($userId);
         $liveEarnings = $this->sumLiveEarnings($userId);
+        $setting = Setting::find()->one();
 
         return [
             'message' => 'Creator dashboard loaded.',
@@ -141,8 +143,18 @@ class CreatorController extends ActiveController
                 'email' => $user->email,
                 'role' => (int) $user->role,
                 'available_coin' => (int) $user->available_coin,
+                'available_balance' => (float) $user->available_balance,
+                'paypal_id' => (string) ($user->paypal_id ?? ''),
                 'dreamland_account_type' => 'creator',
                 'dreamland_creator_status' => $this->resolveCreatorStatus($user),
+            ],
+            'payout' => [
+                'available_coin' => (int) $user->available_coin,
+                'available_balance' => (float) $user->available_balance,
+                'paypal_id' => (string) ($user->paypal_id ?? ''),
+                'per_coin_value' => (float) ($setting->per_coin_value ?? 0),
+                'min_coin_redeem' => (int) ($setting->min_coin_redeem ?? 0),
+                'min_withdraw' => (float) ($setting->min_widhdraw_price ?? 0),
             ],
             'totals' => array_merge($totals, [
                 'live_earned_credits' => $liveEarnings,

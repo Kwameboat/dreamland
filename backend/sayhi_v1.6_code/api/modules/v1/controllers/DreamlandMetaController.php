@@ -33,6 +33,7 @@ class DreamlandMetaController extends Controller
     {
         $s = DreamlandSetting::getSettings();
         $uploadLimits = DreamlandUploadLimits::forApi();
+        $legacySetting = \api\modules\v1\models\Setting::find()->one();
         return [
             'preview_seconds' => (int) ($s->preview_seconds ?? 3),
             'streak_freeze_cost' => (int) ($s->streak_freeze_cost ?? 5),
@@ -54,6 +55,9 @@ class DreamlandMetaController extends Controller
             'gemini_multimodal' => true,
             'ai_capabilities' => $this->aiCapabilities(),
             'dev_mode' => (bool) (Yii::$app->params['dreamlandDevMode'] ?? false),
+            'per_coin_value' => (float) ($legacySetting->per_coin_value ?? 0),
+            'min_coin_redeem' => (int) ($legacySetting->min_coin_redeem ?? 0),
+            'min_withdraw' => (float) ($legacySetting->min_widhdraw_price ?? 0),
             'api_base' => rtrim((string) (Yii::$app->params['siteUrl'] ?? 'http://localhost:8080'), '/') . '/v1',
             'uploads_base' => DreamlandWasabiStorage::uploadsBaseForApi(),
             'storage_system' => DreamlandWasabiStorage::isConfigured() ? 'wasabi' : 'local',
