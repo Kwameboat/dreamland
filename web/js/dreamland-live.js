@@ -35,7 +35,7 @@ function isProxiedSignalingUrl(signalingUrl) {
 function socketIoOptions(signalingUrl) {
   const proxied = isProxiedSignalingUrl(signalingUrl);
   const connectTimeout = /onrender\.com/i.test(signalingUrl) ? 50000 : 35000;
-  return {
+  const opts = {
     transports: proxied ? ['polling'] : ['polling', 'websocket'],
     upgrade: !proxied,
     withCredentials: false,
@@ -43,6 +43,25 @@ function socketIoOptions(signalingUrl) {
     forceNew: true,
     timeout: connectTimeout,
   };
+  // Socket.IO path is always /socket.io/ on the server — proxied via /live-socket/socket.io/
+  if (proxied) {
+    opts.path = '/live-socket/socket.io';
+  }
+  return opts;
+}
+
+/** Proxied signaling uses origin + custom path; bare URL would hit /socket.io/ at domain root (404/HTML). */
+function resolveSocketEndpoint(signalingUrl) {
+  const base = String(signalingUrl || '').replace(/\/$/, '');
+  const options = socketIoOptions(base);
+  if (isProxiedSignalingUrl(base)) {
+    let origin = window.location.origin;
+    try {
+      if (/^https?:\/\//i.test(base)) origin = new URL(base).origin;
+    } catch { /* keep window origin */ }
+    return { serverUrl: origin, options };
+  }
+  return { serverUrl: base, options };
 }
 
 function liveAssetStamp() {
@@ -74,11 +93,14 @@ export async function prepareForLiveConnect() {
 
 function humanizeSocketError(err) {
   const msg = err?.message || String(err || 'Connection failed');
-  if (/timeout/i.test(msg)) {
-    return 'Live server is waking up — retrying automatically…';
+  if (/room not found|invalid live token|not joined|credentials are missing/i.test(msg)) {
+    return msg;
   }
-  if (/xhr poll error|websocket error|poll error|could not connect/i.test(msg)) {
-    return 'Reconnecting to live video…';
+  if (/timeout/i.test(msg)) {
+    return 'Live server is waking up — try again in a moment';
+  }
+  if (/xhr poll error|websocket error|poll error|could not connect|server error/i.test(msg)) {
+    return 'Live signaling blocked — refresh the page and try again';
   }
   return msg;
 }
@@ -257,11 +279,11 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     let lastErr = null;
     for (const signalingUrl of signalingUrls) {
       onStatus?.('Connecting to live stream…');
-      const socketOpts = socketIoOptions(signalingUrl);
+      const { serverUrl, options: socketOpts } = resolveSocketEndpoint(signalingUrl);
       const connectTimeout = socketOpts.timeout;
       let socket = null;
       try {
-        socket = io(signalingUrl, socketOpts);
+        socket = io(serverUrl, socketOpts);
 
         await new Promise((resolve, reject) => {
           const timer = setTimeout(
@@ -298,30 +320,17 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
   }
 
   async function connectSocket(rtc, role, userId, onStatus) {
-    const attempts = [
-      () => connectSocketAttempt(rtc, role, userId, onStatus),
-      async () => {
-        onStatus?.('Refreshing live connection…');
-        await prepareForLiveConnect();
-        return connectSocketAttempt(rtc, role, userId, onStatus);
-      },
-      async () => {
-        onStatus?.('Resetting live cache…');
-        await prepareForLiveConnect();
-        if (window.__DL_purgePwaState) await window.__DL_purgePwaState();
-        return connectSocketAttempt(rtc, role, userId, onStatus);
-      },
-    ];
-
     let lastErr = null;
-    for (let i = 0; i < attempts.length; i++) {
+    for (let i = 0; i < 2; i++) {
       try {
-        return await attempts[i]();
+        if (i > 0) {
+          onStatus?.('Retrying live connection…');
+          await prepareForLiveConnect();
+        }
+        return await connectSocketAttempt(rtc, role, userId, onStatus);
       } catch (err) {
         lastErr = err;
-        if (i < attempts.length - 1) {
-          await new Promise((r) => window.setTimeout(r, 600 * (i + 1)));
-        }
+        if (i === 0) await new Promise((r) => window.setTimeout(r, 800));
       }
     }
     throw new Error(humanizeSocketError(lastErr));
