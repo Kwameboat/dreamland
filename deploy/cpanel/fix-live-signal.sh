@@ -15,7 +15,7 @@ trap 'rm -rf "$TMP"' EXIT
 fetch() { curl -fsSL -A "DreamlandDeploy/1.0" -o "$1" "$2"; }
 install() { cp -f "$1" "$2"; chmod u+rw "$2" 2>/dev/null || true; echo "OK: $2"; }
 
-echo "=== Dreamland live signaling fix (xhr poll error) ==="
+echo "=== Dreamland live connect hardening ==="
 
 fetch "$TMP/dreamland-live.js" "$GITHUB/web/js/dreamland-live.js"
 fetch "$TMP/app.js" "$GITHUB/web/js/app.js"
@@ -24,9 +24,6 @@ fetch "$TMP/.htaccess" "$GITHUB/web/.htaccess"
 fetch "$TMP/live-socket-index.php" "$GITHUB/web/live-socket/index.php"
 fetch "$TMP/live-socket-htaccess" "$GITHUB/web/live-socket/.htaccess"
 fetch "$TMP/DreamlandLiveRtcService.php" "$BASE/common/components/DreamlandLiveRtcService.php"
-fetch "$TMP/HealthController.php" "$BASE/api/modules/v1/controllers/HealthController.php"
-fetch "$TMP/DreamlandMetaController.php" "$BASE/api/modules/v1/controllers/DreamlandMetaController.php"
-fetch "$TMP/LiveController.php" "$BASE/api/modules/v1/controllers/LiveController.php"
 fetch "$TMP/build-version.json" "$GITHUB/web/build-version.json"
 
 install "$TMP/DreamlandLiveRtcService.php" "$DL/common/components/DreamlandLiveRtcService.php"
@@ -52,5 +49,4 @@ echo ""
 echo "Testing same-origin live proxy..."
 curl -fsSL -A "DreamlandDeploy/1.0" "https://dreamlandgh.app/live-socket/health" | head -c 120 || echo "WARN: proxy /health not reachable yet"
 echo ""
-echo "Done ($BUILD). Hard-refresh PWA (Ctrl+Shift+R), then watch live again."
-echo "Also redeploy Render live-server from GitHub for CORS update."
+echo "Done ($BUILD). One hard-refresh (Ctrl+Shift+R) after deploy — live then auto-reconnects without it."

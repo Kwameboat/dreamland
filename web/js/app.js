@@ -583,12 +583,42 @@ let pullRefreshing = false;
 let fastReels = null;
 const hlsPlayers = new WeakMap();
 
-async function ensureDreamlandLive() {
-  if (dreamlandLive) return dreamlandLive;
-  const { createDreamlandLive, preloadLiveLibs } = await import('./dreamland-live.js');
-  void preloadLiveLibs();
-  dreamlandLive = createDreamlandLive({ showToast, formatCount });
+async function ensureDreamlandLive(fresh = false) {
+  if (fresh && dreamlandLive) {
+    try {
+      await dreamlandLive.stopWatching?.();
+      await dreamlandLive.stopBroadcast?.();
+    } catch { /* ignore */ }
+    dreamlandLive = null;
+  }
+  if (dreamlandLive && !fresh) return dreamlandLive;
+
+  const build = window.__DL_BUILD__ || String(Date.now());
+  const mod = await import(/* @vite-ignore */ `./dreamland-live.js?v=${encodeURIComponent(build)}`);
+  await mod.prepareForLiveConnect?.();
+  dreamlandLive = mod.createDreamlandLive({ showToast, formatCount });
   return dreamlandLive;
+}
+
+async function refreshLiveCredentials(liveId) {
+  const stamp = Date.now();
+  const watchRes = await api(`${API_ROUTES.liveWatch}?live_id=${encodeURIComponent(liveId)}&_=${stamp}`);
+  if (Number(watchRes.data?.statusCode) === 402) {
+    const err = new Error(watchRes.data?.message || 'Unlock required');
+    err.status = 402;
+    err.payload = watchRes;
+    throw err;
+  }
+  const live = watchRes.data?.live;
+  if (!live) throw new Error(watchRes.data?.message || 'Live unavailable');
+  const joinRes = await api(API_ROUTES.liveJoin, {
+    method: 'POST',
+    body: JSON.stringify({ live_id: Number(liveId) }),
+  });
+  if (joinRes.data?.rtc) live.rtc = joinRes.data.rtc;
+  if (joinRes.data?.token) live.token = joinRes.data.token;
+  if (joinRes.data?.viewer_count != null) live.viewer_count = joinRes.data.viewer_count;
+  return live;
 }
 
 function unwrapPayload(json, httpStatus = 200) {
@@ -4259,7 +4289,8 @@ function switchFeedMode(mode) {
   updateFeedHeaderUi();
   if (mode === 'live') {
     pauseMediaForLive();
-    void import('./dreamland-live.js').then((m) => m.preloadLiveLibs?.());
+    void import(`./dreamland-live.js?v=${encodeURIComponent(window.__DL_BUILD__ || Date.now())}`)
+      .then((m) => m.prepareForLiveConnect?.());
     loadLives(true);
   } else {
     setupReelPlayback();
@@ -4363,24 +4394,8 @@ function openLivePaywall(liveId, price, title) {
 async function enterLiveRoom(liveId) {
   try {
     if (!(await ensureLiveServerReady())) return;
-
-    const res = await api(`${API_ROUTES.liveWatch}?live_id=${encodeURIComponent(liveId)}`);
-    if (Number(res.data?.statusCode) === 402) {
-      const live = res.data?.live || state.lives.find((item) => String(item.id) === String(liveId));
-      const price = res.data?.dreamland?.paywall?.price_credits || live?.dreamland?.price_credits || 0;
-      openLivePaywall(liveId, price, live?.title);
-      return;
-    }
-    const live = res.data?.live;
-    if (!live) throw new Error(res.data?.message || 'Live unavailable');
-    const joinRes = await api(API_ROUTES.liveJoin, {
-      method: 'POST',
-      body: JSON.stringify({ live_id: Number(liveId) }),
-    });
-    if (joinRes.data?.rtc) live.rtc = joinRes.data.rtc;
-    if (joinRes.data?.token) live.token = joinRes.data.token;
-    if (joinRes.data?.viewer_count != null) live.viewer_count = joinRes.data.viewer_count;
-    await openLiveWatchRoom(live);
+    const live = await refreshLiveCredentials(liveId);
+    await openLiveWatchRoom(live, liveId);
     loadLives(true);
   } catch (err) {
     if (err.status === 402) {
@@ -4393,8 +4408,11 @@ async function enterLiveRoom(liveId) {
   }
 }
 
-async function openLiveWatchRoom(live) {
+async function openLiveWatchRoom(live, liveId = live?.id) {
   pauseMediaForLive();
+  if (dreamlandLive) {
+    try { await dreamlandLive.stopWatching(); } catch { /* ignore */ }
+  }
   state.activeLiveWatch = live;
   const creator = live.creator || {};
   const initial = (creator.username || creator.name || 'C').charAt(0).toUpperCase();
@@ -4429,40 +4447,53 @@ async function openLiveWatchRoom(live) {
   }
 
   setLiveWatchStatus('Starting live connection…');
-  try {
-    const liveClient = await ensureDreamlandLive();
-    const { preloadLiveLibs } = await import('./dreamland-live.js');
-    await preloadLiveLibs();
-    await liveClient.startWatching({
-      rtc: live.rtc,
-      live,
-      userId: state.user?.id,
-      videoEl,
-      onStatus: (msg) => {
-        if (msg) setLiveWatchStatus(msg);
-      },
-      onChat: (msg) => appendLiveChatMessage(msg, 'live-chat-list'),
-      onStreamReady: () => {
-        setLiveWatchStatus('');
-        document.getElementById('live-watch-visual')?.classList.add('live-watch-visual--playing');
-        if (videoEl) {
-          videoEl.muted = false;
-          videoEl.removeAttribute('muted');
-          videoEl.play().catch(() => {
-            videoEl.muted = true;
-            videoEl.setAttribute('muted', '');
-            setLiveWatchStatus('Tap the video to enable sound', false);
-          });
-        }
-      },
-      onWaiting: (msg) => setLiveWatchStatus(msg || 'Waiting for host camera…'),
-    });
-  } catch (err) {
-    const msg = err.message || 'Could not connect to live video';
-    const hint = /timeout|connection|consume|transport/i.test(msg)
-      ? `${msg} — tap Reload or try again in a moment.`
-      : msg;
-    setLiveWatchStatus(hint, true);
+  const maxAttempts = 3;
+  let lastErr = null;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      if (attempt > 0 && liveId) {
+        setLiveWatchStatus('Reconnecting to live…');
+        live = await refreshLiveCredentials(liveId);
+        state.activeLiveWatch = live;
+      }
+      const liveClient = await ensureDreamlandLive(attempt > 0);
+      await liveClient.startWatching({
+        rtc: live.rtc,
+        live,
+        userId: state.user?.id,
+        videoEl,
+        onStatus: (msg) => {
+          if (msg) setLiveWatchStatus(msg);
+        },
+        onChat: (msg) => appendLiveChatMessage(msg, 'live-chat-list'),
+        onStreamReady: () => {
+          setLiveWatchStatus('');
+          document.getElementById('live-watch-visual')?.classList.add('live-watch-visual--playing');
+          if (videoEl) {
+            videoEl.muted = false;
+            videoEl.removeAttribute('muted');
+            videoEl.play().catch(() => {
+              videoEl.muted = true;
+              videoEl.setAttribute('muted', '');
+              setLiveWatchStatus('Tap the video to enable sound', false);
+            });
+          }
+        },
+        onWaiting: (msg) => setLiveWatchStatus(msg || 'Waiting for host camera…'),
+      });
+      lastErr = null;
+      break;
+    } catch (err) {
+      lastErr = err;
+      try { await dreamlandLive?.stopWatching(); } catch { /* ignore */ }
+      if (attempt < maxAttempts - 1) {
+        await new Promise((r) => window.setTimeout(r, 800 * (attempt + 1)));
+      }
+    }
+  }
+  if (lastErr) {
+    const msg = lastErr.message || 'Could not connect to live video';
+    setLiveWatchStatus(`${msg} — tap Watch live to try again`, true);
     showToast(msg);
   }
 
@@ -4476,7 +4507,9 @@ async function openLiveWatchRoom(live) {
 }
 
 async function closeLiveWatchRoom() {
-  if (dreamlandLive) await dreamlandLive.stopWatching();
+  if (dreamlandLive) {
+    try { await dreamlandLive.stopWatching(); } catch { /* ignore */ }
+  }
   state.activeLiveWatch = null;
   setLiveWatchStatus('');
   const videoEl = document.getElementById('live-watch-video');

@@ -45,13 +45,40 @@ function socketIoOptions(signalingUrl) {
   };
 }
 
+function liveAssetStamp() {
+  return encodeURIComponent(window.__DL_BUILD__ || `t${Date.now()}`);
+}
+
+function resetLiveLibs() {
+  socketIoPromise = null;
+  mediasoupPromise = null;
+}
+
+export async function prepareForLiveConnect() {
+  resetLiveLibs();
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration?.();
+    reg?.active?.postMessage?.({ type: 'CLEAR_LIVE_CACHE' });
+    navigator.serviceWorker?.controller?.postMessage?.({ type: 'CLEAR_LIVE_CACHE' });
+  } catch { /* ignore */ }
+
+  const wakeUrls = [];
+  const host = window.location.hostname;
+  if (/dreamlandgh\.app$/i.test(host) && window.location.protocol === 'https:') {
+    wakeUrls.push(`${window.location.origin}/live-socket`);
+  }
+  const envSignal = window.__DL_ENV__?.live_signaling_url;
+  if (envSignal) wakeUrls.push(String(envSignal).replace(/\/$/, ''));
+  await Promise.allSettled([...new Set(wakeUrls)].map((url) => wakeLiveServer(url)));
+}
+
 function humanizeSocketError(err) {
   const msg = err?.message || String(err || 'Connection failed');
-  if (/xhr poll error|websocket error|poll error/i.test(msg)) {
-    return 'Could not connect to live video — hard refresh (Ctrl+Shift+R) and try again';
-  }
   if (/timeout/i.test(msg)) {
-    return 'Live server is waking up — wait 30 seconds and try again';
+    return 'Live server is waking up — retrying automatically…';
+  }
+  if (/xhr poll error|websocket error|poll error|could not connect/i.test(msg)) {
+    return 'Reconnecting to live video…';
   }
   return msg;
 }
@@ -121,18 +148,22 @@ async function vendorModuleExists(url) {
 }
 
 async function importLiveModule(urls, label) {
+  const stamp = liveAssetStamp();
   let lastErr = null;
   for (const url of urls) {
-    const timeout = url.startsWith('/') ? 8000 : 20000;
+    const busted = url.startsWith('/') && !url.includes('?')
+      ? `${url}?v=${stamp}`
+      : url;
+    const timeout = busted.startsWith('/') ? 8000 : 20000;
     try {
-      if (url.startsWith('/') && !(await vendorModuleExists(url))) {
+      if (busted.startsWith('/') && !(await vendorModuleExists(busted))) {
         continue;
       }
-      const mod = await withTimeout(import(/* @vite-ignore */ url), timeout, `${label} timed out`);
+      const mod = await withTimeout(import(/* @vite-ignore */ busted), timeout, `${label} timed out`);
       return mod;
     } catch (err) {
       lastErr = err;
-      console.warn(`${label} import failed (${url}):`, err.message);
+      console.warn(`${label} import failed (${busted}):`, err.message);
     }
   }
   throw lastErr || new Error(`${label} unavailable`);
@@ -172,6 +203,7 @@ async function loadMediasoupClient() {
 }
 
 export async function preloadLiveLibs() {
+  await prepareForLiveConnect();
   await Promise.allSettled([loadSocketIo(), loadMediasoupClient()]);
 }
 
@@ -201,7 +233,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     }
   }
 
-  async function connectSocket(rtc, role, userId, onStatus) {
+  async function connectSocketAttempt(rtc, role, userId, onStatus) {
     const cfg = normalizeRtcConfig(rtc);
     if (!cfg.live_id || !cfg.token) {
       throw new Error('Live room credentials are missing — refresh and try again');
@@ -219,6 +251,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     await Promise.allSettled(signalingUrls.map((url) => wakeLiveServer(url)));
 
     onStatus?.('Loading live player…');
+    resetLiveLibs();
     const { io } = await loadSocketIo();
 
     let lastErr = null;
@@ -261,6 +294,36 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       }
     }
 
+    throw lastErr || new Error('Live signaling connection failed');
+  }
+
+  async function connectSocket(rtc, role, userId, onStatus) {
+    const attempts = [
+      () => connectSocketAttempt(rtc, role, userId, onStatus),
+      async () => {
+        onStatus?.('Refreshing live connection…');
+        await prepareForLiveConnect();
+        return connectSocketAttempt(rtc, role, userId, onStatus);
+      },
+      async () => {
+        onStatus?.('Resetting live cache…');
+        await prepareForLiveConnect();
+        if (window.__DL_purgePwaState) await window.__DL_purgePwaState();
+        return connectSocketAttempt(rtc, role, userId, onStatus);
+      },
+    ];
+
+    let lastErr = null;
+    for (let i = 0; i < attempts.length; i++) {
+      try {
+        return await attempts[i]();
+      } catch (err) {
+        lastErr = err;
+        if (i < attempts.length - 1) {
+          await new Promise((r) => window.setTimeout(r, 600 * (i + 1)));
+        }
+      }
+    }
     throw new Error(humanizeSocketError(lastErr));
   }
 
@@ -672,6 +735,8 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     stopWatching,
     sendChat,
     normalizeRtcConfig,
+    prepareForLiveConnect,
+    resetLiveLibs,
     isBroadcasting: () => Boolean(broadcastSession),
     isWatching: () => Boolean(watchSession),
   };

@@ -42,7 +42,9 @@ function isBypassPath(pathname) {
     || pathname.endsWith('/sw.js')
     || pathname === '/build-version.json'
     || pathname.endsWith('/build-version.json')
-    || pathname.startsWith('/live-socket');
+    || pathname.startsWith('/live-socket')
+    || pathname.includes('/dreamland-live.js')
+    || pathname.includes('/js/vendor/');
 }
 
 function isMutableAsset(pathname) {
@@ -135,6 +137,23 @@ self.addEventListener('message', (event) => {
     event.waitUntil(
       caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key)))),
     );
+  }
+  if (event.data?.type === 'CLEAR_LIVE_CACHE') {
+    event.waitUntil((async () => {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(async (cacheName) => {
+        const cache = await caches.open(cacheName);
+        const requests = await cache.keys();
+        await Promise.all(requests.map(async (req) => {
+          const path = new URL(req.url).pathname;
+          if (path.includes('dreamland-live')
+            || path.includes('/js/vendor/')
+            || path.startsWith('/live-socket')) {
+            await cache.delete(req);
+          }
+        }));
+      }));
+    })());
   }
 });
 
