@@ -96,8 +96,8 @@ function humanizeSocketError(err) {
   if (/room not found|invalid live token|not joined|credentials are missing/i.test(msg)) {
     return msg;
   }
-  if (/timeout/i.test(msg)) {
-    return 'Live server is waking up — try again in a moment';
+  if (/timeout|timed out|could not receive|cannot consume|connection failed|transport connect/i.test(msg)) {
+    return 'Live video could not load — the media server may be unreachable. Try again in a moment.';
   }
   if (/xhr poll error|websocket error|poll error|could not connect|server error/i.test(msg)) {
     return 'Live signaling blocked — refresh the page and try again';
@@ -423,7 +423,11 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       'Live media attach timed out',
     );
 
-    await emitAck(socket, 'live:resumeConsumer', { consumerId: consumer.id });
+    await withTimeout(
+      emitAck(socket, 'live:resumeConsumer', { consumerId: consumer.id }, 10000),
+      10000,
+      'Live resume timed out',
+    );
     remoteStream.addTrack(consumer.track);
     return consumer;
   }
@@ -446,37 +450,49 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
   async function consumeAll(socket, device, transport, videoEl, seedProducers = []) {
     const remoteStream = new MediaStream();
     const consumedProducerIds = new Set();
-    const items = seedProducers.length
-      ? seedProducers
-      : ((await emitAck(socket, 'live:getProducers')).items || []);
     const consumeErrors = [];
     let consumeAttempted = false;
 
-    for (const item of items) {
-      if (!item?.producerId || consumedProducerIds.has(item.producerId)) continue;
-      consumeAttempted = true;
-      try {
-        await consumeProducer(socket, device, transport, item.producerId, remoteStream);
-        consumedProducerIds.add(item.producerId);
-      } catch (err) {
-        consumeErrors.push(err.message || String(err));
-        console.warn('Consume producer failed:', item.producerId, err.message);
+    const run = async () => {
+      const items = seedProducers.length
+        ? seedProducers
+        : ((await emitAck(socket, 'live:getProducers', {}, 10000)).items || []);
+
+      for (const item of items) {
+        if (!item?.producerId || consumedProducerIds.has(item.producerId)) continue;
+        consumeAttempted = true;
+        try {
+          await consumeProducer(socket, device, transport, item.producerId, remoteStream);
+          consumedProducerIds.add(item.producerId);
+        } catch (err) {
+          consumeErrors.push(err.message || String(err));
+          console.warn('Consume producer failed:', item.producerId, err.message);
+        }
       }
-    }
 
-    if (consumeAttempted) {
-      await waitForTransportConnection(transport, 25000).catch((err) => {
-        consumeErrors.push(err.message || String(err));
-        console.warn('Transport connect:', err.message);
-      });
-    }
+      if (remoteStream.getTracks().length) {
+        void waitForTransportConnection(transport, 12000).catch((err) => {
+          console.warn('Transport connect:', err.message);
+        });
+      }
 
-    if (consumeAttempted && !remoteStream.getTracks().length && consumeErrors.length) {
-      throw new Error(consumeErrors[0] || 'Could not receive live video');
-    }
+      if (consumeAttempted && !remoteStream.getTracks().length && consumeErrors.length) {
+        throw new Error(consumeErrors[0] || 'Could not receive live video');
+      }
 
-    if (videoEl) {
-      await attachRemoteStreamToVideo(videoEl, remoteStream);
+      if (videoEl && remoteStream.getTracks().length) {
+        await attachRemoteStreamToVideo(videoEl, remoteStream);
+      }
+    };
+
+    try {
+      await withTimeout(run(), 12000, 'Live video load timed out');
+    } catch (err) {
+      if (remoteStream.getTracks().length) {
+        if (videoEl) await attachRemoteStreamToVideo(videoEl, remoteStream).catch(() => {});
+        return { remoteStream, transport, device, consumedProducerIds };
+      }
+      if (consumeAttempted) throw err;
     }
 
     return { remoteStream, transport, device, consumedProducerIds };
@@ -576,9 +592,14 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     if (!published.length) {
       throw new Error('Camera or microphone not ready — allow permissions and try again');
     }
-    void waitForTransportConnection(sendTransport).catch((err) => {
-      console.warn('Host transport connect:', err.message);
-    });
+    onStatus?.('Connecting camera to server…');
+    await waitForTransportConnection(sendTransport, 22000);
+
+    const producerCheck = await emitAck(socket, 'live:getProducers', {}, 8000);
+    const count = Array.isArray(producerCheck?.items) ? producerCheck.items.length : published.length;
+    if (!count) {
+      throw new Error('Camera could not reach the live server — viewers will not see video');
+    }
 
     socket.on('live:stats', (stats) => {
       if (typeof onStats === 'function') onStats(stats);
@@ -656,11 +677,12 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     consumed.consumedProducerIds.forEach((id) => session.consumedProducerIds.add(id));
 
     if (!session.remoteStream.getTracks().length) {
-      if (join.hasHost === false) {
-        onWaiting?.('Waiting for host to connect…');
-      } else {
-        onWaiting?.('Waiting for host camera…');
-      }
+      const waitingMsg = join.hasHost === false
+        ? 'Waiting for host to connect…'
+        : (join.producers?.length || seedProducers.length)
+          ? 'Receiving host video…'
+          : 'Waiting for host camera…';
+      onWaiting?.(waitingMsg);
       startProducerPolling(session, callbacks);
     } else {
       onStatus?.('');

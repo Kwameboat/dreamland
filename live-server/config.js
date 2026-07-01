@@ -11,6 +11,7 @@ function parseRenderHostname() {
 }
 
 const isRender = Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID);
+const isFly = Boolean(process.env.FLY_APP_NAME || process.env.DREAMLAND_LIVE_DEPLOY === 'fly');
 const renderHost = parseRenderHostname();
 
 module.exports = {
@@ -20,12 +21,15 @@ module.exports = {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
-  deployTarget: process.env.DREAMLAND_LIVE_DEPLOY || (isRender ? 'render' : 'local'),
+  deployTarget: process.env.DREAMLAND_LIVE_DEPLOY || (isFly ? 'fly' : (isRender ? 'render' : 'local')),
   mediasoup: {
     listenIp: process.env.DREAMLAND_LIVE_LISTEN_IP || '0.0.0.0',
     announcedIp: process.env.DREAMLAND_LIVE_ANNOUNCED_IP || renderHost || undefined,
     rtcMinPort: Number(process.env.DREAMLAND_LIVE_RTC_MIN || 40000),
     rtcMaxPort: Number(process.env.DREAMLAND_LIVE_RTC_MAX || 49999),
   },
-  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ],
 };

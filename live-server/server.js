@@ -103,11 +103,12 @@ async function getListenOptions() {
 
 function transportOptions() {
   const onRender = config.deployTarget === 'render';
+  const onFly = config.deployTarget === 'fly';
   return {
     listenIps: resolvedListenOptions || [{ ip: config.mediasoup.listenIp }],
-    enableUdp: !onRender,
+    enableUdp: onFly || !onRender,
     enableTcp: true,
-    preferUdp: !onRender,
+    preferUdp: onFly || !onRender,
     initialAvailableOutgoingBitrate: 1_000_000,
   };
 }
