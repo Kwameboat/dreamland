@@ -45,7 +45,9 @@ class DreamlandMetaController extends Controller
             'max_reel_upload_mb' => $uploadLimits['max_reel_upload_mb'],
             'max_reel_upload_bytes' => $uploadLimits['max_reel_upload_bytes'],
             'max_live_duration_seconds' => $uploadLimits['max_live_duration_seconds'],
-            'live_signaling_url' => (string) (Yii::$app->params['dreamlandLiveSignalingUrl'] ?? 'http://localhost:4443'),
+            'live_signaling_url' => Yii::$app->has('dreamlandLive')
+                ? Yii::$app->dreamlandLive->browserSignalingUrl()
+                : (string) (Yii::$app->params['dreamlandLiveSignalingUrl'] ?? 'http://localhost:4443'),
             'live_enabled' => Yii::$app->has('dreamlandLive') ? Yii::$app->dreamlandLive->isHealthy() : false,
             'moderation_agent_url' => (string) (Yii::$app->params['dreamlandModerationAgentUrl'] ?? 'http://localhost:4444'),
             'moderation_enabled' => Yii::$app->has('dreamlandModeration') ? Yii::$app->dreamlandModeration->isHealthy() : false,

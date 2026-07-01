@@ -4,6 +4,9 @@ RewriteEngine On
 RewriteCond %{REQUEST_URI} \.(js|mjs|css|json|png|jpe?g|gif|webp|svg|ico|woff2?|map)$ [NC]
 RewriteRule ^ - [L]
 
+# Same-origin live signaling proxy (Socket.IO → Render; avoids xhr poll / CORS errors)
+RewriteRule ^live-socket(/.*)?$ live-socket/index.php [L,QSA]
+
 # Leave /admin and /api to the Yii PHP apps
 RewriteRule ^admin(/|$) - [L]
 RewriteRule ^api(/|$) - [L]

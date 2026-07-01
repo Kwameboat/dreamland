@@ -152,8 +152,25 @@ async function boot() {
   await createWorker();
   await getListenOptions();
 
+  const allowOrigin = (origin, callback) => {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+    const allowed = config.corsOrigins;
+    if (allowed.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    if (/^https:\/\/([a-z0-9-]+\.)?dreamlandgh\.app$/i.test(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(null, false);
+  };
+
   const app = express();
-  app.use(cors({ origin: config.corsOrigins, credentials: true }));
+  app.use(cors({ origin: allowOrigin, credentials: false }));
   app.use(express.json());
 
   app.get('/health', (_req, res) => {
@@ -216,7 +233,7 @@ async function boot() {
 
   const server = http.createServer(app);
   const io = new Server(server, {
-    cors: { origin: config.corsOrigins, credentials: true },
+    cors: { origin: allowOrigin, credentials: false },
     maxHttpBufferSize: 1e7,
   });
 

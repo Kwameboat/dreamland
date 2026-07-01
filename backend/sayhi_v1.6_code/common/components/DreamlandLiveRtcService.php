@@ -44,13 +44,31 @@ class DreamlandLiveRtcService extends Component
     }
 
     /**
+     * URL browsers should use for Socket.IO (same-origin proxy on production PWA).
+     */
+    public function browserSignalingUrl(): string
+    {
+        $params = Yii::$app->params;
+        if (!empty($params['dreamlandLiveBrowserSignalingUrl'])) {
+            return rtrim((string) $params['dreamlandLiveBrowserSignalingUrl'], '/');
+        }
+        $pwa = getenv('DREAMLAND_PWA_URL') ?: getenv('PWA_URL') ?: '';
+        if ($pwa !== '' && stripos($pwa, 'dreamlandgh.app') !== false) {
+            return rtrim($pwa, '/') . '/live-socket';
+        }
+        return rtrim($this->signalingUrl, '/');
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function clientConfig(UserLiveHistory $live, string $role = 'viewer'): array
     {
+        $direct = rtrim($this->signalingUrl, '/');
         return [
             'provider' => 'dreamland',
-            'signaling_url' => rtrim($this->signalingUrl, '/'),
+            'signaling_url' => $this->browserSignalingUrl(),
+            'signaling_url_direct' => $direct,
             'live_id' => (int) $live->id,
             'token' => (string) $live->token,
             'role' => $role,

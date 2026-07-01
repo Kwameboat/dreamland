@@ -7,10 +7,36 @@ function normalizeRtcConfig(rtc, live = {}) {
   return {
     ...base,
     signaling_url: String(base.signaling_url || '').replace(/\/$/, ''),
+    signaling_url_direct: String(base.signaling_url_direct || base.signaling_url || '').replace(/\/$/, ''),
     live_id: Number(base.live_id || live.id || 0),
     token: String(base.token || live.token || ''),
     ice_servers: base.ice_servers || base.iceServers || [],
   };
+}
+
+function resolveSignalingUrls(cfg) {
+  const normalized = normalizeRtcConfig(cfg);
+  const urls = [];
+  const host = window.location.hostname;
+  const onDreamlandProd = /dreamlandgh\.app$/i.test(host) && window.location.protocol === 'https:';
+  if (onDreamlandProd) {
+    urls.push(`${window.location.origin}/live-socket`);
+  }
+  for (const candidate of [normalized.signaling_url, normalized.signaling_url_direct]) {
+    if (candidate && !urls.includes(candidate)) urls.push(candidate);
+  }
+  return urls;
+}
+
+function humanizeSocketError(err) {
+  const msg = err?.message || String(err || 'Connection failed');
+  if (/xhr poll error/i.test(msg)) {
+    return 'Live signaling blocked — retry in a moment or hard refresh (Ctrl+Shift+R)';
+  }
+  if (/websocket error/i.test(msg)) {
+    return 'Live video connection failed — check your network and try again';
+  }
+  return msg;
 }
 function emitAck(socket, event, payload = {}, timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
@@ -137,8 +163,8 @@ export async function wakeLiveServer(signalingUrl) {
   if (!base) return;
   try {
     await withTimeout(
-      fetch(`${base}/health`, { cache: 'no-store', mode: 'cors' }),
-      12000,
+      fetch(`${base}/health`, { cache: 'no-store', mode: 'cors', credentials: 'omit' }),
+      15000,
       'Live server wake timeout',
     );
   } catch {
@@ -160,54 +186,67 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
 
   async function connectSocket(rtc, role, userId, onStatus) {
     const cfg = normalizeRtcConfig(rtc);
-    const signalingUrl = cfg.signaling_url;
-    if (!signalingUrl) {
-      throw new Error('Live signaling URL is missing');
-    }
     if (!cfg.live_id || !cfg.token) {
       throw new Error('Live room credentials are missing — refresh and try again');
     }
     const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    if (!isLocalHost && /localhost|127\.0\.0\.1/i.test(signalingUrl)) {
+    const signalingUrls = resolveSignalingUrls(cfg);
+    if (!signalingUrls.length) {
+      throw new Error('Live signaling URL is missing');
+    }
+    if (!isLocalHost && signalingUrls.every((url) => /localhost|127\.0\.0\.1/i.test(url))) {
       throw new Error('Live signaling is not configured for this site');
     }
 
     onStatus?.('Waking live video server…');
-    await wakeLiveServer(signalingUrl);
+    await Promise.allSettled(signalingUrls.map((url) => wakeLiveServer(url)));
 
     onStatus?.('Loading live player…');
     const { io } = await loadSocketIo();
 
-    onStatus?.('Connecting to live stream…');
-    const connectTimeout = /onrender\.com/i.test(signalingUrl) ? 45000 : 20000;
-    const socket = io(signalingUrl, {
-      transports: ['polling', 'websocket'],
-      reconnection: true,
-      reconnectionAttempts: 8,
-      timeout: connectTimeout,
-    });
+    let lastErr = null;
+    for (const signalingUrl of signalingUrls) {
+      onStatus?.('Connecting to live stream…');
+      const connectTimeout = /onrender\.com/i.test(signalingUrl) ? 50000 : 25000;
+      try {
+        const socket = io(signalingUrl, {
+          transports: ['polling', 'websocket'],
+          withCredentials: false,
+          reconnection: false,
+          timeout: connectTimeout,
+        });
 
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('Live signaling timeout — try again in a moment')), connectTimeout);
-      socket.once('connect', () => {
-        clearTimeout(timer);
-        resolve();
-      });
-      socket.once('connect_error', (err) => {
-        clearTimeout(timer);
-        reject(err instanceof Error ? err : new Error(err?.message || 'Live signaling connection failed'));
-      });
-    });
+        await new Promise((resolve, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error('Live signaling timeout — try again in a moment')),
+            connectTimeout,
+          );
+          socket.once('connect', () => {
+            clearTimeout(timer);
+            resolve();
+          });
+          socket.once('connect_error', (err) => {
+            clearTimeout(timer);
+            reject(err instanceof Error ? err : new Error(err?.message || 'Live signaling connection failed'));
+          });
+        });
 
-    onStatus?.('Joining live room…');
-    const join = await emitAck(socket, 'live:join', {
-      liveId: cfg.live_id,
-      token: cfg.token,
-      role,
-      userId: userId || 0,
-    }, 25000);
+        onStatus?.('Joining live room…');
+        const join = await emitAck(socket, 'live:join', {
+          liveId: cfg.live_id,
+          token: cfg.token,
+          role,
+          userId: userId || 0,
+        }, 25000);
 
-    return { socket, join, rtc: cfg };
+        return { socket, join, rtc: cfg };
+      } catch (err) {
+        lastErr = err;
+        console.warn('Live signaling failed (' + signalingUrl + '):', err?.message || err);
+      }
+    }
+
+    throw new Error(humanizeSocketError(lastErr));
   }
 
   async function createSendTransport(socket, device) {

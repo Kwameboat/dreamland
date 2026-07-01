@@ -149,7 +149,9 @@ class HealthController extends Controller
             'api' => $apiBase . '/v1',
             'admin' => $adminUrl,
             'uploads' => $this->safeUploadsBase(),
-            'live_signaling' => (string) ($params['dreamlandLiveSignalingUrl'] ?? 'http://localhost:4443'),
+            'live_signaling' => Yii::$app->has('dreamlandLive')
+                ? Yii::$app->dreamlandLive->browserSignalingUrl()
+                : (string) ($params['dreamlandLiveSignalingUrl'] ?? 'http://localhost:4443'),
             'live_ok' => $liveOk,
             'moderation_agent' => (string) ($params['dreamlandModerationAgentUrl'] ?? 'http://localhost:4444'),
             'moderation_ok' => $modOk,

@@ -1,4 +1,4 @@
-const defaultCors = 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080,https://dreamlandgh.app';
+const defaultCors = 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080,https://dreamlandgh.app,https://www.dreamlandgh.app';
 
 function parseRenderHostname() {
   const external = process.env.RENDER_EXTERNAL_URL || '';
