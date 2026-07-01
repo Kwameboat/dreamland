@@ -41,7 +41,8 @@ function isBypassPath(pathname) {
   return pathname === '/sw.js'
     || pathname.endsWith('/sw.js')
     || pathname === '/build-version.json'
-    || pathname.endsWith('/build-version.json');
+    || pathname.endsWith('/build-version.json')
+    || pathname.startsWith('/live-socket');
 }
 
 function isMutableAsset(pathname) {

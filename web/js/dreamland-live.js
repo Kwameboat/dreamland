@@ -28,13 +28,30 @@ function resolveSignalingUrls(cfg) {
   return urls;
 }
 
+function isProxiedSignalingUrl(signalingUrl) {
+  return /\/live-socket\/?$/i.test(signalingUrl) || String(signalingUrl).includes('/live-socket/');
+}
+
+function socketIoOptions(signalingUrl) {
+  const proxied = isProxiedSignalingUrl(signalingUrl);
+  const connectTimeout = /onrender\.com/i.test(signalingUrl) ? 50000 : 35000;
+  return {
+    transports: proxied ? ['polling'] : ['polling', 'websocket'],
+    upgrade: !proxied,
+    withCredentials: false,
+    reconnection: false,
+    forceNew: true,
+    timeout: connectTimeout,
+  };
+}
+
 function humanizeSocketError(err) {
   const msg = err?.message || String(err || 'Connection failed');
-  if (/xhr poll error/i.test(msg)) {
-    return 'Live signaling blocked — retry in a moment or hard refresh (Ctrl+Shift+R)';
+  if (/xhr poll error|websocket error|poll error/i.test(msg)) {
+    return 'Could not connect to live video — hard refresh (Ctrl+Shift+R) and try again';
   }
-  if (/websocket error/i.test(msg)) {
-    return 'Live video connection failed — check your network and try again';
+  if (/timeout/i.test(msg)) {
+    return 'Live server is waking up — wait 30 seconds and try again';
   }
   return msg;
 }
@@ -207,14 +224,11 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     let lastErr = null;
     for (const signalingUrl of signalingUrls) {
       onStatus?.('Connecting to live stream…');
-      const connectTimeout = /onrender\.com/i.test(signalingUrl) ? 50000 : 25000;
+      const socketOpts = socketIoOptions(signalingUrl);
+      const connectTimeout = socketOpts.timeout;
+      let socket = null;
       try {
-        const socket = io(signalingUrl, {
-          transports: ['polling', 'websocket'],
-          withCredentials: false,
-          reconnection: false,
-          timeout: connectTimeout,
-        });
+        socket = io(signalingUrl, socketOpts);
 
         await new Promise((resolve, reject) => {
           const timer = setTimeout(
@@ -242,6 +256,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
         return { socket, join, rtc: cfg };
       } catch (err) {
         lastErr = err;
+        try { socket?.disconnect(); } catch { /* ignore */ }
         console.warn('Live signaling failed (' + signalingUrl + '):', err?.message || err);
       }
     }
