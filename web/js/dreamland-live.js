@@ -337,7 +337,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
   }
 
   async function createSendTransport(socket, device) {
-    const info = await emitAck(socket, 'live:createTransport', { direction: 'send' });
+    const info = await emitAck(socket, 'live:createTransport', { direction: 'send' }, 12000);
     const transport = device.createSendTransport({
       id: info.id,
       iceParameters: info.iceParameters,
@@ -346,18 +346,26 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     });
 
     transport.on('connect', ({ dtlsParameters }, callback, errback) => {
-      emitAck(socket, 'live:connectTransport', {
-        transportId: transport.id,
-        dtlsParameters,
-      }).then(() => callback()).catch(errback);
+      withTimeout(
+        emitAck(socket, 'live:connectTransport', {
+          transportId: transport.id,
+          dtlsParameters,
+        }, 12000),
+        12000,
+        'Stream connect timed out',
+      ).then(() => callback()).catch(errback);
     });
 
     transport.on('produce', ({ kind, rtpParameters }, callback, errback) => {
-      emitAck(socket, 'live:produce', {
-        transportId: transport.id,
-        kind,
-        rtpParameters,
-      })
+      withTimeout(
+        emitAck(socket, 'live:produce', {
+          transportId: transport.id,
+          kind,
+          rtpParameters,
+        }, 12000),
+        12000,
+        `Publish ${kind} timed out`,
+      )
         .then((res) => callback({ id: res.id }))
         .catch(errback);
     });
@@ -384,21 +392,27 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     return transport;
   }
 
-  async function produceTracks(transport, stream) {
-    const tracks = [];
-    for (const track of stream.getTracks()) {
-      if (track.readyState !== 'live') continue;
+  async function produceTracks(transport, stream, onStatus) {
+    const tracks = ['audio', 'video']
+      .map((kind) => stream.getTracks().find((t) => t.kind === kind && t.readyState === 'live'))
+      .filter(Boolean);
+    if (!tracks.length) {
+      throw new Error('Camera not active — allow camera access and try again');
+    }
+    const published = [];
+    for (const track of tracks) {
+      onStatus?.(track.kind === 'video' ? 'Publishing camera…' : 'Publishing microphone…');
       const params = { track };
       if (track.kind === 'video') {
         params.encodings = [{ maxBitrate: 1_500_000 }];
       }
-      tracks.push(await withTimeout(
+      published.push(await withTimeout(
         transport.produce(params),
-        20000,
+        15000,
         `Failed to publish ${track.kind}`,
       ));
     }
-    return tracks;
+    return published;
   }
 
   async function consumeProducer(socket, device, transport, producerId, remoteStream) {
@@ -583,12 +597,13 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       connectSocket(rtc, 'host', userId, onStatus),
     ]);
 
-    onStatus?.('Publishing camera…');
+    onStatus?.('Loading broadcast engine…');
     const device = new Device();
     await device.load({ routerRtpCapabilities: join.rtpCapabilities });
 
+    onStatus?.('Opening stream channel…');
     const sendTransport = await createSendTransport(socket, device);
-    const published = await produceTracks(sendTransport, stream);
+    const published = await produceTracks(sendTransport, stream, onStatus);
     if (!published.length) {
       throw new Error('Camera or microphone not ready — allow permissions and try again');
     }

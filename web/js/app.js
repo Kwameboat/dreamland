@@ -2408,10 +2408,20 @@ async function startLiveBroadcastCamera() {
     const video = document.getElementById('live-broadcast-video');
     if (video) {
       video.srcObject = cameraStream;
+      video.muted = true;
+      video.setAttribute('muted', '');
+      video.playsInline = true;
+      video.setAttribute('playsinline', '');
+      await video.play().catch(() => {});
       video.classList.toggle('live-broadcast__video--mirror', liveFacingMode === 'user');
     }
-  } catch {
-    showToast('Camera access denied or unavailable');
+    const liveTracks = cameraStream?.getTracks?.().filter((t) => t.readyState === 'live') || [];
+    if (!liveTracks.length) {
+      throw new Error('Camera not ready');
+    }
+  } catch (err) {
+    showToast(err?.message || 'Camera access denied or unavailable');
+    cameraStream = null;
   }
 }
 
@@ -2566,6 +2576,9 @@ async function startLiveSession() {
 
     pauseMediaForLive();
     if (!cameraStream) await startLiveBroadcastCamera();
+    if (!cameraStream?.getTracks?.().some((t) => t.readyState === 'live')) {
+      throw new Error('Camera not available — allow camera access in Windows settings, then try again');
+    }
     const form = new FormData();
     form.append('title', title);
     form.append('is_monetized', isMonetized);
