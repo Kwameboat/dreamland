@@ -593,7 +593,11 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       throw new Error('Camera or microphone not ready — allow permissions and try again');
     }
     onStatus?.('Connecting camera to server…');
-    await waitForTransportConnection(sendTransport, 22000);
+    try {
+      await waitForTransportConnection(sendTransport, 28000);
+    } catch (err) {
+      throw new Error('Camera could not reach the live server — wait a moment and try again');
+    }
 
     const producerCheck = await emitAck(socket, 'live:getProducers', {}, 8000);
     const count = Array.isArray(producerCheck?.items) ? producerCheck.items.length : published.length;

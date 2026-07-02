@@ -77,6 +77,7 @@ async function createWorker() {
 async function resolveAnnouncedIp(value) {
   if (!value) return undefined;
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) return value;
+  if (/^[0-9a-f:]+$/i.test(value) && value.includes(':')) return value;
   try {
     const { address } = await dns.lookup(value, { family: 4 });
     return address;
@@ -86,18 +87,33 @@ async function resolveAnnouncedIp(value) {
   }
 }
 
+async function resolveFlyBindIp() {
+  const candidate = config.mediasoup.listenIp || 'fly-global-services';
+  if (candidate !== 'fly-global-services') return candidate;
+  try {
+    const { address } = await dns.lookup('fly-global-services');
+    console.log('Fly UDP bind address (fly-global-services):', address);
+    return address;
+  } catch (err) {
+    console.warn('fly-global-services lookup failed, falling back to 0.0.0.0:', err.message);
+    return '0.0.0.0';
+  }
+}
+
 let resolvedListenOptions = null;
 
 async function getListenOptions() {
   if (resolvedListenOptions) return resolvedListenOptions;
-  const listenIp = config.mediasoup.listenIp;
+  const onFly = config.deployTarget === 'fly';
+  const bindIp = onFly ? await resolveFlyBindIp() : config.mediasoup.listenIp;
   const announced = await resolveAnnouncedIp(config.mediasoup.announcedIp);
-  resolvedListenOptions = announced
-    ? [{ ip: listenIp, announcedIp: announced }]
-    : [{ ip: listenIp }];
-  if (announced) {
-    console.log('WebRTC announced IP:', announced);
+  if (onFly && !announced) {
+    console.warn('Fly WebRTC: set DREAMLAND_LIVE_ANNOUNCED_IP to your Fly public IPv4 (fly ips list)');
   }
+  resolvedListenOptions = announced
+    ? [{ ip: bindIp, announcedIp: announced }]
+    : [{ ip: bindIp }];
+  console.log('WebRTC listen options:', JSON.stringify(resolvedListenOptions));
   return resolvedListenOptions;
 }
 
@@ -180,6 +196,8 @@ async function boot() {
       service: 'dreamland-live',
       rooms: rooms.size,
       uptime: process.uptime(),
+      deploy: config.deployTarget,
+      webrtc: resolvedListenOptions || null,
     });
   });
 
