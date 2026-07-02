@@ -124,7 +124,7 @@ function transportOptions() {
     listenIps: resolvedListenOptions || [{ ip: config.mediasoup.listenIp }],
     enableUdp: onFly || !onRender,
     enableTcp: true,
-    preferUdp: onFly || !onRender,
+    preferUdp: !onFly && !onRender,
     initialAvailableOutgoingBitrate: 1_000_000,
   };
 }

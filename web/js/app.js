@@ -2661,6 +2661,13 @@ async function startLiveSession() {
 
     liveBroadcastActive = true;
     setLiveBroadcastUiStage(true);
+    const preview = document.getElementById('live-broadcast-video');
+    if (preview && cameraStream) {
+      preview.srcObject = cameraStream;
+      preview.muted = true;
+      preview.playsInline = true;
+      await preview.play().catch(() => {});
+    }
     updateLiveBroadcastViewerCount(1);
     if (liveMaxTimer) clearTimeout(liveMaxTimer);
     const liveLimitSec = maxLiveDurationSeconds();

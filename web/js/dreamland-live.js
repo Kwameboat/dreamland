@@ -607,18 +607,17 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     if (!published.length) {
       throw new Error('Camera or microphone not ready — allow permissions and try again');
     }
-    onStatus?.('Connecting camera to server…');
-    try {
-      await waitForTransportConnection(sendTransport, 28000);
-    } catch (err) {
-      throw new Error('Camera could not reach the live server — wait a moment and try again');
-    }
 
+    onStatus?.('Starting broadcast…');
     const producerCheck = await emitAck(socket, 'live:getProducers', {}, 8000);
     const count = Array.isArray(producerCheck?.items) ? producerCheck.items.length : published.length;
     if (!count) {
-      throw new Error('Camera could not reach the live server — viewers will not see video');
+      throw new Error('Camera could not reach the live server — try again in a moment');
     }
+
+    void waitForTransportConnection(sendTransport, 60000).catch((err) => {
+      console.warn('Host transport ICE (background):', err.message);
+    });
 
     socket.on('live:stats', (stats) => {
       if (typeof onStats === 'function') onStats(stats);
