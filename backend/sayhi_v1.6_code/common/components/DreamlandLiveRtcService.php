@@ -102,7 +102,8 @@ class DreamlandLiveRtcService extends Component
 
     public function isHealthy(): bool
     {
-        $result = $this->request('GET', '/health', null, 1);
+        $timeout = stripos((string) ($this->serverUrl ?? ''), 'fly.dev') !== false ? 12 : 5;
+        $result = $this->request('GET', '/health', null, $timeout);
         return is_array($result) && !empty($result['ok']);
     }
 

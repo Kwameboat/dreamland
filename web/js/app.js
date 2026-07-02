@@ -2400,7 +2400,7 @@ async function startLiveBroadcastCamera() {
       cameraStream = null;
     }
     if (!cameraStream) {
-      cameraStream = await navigator.mediaDevices.getUserMedia({
+      cameraStream = await getUserMediaWithTimeout({
         video: { facingMode: liveFacingMode, width: { ideal: 720 }, height: { ideal: 1280 } },
         audio: true,
       });
@@ -2534,15 +2534,52 @@ async function closeLiveBroadcast(forceEnd = false) {
   resumeFeedPlaybackIfNeeded();
 }
 
-async function ensureLiveServerReady() {
+async function getUserMediaWithTimeout(constraints, timeoutMs = 15000) {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error('Camera not supported in this browser');
+  }
+  return Promise.race([
+    navigator.mediaDevices.getUserMedia(constraints),
+    new Promise((_, reject) => {
+      window.setTimeout(
+        () => reject(new Error('Camera permission timed out — allow camera access in Windows settings')),
+        timeoutMs,
+      );
+    }),
+  ]);
+}
+
+async function wakeProductionLiveServer() {
+  const host = window.location.hostname;
+  if (!/dreamlandgh\.app$/i.test(host) || window.location.protocol !== 'https:') return;
   try {
-    const res = await api(API_ROUTES.health, { timeoutMs: 15000 });
+    await fetch(`${window.location.origin}/live-socket/health`, { cache: 'no-store', mode: 'cors', credentials: 'omit' });
+  } catch { /* cold start */ }
+}
+
+async function ensureLiveServerReady(onStatus) {
+  try {
+    onStatus?.('Waking live server…');
+    await wakeProductionLiveServer();
+    onStatus?.('Checking live server…');
+    let res = await api(API_ROUTES.health, { timeoutMs: 20000 });
     const checks = res.data?.checks || {};
     const signaling = String(res.data?.services?.live_signaling || '');
     const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
     if (checks.live_server === false) {
-      showToast('Live server is offline — contact admin to enable Dreamland Live');
+      await new Promise((r) => window.setTimeout(r, 4000));
+      await wakeProductionLiveServer();
+      res = await api(API_ROUTES.health, { timeoutMs: 25000 });
+    }
+
+    const liveOk = res.data?.checks?.live_server !== false;
+    if (!liveOk) {
+      if (/dreamlandgh\.app\/live-socket/i.test(signaling)) {
+        showToast('Live server is waking up — trying anyway…');
+        return true;
+      }
+      showToast('Live server is offline — wait 30 seconds and try again');
       return false;
     }
     if (!isLocalHost && /localhost|127\.0\.0\.1/i.test(signaling)) {
@@ -2572,10 +2609,18 @@ async function startLiveSession() {
 
   let apiLiveStarted = false;
   try {
-    if (!(await ensureLiveServerReady())) return;
+    if (!(await ensureLiveServerReady((msg) => setStartBtn(msg)))) return;
 
     pauseMediaForLive();
-    if (!cameraStream) await startLiveBroadcastCamera();
+    setStartBtn('Opening camera…');
+    const tracksLive = cameraStream?.getTracks?.().some((t) => t.readyState === 'live');
+    if (!tracksLive) {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((t) => t.stop());
+        cameraStream = null;
+      }
+      await startLiveBroadcastCamera();
+    }
     if (!cameraStream?.getTracks?.().some((t) => t.readyState === 'live')) {
       throw new Error('Camera not available — allow camera access in Windows settings, then try again');
     }
