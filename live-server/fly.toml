@@ -1,6 +1,7 @@
-# Dreamland Live SFU — Fly.io (UDP for WebRTC media)
-# Deploy: cd live-server && fly launch --no-deploy && fly secrets set DREAMLAND_LIVE_SECRET=... && fly deploy
-# See deploy/fly/FLY-LIVE-SERVER.md
+# fly.toml app configuration file generated for dreamland-live on 2026-07-02T18:35:20Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
 app = 'dreamland-live'
 primary_region = 'iad'
@@ -9,18 +10,18 @@ primary_region = 'iad'
   dockerfile = 'Dockerfile'
 
 [env]
-  NODE_ENV = 'production'
-  DREAMLAND_LIVE_DEPLOY = 'fly'
   DREAMLAND_LIVE_CORS = 'https://dreamlandgh.app,https://www.dreamlandgh.app'
-  DREAMLAND_LIVE_RTC_MIN = '40000'
+  DREAMLAND_LIVE_DEPLOY = 'fly'
   DREAMLAND_LIVE_RTC_MAX = '40100'
+  DREAMLAND_LIVE_RTC_MIN = '40000'
+  NODE_ENV = 'production'
 
 [http_service]
   internal_port = 4443
   force_https = true
-  auto_stop_machines = 'off'
+  auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
   processes = ['app']
 
 [[services]]
@@ -31,3 +32,9 @@ primary_region = 'iad'
   [[services.ports]]
     start_port = 40000
     end_port = 40100
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 1024

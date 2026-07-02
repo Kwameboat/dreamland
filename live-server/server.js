@@ -465,7 +465,8 @@ async function boot() {
     });
   });
 
-  server.listen(config.port, () => {
+  const host = process.env.FLY_APP_NAME ? '0.0.0.0' : undefined;
+  server.listen(config.port, host, () => {
     const target = config.deployTarget || 'local';
     console.log(`Dreamland Live Server listening on port ${config.port} (${target})`);
     if (target === 'render') {
