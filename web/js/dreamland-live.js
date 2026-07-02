@@ -374,7 +374,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
   }
 
   async function createRecvTransport(socket, device) {
-    const info = await emitAck(socket, 'live:createTransport', { direction: 'recv' });
+    const info = await emitAck(socket, 'live:createTransport', { direction: 'recv' }, 12000);
     const transport = device.createRecvTransport({
       id: info.id,
       iceParameters: info.iceParameters,
@@ -383,10 +383,14 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     });
 
     transport.on('connect', ({ dtlsParameters }, callback, errback) => {
-      emitAck(socket, 'live:connectTransport', {
-        transportId: transport.id,
-        dtlsParameters,
-      }).then(() => callback()).catch(errback);
+      withTimeout(
+        emitAck(socket, 'live:connectTransport', {
+          transportId: transport.id,
+          dtlsParameters,
+        }, 12000),
+        12000,
+        'Viewer stream connect timed out',
+      ).then(() => callback()).catch(errback);
     });
 
     return transport;
@@ -461,55 +465,35 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     }
   }
 
-  async function consumeAll(socket, device, transport, videoEl, seedProducers = []) {
+  async function consumeAll(socket, device, transport, videoEl, seedProducers = [], callbacks = {}) {
     const remoteStream = new MediaStream();
     const consumedProducerIds = new Set();
-    const consumeErrors = [];
     let consumeAttempted = false;
 
-    const run = async () => {
-      const items = seedProducers.length
-        ? seedProducers
-        : ((await emitAck(socket, 'live:getProducers', {}, 10000)).items || []);
+    const items = seedProducers.length
+      ? seedProducers
+      : ((await emitAck(socket, 'live:getProducers', {}, 8000).catch(() => ({ items: [] }))).items || []);
 
-      for (const item of items) {
-        if (!item?.producerId || consumedProducerIds.has(item.producerId)) continue;
-        consumeAttempted = true;
-        try {
-          await consumeProducer(socket, device, transport, item.producerId, remoteStream);
-          consumedProducerIds.add(item.producerId);
-        } catch (err) {
-          consumeErrors.push(err.message || String(err));
-          console.warn('Consume producer failed:', item.producerId, err.message);
-        }
+    for (const item of items) {
+      if (!item?.producerId || consumedProducerIds.has(item.producerId)) continue;
+      consumeAttempted = true;
+      callbacks.onWaiting?.('Receiving live video…');
+      try {
+        await consumeProducer(socket, device, transport, item.producerId, remoteStream);
+        consumedProducerIds.add(item.producerId);
+      } catch (err) {
+        console.warn('Consume producer failed:', item.producerId, err.message);
       }
-
-      if (remoteStream.getTracks().length) {
-        void waitForTransportConnection(transport, 12000).catch((err) => {
-          console.warn('Transport connect:', err.message);
-        });
-      }
-
-      if (consumeAttempted && !remoteStream.getTracks().length && consumeErrors.length) {
-        throw new Error(consumeErrors[0] || 'Could not receive live video');
-      }
-
-      if (videoEl && remoteStream.getTracks().length) {
-        await attachRemoteStreamToVideo(videoEl, remoteStream);
-      }
-    };
-
-    try {
-      await withTimeout(run(), 12000, 'Live video load timed out');
-    } catch (err) {
-      if (remoteStream.getTracks().length) {
-        if (videoEl) await attachRemoteStreamToVideo(videoEl, remoteStream).catch(() => {});
-        return { remoteStream, transport, device, consumedProducerIds };
-      }
-      if (consumeAttempted) throw err;
     }
 
-    return { remoteStream, transport, device, consumedProducerIds };
+    if (remoteStream.getTracks().length) {
+      void waitForTransportConnection(transport, 15000).catch((err) => {
+        console.warn('Transport connect:', err.message);
+      });
+      if (videoEl) await attachRemoteStreamToVideo(videoEl, remoteStream).catch(() => {});
+    }
+
+    return { remoteStream, transport, device, consumedProducerIds, consumeAttempted };
   }
 
   async function syncProducers(session, callbacks = {}) {
@@ -615,9 +599,14 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       throw new Error('Camera could not reach the live server — try again in a moment');
     }
 
-    void waitForTransportConnection(sendTransport, 60000).catch((err) => {
-      console.warn('Host transport ICE (background):', err.message);
-    });
+    onStatus?.('Connecting camera to server…');
+    const iceOk = await Promise.race([
+      waitForTransportConnection(sendTransport, 18000).then(() => true).catch(() => false),
+      new Promise((resolve) => window.setTimeout(() => resolve(false), 18000)),
+    ]);
+    if (!iceOk) {
+      throw new Error('Camera could not connect to live server — end and try Go live again');
+    }
 
     socket.on('live:stats', (stats) => {
       if (typeof onStats === 'function') onStats(stats);
@@ -689,22 +678,25 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     const callbacks = { onStreamReady, onWaiting };
     const seedProducers = Array.isArray(join.producers) ? join.producers : [];
 
+    watchSession = session;
+    startProducerPolling(session, callbacks);
+
     onStatus?.('Loading live video…');
-    const consumed = await consumeAll(socket, device, recvTransport, videoEl, seedProducers);
+    const consumed = await consumeAll(socket, device, recvTransport, videoEl, seedProducers, callbacks);
     session.remoteStream = consumed.remoteStream;
     consumed.consumedProducerIds.forEach((id) => session.consumedProducerIds.add(id));
 
     if (!session.remoteStream.getTracks().length) {
       const waitingMsg = join.hasHost === false
         ? 'Waiting for host to connect…'
-        : (join.producers?.length || seedProducers.length)
+        : (join.producers?.length || seedProducers.length || consumed.consumeAttempted)
           ? 'Receiving host video…'
           : 'Waiting for host camera…';
       onWaiting?.(waitingMsg);
-      startProducerPolling(session, callbacks);
     } else {
       onStatus?.('');
       onStreamReady?.(session.remoteStream);
+      clearProducerPoll();
     }
 
     socket.on('live:newProducer', async ({ producerId }) => {
@@ -712,7 +704,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       try {
         await consumeProducer(socket, device, recvTransport, producerId, session.remoteStream);
         session.consumedProducerIds.add(producerId);
-        await waitForTransportConnection(recvTransport, 20000).catch(() => {});
+        void waitForTransportConnection(recvTransport, 15000).catch(() => {});
         if (videoEl) {
           await attachRemoteStreamToVideo(videoEl, session.remoteStream);
         }
