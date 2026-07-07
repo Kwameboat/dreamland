@@ -129,6 +129,12 @@ class DreamlandLiveRtcService extends Component
         return false;
     }
 
+    public function verifyInternalAuth(): bool
+    {
+        $result = $this->request('GET', '/internal/ping', null, 4);
+        return is_array($result) && !empty($result['ok']);
+    }
+
     public function closeRoom(int $liveId): bool
     {
         $result = $this->request('DELETE', '/internal/rooms/' . $liveId);
@@ -156,6 +162,36 @@ class DreamlandLiveRtcService extends Component
     private function request(string $method, string $path, ?array $body = null, int $timeout = 5): ?array
     {
         $url = rtrim($this->serverUrl, '/') . $path;
+
+        if (function_exists('curl_init')) {
+            $ch = curl_init($url);
+            $headers = [
+                'Accept: application/json',
+                'Content-Type: application/json',
+                'X-Dreamland-Secret: ' . $this->internalSecret,
+            ];
+            curl_setopt_array($ch, [
+                CURLOPT_CUSTOMREQUEST => $method,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => $timeout,
+                CURLOPT_CONNECTTIMEOUT => min(4, $timeout),
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_FOLLOWLOCATION => false,
+            ]);
+            if ($body !== null && in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($body));
+            }
+            $raw = curl_exec($ch);
+            $errno = curl_errno($ch);
+            curl_close($ch);
+            if ($raw === false || $errno !== 0) {
+                Yii::warning("Dreamland live-server unreachable: {$method} {$url}", __METHOD__);
+                return null;
+            }
+            $decoded = json_decode($raw, true);
+            return is_array($decoded) ? $decoded : null;
+        }
+
         $headers = "Accept: application/json\r\nContent-Type: application/json\r\nX-Dreamland-Secret: {$this->internalSecret}\r\n";
 
         $opts = [

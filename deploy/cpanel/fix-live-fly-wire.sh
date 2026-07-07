@@ -30,7 +30,7 @@ upsert DREAMLAND_LIVE_SIGNALING_URL "$FLY_URL"
 if [ -n "${LIVE_SECRET:-}" ]; then
   upsert DREAMLAND_LIVE_SECRET "$LIVE_SECRET"
 elif ! grep -q '^DREAMLAND_LIVE_SECRET=' "$ENV" 2>/dev/null; then
-  echo "WARN: Set LIVE_SECRET=... or add DREAMLAND_LIVE_SECRET to $ENV (must match Fly)"
+  echo "WARN: Set LIVE_SECRET=... (must match Fly: fly secrets list -a dreamland-live)"
 fi
 
 echo "Wired .env:"

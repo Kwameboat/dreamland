@@ -458,9 +458,12 @@ class CreatorController extends ActiveController
             $live->status = UserLiveHistory::STATUS_COMPLETED;
             $live->end_time = time();
             $live->save(false);
+            $secretOk = $rtc->verifyInternalAuth();
             return [
                 'statusCode' => 503,
-                'message' => 'Live video server is busy — wait a few seconds and try again.',
+                'message' => $secretOk
+                    ? 'Live video server is busy — wait a few seconds and try again.'
+                    : 'Live server secret mismatch — re-run fix-live-e2e.sh on cPanel with LIVE_SECRET.',
             ];
         }
 

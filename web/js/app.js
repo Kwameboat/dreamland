@@ -2647,8 +2647,13 @@ async function ensureLiveServerReady(onStatus) {
     try {
       const res = await api(API_ROUTES.health, { timeoutMs: 10000 });
       const liveOk = res.data?.checks?.live_server !== false;
+      const registerOk = res.data?.checks?.live_register_ok !== false;
       const signaling = String(res.data?.services?.live_signaling || '');
       const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (liveOk && !registerOk) {
+        showToast('Live server secret mismatch — run fix-live-e2e.sh on cPanel');
+        return false;
+      }
       if (liveOk) {
         if (!isLocalHost && /localhost|127\.0\.0\.1/i.test(signaling)) {
           showToast('Live signaling is not configured for production yet');
@@ -2771,13 +2776,23 @@ async function startLiveSession() {
     state.creatorDashboard = null;
     await loadCreatorDashboard(true);
   } catch (err) {
+    const failMsg = err.message || 'Could not go live';
     if (apiLiveStarted) {
       try { await abortPendingLiveStart(); } catch (_) { /* best-effort cleanup */ }
     }
-    showToast(err.message || 'Could not go live');
+    showToast(failMsg);
+    setStartBtn(failMsg.length > 30 ? `${failMsg.slice(0, 28)}…` : failMsg, false);
     resumeFeedPlaybackIfNeeded();
+    return;
   } finally {
-    setStartBtn('Go live', false);
+    if (!liveBroadcastActive) {
+      const btn = document.getElementById('live-broadcast-start');
+      if (btn && btn.disabled && btn.textContent !== 'Go live' && !btn.textContent.includes('…')) {
+        /* keep error message visible */
+      } else if (!liveBroadcastActive) {
+        setStartBtn('Go live', false);
+      }
+    }
   }
 }
 

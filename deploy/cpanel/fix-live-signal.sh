@@ -66,6 +66,10 @@ if [ -f "$ENV" ]; then
     upsert_env DREAMLAND_LIVE_SIGNALING_URL "$FLY_URL"
     echo "Wired .env live URLs → $FLY_URL"
   fi
+  if [ -n "${LIVE_SECRET:-}" ]; then
+    upsert_env DREAMLAND_LIVE_SECRET "$LIVE_SECRET"
+    echo "Wired DREAMLAND_LIVE_SECRET from LIVE_SECRET"
+  fi
 fi
 
 BUILD="$(grep -o 'build-[0-9]*' "$TMP/build-version.json" | head -1 || echo unknown)"

@@ -282,6 +282,13 @@ async function boot() {
     });
   });
 
+  app.get('/internal/ping', (req, res) => {
+    if (req.headers['x-dreamland-secret'] !== config.internalSecret) {
+      return res.status(403).json({ ok: false, message: 'Forbidden' });
+    }
+    res.json({ ok: true, ping: true, deploy: config.deployTarget });
+  });
+
   const server = http.createServer(app);
   const io = new Server(server, {
     cors: { origin: allowOrigin, credentials: false },

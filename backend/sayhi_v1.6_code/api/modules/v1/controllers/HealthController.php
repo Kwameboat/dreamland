@@ -43,6 +43,7 @@ class HealthController extends Controller
             }
 
             $liveOk = false;
+            $liveRegisterOk = false;
             $modOk = false;
             $uploadsWritable = false;
             $wasabi = ['ok' => false, 'message' => 'Wasabi check skipped.'];
@@ -52,6 +53,9 @@ class HealthController extends Controller
 
             try {
                 $liveOk = Yii::$app->has('dreamlandLive') ? Yii::$app->dreamlandLive->isHealthy() : false;
+                $liveRegisterOk = $liveOk && Yii::$app->has('dreamlandLive')
+                    ? Yii::$app->dreamlandLive->verifyInternalAuth()
+                    : false;
             } catch (\Throwable $e) {
                 Yii::warning($e->getMessage(), __METHOD__);
             }
@@ -100,13 +104,14 @@ class HealthController extends Controller
                     'wasabi_message' => $wasabi['message'] ?? '',
                     'safety_queue_depth' => $queueDepth,
                     'live_server' => $liveOk,
+                    'live_register_ok' => $liveRegisterOk,
                     'moderation_agent' => $modOk,
                     'ai_powered' => $aiOk,
                     'gemini_multimodal' => $geminiOk,
                     'dev_mode' => (bool) (Yii::$app->params['dreamlandDevMode'] ?? false),
                     'timestamp' => time(),
                 ],
-                'services' => $this->safeServiceMap(true, $liveOk, $modOk, $aiOk, $geminiOk, $health),
+                'services' => $this->safeServiceMap(true, $liveOk, $modOk, $aiOk, $geminiOk, $health, $liveRegisterOk),
             ];
         } catch (\Throwable $e) {
             Yii::error($e->getMessage(), __METHOD__);
@@ -120,10 +125,10 @@ class HealthController extends Controller
         }
     }
 
-    private function safeServiceMap(bool $apiOk, bool $liveOk, bool $modOk, bool $aiOk = false, bool $geminiOk = false, ?array $agentHealth = null): array
+    private function safeServiceMap(bool $apiOk, bool $liveOk, bool $modOk, bool $aiOk = false, bool $geminiOk = false, ?array $agentHealth = null, bool $liveRegisterOk = false): array
     {
         try {
-            return $this->serviceMap($apiOk, $liveOk, $modOk, $aiOk, $geminiOk, $agentHealth);
+            return $this->serviceMap($apiOk, $liveOk, $modOk, $aiOk, $geminiOk, $agentHealth, $liveRegisterOk);
         } catch (\Throwable $e) {
             Yii::warning($e->getMessage(), __METHOD__);
             return [
@@ -136,7 +141,7 @@ class HealthController extends Controller
         }
     }
 
-    private function serviceMap(bool $apiOk, bool $liveOk, bool $modOk, bool $aiOk = false, bool $geminiOk = false, ?array $agentHealth = null): array
+    private function serviceMap(bool $apiOk, bool $liveOk, bool $modOk, bool $aiOk = false, bool $geminiOk = false, ?array $agentHealth = null, bool $liveRegisterOk = false): array
     {
         $params = Yii::$app->params;
         $apiBase = rtrim((string) ($params['siteUrl'] ?? 'http://localhost:8080'), '/');
@@ -153,6 +158,7 @@ class HealthController extends Controller
                 ? Yii::$app->dreamlandLive->browserSignalingUrl()
                 : (string) ($params['dreamlandLiveSignalingUrl'] ?? 'http://localhost:4443'),
             'live_ok' => $liveOk,
+            'live_register_ok' => $liveRegisterOk,
             'moderation_agent' => (string) ($params['dreamlandModerationAgentUrl'] ?? 'http://localhost:4444'),
             'moderation_ok' => $modOk,
             'ai_ok' => $aiOk,
