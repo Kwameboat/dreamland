@@ -2,20 +2,21 @@
 # Sync DREAMLAND_LIVE_SECRET on cPanel so PHP can register rooms on Fly.io.
 # MUST match: fly secrets list -a dreamland-live  →  DREAMLAND_LIVE_SECRET
 #
-# Run on cPanel:
-#   LIVE_SECRET=your-fly-secret bash <(curl -fsSL -A "DreamlandDeploy/1.0" https://raw.githubusercontent.com/Kwameboat/dreamland/main/deploy/cpanel/fix-live-secret.sh)
+# Run on cPanel (pick ONE):
+#
+#   export LIVE_SECRET="your-fly-secret"
+#   curl -fsSL -A "DreamlandDeploy/1.0" https://raw.githubusercontent.com/Kwameboat/dreamland/main/deploy/cpanel/fix-live-secret.sh | bash
+#
+#   curl -fsSL -A "DreamlandDeploy/1.0" https://raw.githubusercontent.com/Kwameboat/dreamland/main/deploy/cpanel/fix-live-secret.sh | LIVE_SECRET="your-fly-secret" bash
+#
+#   LIVE_SECRET="your-fly-secret" bash <(curl -fsSL -A "DreamlandDeploy/1.0" https://raw.githubusercontent.com/Kwameboat/dreamland/main/deploy/cpanel/fix-live-secret.sh)
 set -euo pipefail
 
 HOME_DIR="${HOME:-/home/$(whoami)}"
 ENV="$HOME_DIR/dreamland/.env"
 FLY_URL="${DREAMLAND_LIVE_FLY_URL:-https://dreamland-live.fly.dev}"
 
-if [ -z "${LIVE_SECRET:-}" ]; then
-  echo "ERROR: LIVE_SECRET is required."
-  echo "  Get value from Fly: fly secrets list -a dreamland-live"
-  echo "  Then run: LIVE_SECRET=... curl -fsSL .../fix-live-secret.sh | bash"
-  exit 1
-fi
+LIVE_SECRET="${LIVE_SECRET:-${1:-}}"
 
 upsert() {
   local key="$1" val="$2"
