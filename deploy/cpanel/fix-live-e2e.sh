@@ -2,11 +2,11 @@
 # Dreamland live E2E — TikTok-style WebRTC SFU (creator go-live + viewer watch).
 # Wires Fly.io edge, deploys PWA client, PHP API, and live-socket proxy.
 #
-# Run on cPanel:
+# Run on cPanel (LIVE_SECRET required — must match Fly.io):
 #   LIVE_SECRET=your-fly-secret bash <(curl -fsSL -A "DreamlandDeploy/1.0" https://raw.githubusercontent.com/Kwameboat/dreamland/main/deploy/cpanel/fix-live-e2e.sh)
 #
-# Or:
-#   curl -fsSL -A "DreamlandDeploy/1.0" https://raw.githubusercontent.com/Kwameboat/dreamland/main/deploy/cpanel/fix-live-e2e.sh | bash
+# Secret only (if deploy already done):
+#   LIVE_SECRET=your-fly-secret bash <(curl -fsSL -A "DreamlandDeploy/1.0" https://raw.githubusercontent.com/Kwameboat/dreamland/main/deploy/cpanel/fix-live-secret.sh)
 set -euo pipefail
 
 HOME_DIR="${HOME:-/home/$(whoami)}"
@@ -33,8 +33,10 @@ upsert DREAMLAND_LIVE_SIGNALING_URL "$FLY_URL"
 
 if [ -n "${LIVE_SECRET:-}" ]; then
   upsert DREAMLAND_LIVE_SECRET "$LIVE_SECRET"
-elif ! grep -q '^DREAMLAND_LIVE_SECRET=' "$ENV" 2>/dev/null; then
-  echo "WARN: Set LIVE_SECRET=... (must match Fly secret)"
+else
+  echo "ERROR: LIVE_SECRET is required (must match Fly.io DREAMLAND_LIVE_SECRET)."
+  echo "  Run: LIVE_SECRET=... curl -fsSL .../fix-live-e2e.sh | bash"
+  exit 1
 fi
 
 echo ""
@@ -45,7 +47,7 @@ rm -rf "$HOME_DIR/dreamland/api/runtime/cache/"* 2>/dev/null || true
 
 echo ""
 echo "Deploying PWA + API + live-socket proxy..."
-curl -fsSL -A "DreamlandDeploy/1.0" "$GITHUB/deploy/cpanel/fix-live-signal.sh" | bash
+LIVE_SECRET="$LIVE_SECRET" curl -fsSL -A "DreamlandDeploy/1.0" "$GITHUB/deploy/cpanel/fix-live-signal.sh" | bash
 
 echo ""
 echo "Verifying Fly edge..."
@@ -72,6 +74,15 @@ else
 fi
 
 BUILD="$(curl -fsSL -A "DreamlandDeploy/1.0" "$GITHUB/web/build-version.json" 2>/dev/null | grep -o 'build-[0-9]*' | head -1 || echo unknown)"
+HEALTH="$(curl -fsSL -A "DreamlandDeploy/1.0" "https://dreamlandgh.app/api/v1/health" 2>/dev/null || echo '{}')"
+echo ""
+if echo "$HEALTH" | grep -q '"live_register_ok":true'; then
+  echo "OK: live_register_ok=true — room creation will work"
+else
+  echo "FAIL: live_register_ok=false — secret mismatch with Fly.io"
+  echo "  On PC: fly secrets set DREAMLAND_LIVE_SECRET=\"<same-as-LIVE_SECRET>\" -a dreamland-live"
+  echo "  Then re-run this script"
+fi
 echo ""
 echo "============================================"
 echo " Done ($BUILD)"
