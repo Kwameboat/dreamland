@@ -112,18 +112,18 @@ class DreamlandLiveRtcService extends Component
             'liveId' => $liveId,
             'hostUserId' => $hostUserId,
             'token' => $token,
-        ], 15);
+        ], 8);
         return is_array($result) && !empty($result['ok']);
     }
 
-    public function registerRoomWithRetry(int $liveId, int $hostUserId, string $token, int $attempts = 3): bool
+    public function registerRoomWithRetry(int $liveId, int $hostUserId, string $token, int $attempts = 2): bool
     {
         for ($i = 0; $i < $attempts; $i++) {
             if ($this->registerRoom($liveId, $hostUserId, $token)) {
                 return true;
             }
             if ($i < $attempts - 1) {
-                usleep(600000 * ($i + 1));
+                usleep(400000);
             }
         }
         return false;
@@ -140,12 +140,12 @@ class DreamlandLiveRtcService extends Component
      */
     public function roomStatus(int $liveId): ?array
     {
-        return $this->request('GET', '/internal/rooms/' . $liveId . '/status');
+        return $this->request('GET', '/internal/rooms/' . $liveId . '/status', null, 4);
     }
 
     public function isHealthy(): bool
     {
-        $timeout = stripos((string) ($this->serverUrl ?? ''), 'fly.dev') !== false ? 12 : 5;
+        $timeout = stripos((string) ($this->serverUrl ?? ''), 'fly.dev') !== false ? 6 : 4;
         $result = $this->request('GET', '/health', null, $timeout);
         return is_array($result) && !empty($result['ok']);
     }

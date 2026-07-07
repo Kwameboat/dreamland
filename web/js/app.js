@@ -2455,12 +2455,12 @@ async function resumeLiveBroadcast() {
   if (!live?.rtc) return;
   try {
     if (live.id) {
-      const form = new FormData();
-      form.append('title', live.title || 'Dreamland Live');
-      form.append('is_monetized', live.is_monetized ? '1' : '0');
-      if (live.price_credits) form.append('price_credits', String(live.price_credits));
       try {
-        const res = await apiUpload(API_ROUTES.creatorStartLive, form, { timeoutMs: 30000 });
+        const res = await createLiveRoom({
+          title: live.title || 'Dreamland Live',
+          isMonetized: Boolean(live.is_monetized),
+          price: live.price_credits || 0,
+        });
         if (res?.data?.live?.rtc) {
           state.creatorDashboard.live = { ...live, ...res.data.live, rtc: res.data.live.rtc };
         }
@@ -2573,6 +2573,25 @@ async function fetchWithTimeout(url, timeoutMs = 10000) {
   } finally {
     window.clearTimeout(timer);
   }
+}
+
+async function createLiveRoom({ title, isMonetized, price, onStatus }) {
+  onStatus?.('Creating live room…');
+  const payload = {
+    title,
+    is_monetized: isMonetized ? 1 : 0,
+    price_credits: Number(price) || 0,
+  };
+  return Promise.race([
+    api(API_ROUTES.creatorStartLive, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      timeoutMs: 20000,
+    }),
+    new Promise((_, reject) => {
+      window.setTimeout(() => reject(new Error('Creating live room timed out — try again')), 22000);
+    }),
+  ]);
 }
 
 const DREAMLAND_LIVE_FLY_URL = 'https://dreamland-live.fly.dev';
@@ -2694,13 +2713,13 @@ async function startLiveSession() {
     if (!cameraStream?.getTracks?.().some((t) => t.readyState === 'live')) {
       throw new Error('Camera not available — allow camera access in Windows settings, then try again');
     }
-    const form = new FormData();
-    form.append('title', title);
-    form.append('is_monetized', isMonetized);
-    form.append('price_credits', price);
 
-    setStartBtn('Creating live room…');
-    const res = await apiUpload(API_ROUTES.creatorStartLive, form, { timeoutMs: 45000 });
+    const res = await createLiveRoom({
+      title,
+      isMonetized: isMonetized === '1',
+      price,
+      onStatus: (msg) => setStartBtn(msg),
+    });
     const live = res.data?.live;
     apiLiveStarted = Boolean(live?.id);
     if (!live?.rtc?.signaling_url) {
@@ -2725,7 +2744,7 @@ async function startLiveSession() {
     await Promise.race([
       broadcastPromise,
       new Promise((_, reject) => {
-        window.setTimeout(() => reject(new Error('Going live timed out — try again')), 55000);
+        window.setTimeout(() => reject(new Error('Going live timed out — try again')), 90000);
       }),
     ]);
 

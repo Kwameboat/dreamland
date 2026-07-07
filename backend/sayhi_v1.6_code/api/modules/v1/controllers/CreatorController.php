@@ -393,42 +393,12 @@ class CreatorController extends ActiveController
 
         /** @var \common\components\DreamlandLiveRtcService $rtc */
         $rtc = Yii::$app->dreamlandLive;
-        if (!$rtc->isHealthy()) {
-            return [
-                'statusCode' => 503,
-                'message' => 'Dreamland Live server is offline. Set DREAMLAND_LIVE_SERVER_URL in .env and deploy live-server (see DEPLOY.md).',
-            ];
-        }
-
         $userId = (int) Yii::$app->user->identity->id;
-        $existing = $this->findActiveLive($userId);
-        if ($existing) {
-            $status = $rtc->roomStatus((int) $existing->id);
-            $hasActiveHost = is_array($status) && !empty($status['hasHost']);
+        $body = Yii::$app->request->getBodyParams();
 
-            if (!$hasActiveHost) {
-                if ($rtc->registerRoomWithRetry((int) $existing->id, $userId, (string) $existing->token)) {
-                    return [
-                        'message' => 'Resuming your live session.',
-                        'live' => $this->serializeLive($existing, 'host'),
-                    ];
-                }
-
-                $existing->status = UserLiveHistory::STATUS_COMPLETED;
-                $existing->end_time = time();
-                $existing->save(false);
-                $rtc->closeRoom((int) $existing->id);
-            } else {
-                return [
-                    'message' => 'You are already live.',
-                    'live' => $this->serializeLive($existing, 'host'),
-                ];
-            }
-        }
-
-        $title = trim((string) Yii::$app->request->post('title', 'Dreamland Live'));
-        $isMonetized = (int) Yii::$app->request->post('is_monetized', 0) === 1;
-        $priceCredits = (int) Yii::$app->request->post('price_credits', 0);
+        $title = trim((string) ($body['title'] ?? Yii::$app->request->post('title', 'Dreamland Live')));
+        $isMonetized = (int) ($body['is_monetized'] ?? Yii::$app->request->post('is_monetized', 0)) === 1;
+        $priceCredits = (int) ($body['price_credits'] ?? Yii::$app->request->post('price_credits', 0));
 
         if ($title === '') {
             $title = 'Dreamland Live';
@@ -438,6 +408,36 @@ class CreatorController extends ActiveController
         }
         if (!$isMonetized) {
             $priceCredits = null;
+        }
+
+        $existing = $this->findActiveLive($userId);
+        if ($existing) {
+            $status = $rtc->roomStatus((int) $existing->id);
+            $hasActiveHost = is_array($status) && !empty($status['hasHost']);
+
+            if ($hasActiveHost) {
+                return [
+                    'message' => 'You are already live.',
+                    'live' => $this->serializeLive($existing, 'host'),
+                ];
+            }
+
+            if ($title !== '') {
+                $existing->live_title = $title;
+                $existing->save(false);
+            }
+
+            if ($rtc->registerRoomWithRetry((int) $existing->id, $userId, (string) $existing->token)) {
+                return [
+                    'message' => 'Resuming your live session.',
+                    'live' => $this->serializeLive($existing, 'host'),
+                ];
+            }
+
+            $existing->status = UserLiveHistory::STATUS_COMPLETED;
+            $existing->end_time = time();
+            $existing->save(false);
+            $rtc->closeRoom((int) $existing->id);
         }
 
         $live = new UserLiveHistory();
@@ -454,24 +454,13 @@ class CreatorController extends ActiveController
             return ['statusCode' => 422, 'message' => 'Could not start live session.'];
         }
 
-        /** @var \common\components\DreamlandLiveRtcService $rtc */
-        $rtc = Yii::$app->dreamlandLive;
-        if (!$rtc->isHealthy()) {
-            $live->status = UserLiveHistory::STATUS_COMPLETED;
-            $live->end_time = time();
-            $live->save(false);
-            return [
-                'statusCode' => 503,
-                'message' => 'Dreamland Live server is offline. Set DREAMLAND_LIVE_SERVER_URL in .env and deploy live-server (see DEPLOY.md).',
-            ];
-        }
         if (!$rtc->registerRoomWithRetry((int) $live->id, $userId, (string) $live->token)) {
             $live->status = UserLiveHistory::STATUS_COMPLETED;
             $live->end_time = time();
             $live->save(false);
             return [
                 'statusCode' => 503,
-                'message' => 'Dreamland Live server is not running. Start it with start-live-server.ps1',
+                'message' => 'Live video server is busy — wait a few seconds and try again.',
             ];
         }
 
