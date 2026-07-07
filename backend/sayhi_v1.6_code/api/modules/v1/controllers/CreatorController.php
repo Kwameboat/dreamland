@@ -407,7 +407,7 @@ class CreatorController extends ActiveController
             $hasActiveHost = is_array($status) && !empty($status['hasHost']);
 
             if (!$hasActiveHost) {
-                if ($rtc->registerRoom((int) $existing->id, $userId, (string) $existing->token)) {
+                if ($rtc->registerRoomWithRetry((int) $existing->id, $userId, (string) $existing->token)) {
                     return [
                         'message' => 'Resuming your live session.',
                         'live' => $this->serializeLive($existing, 'host'),
@@ -465,7 +465,7 @@ class CreatorController extends ActiveController
                 'message' => 'Dreamland Live server is offline. Set DREAMLAND_LIVE_SERVER_URL in .env and deploy live-server (see DEPLOY.md).',
             ];
         }
-        if (!$rtc->registerRoom((int) $live->id, $userId, (string) $live->token)) {
+        if (!$rtc->registerRoomWithRetry((int) $live->id, $userId, (string) $live->token)) {
             $live->status = UserLiveHistory::STATUS_COMPLETED;
             $live->end_time = time();
             $live->save(false);

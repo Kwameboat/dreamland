@@ -27,12 +27,14 @@ fetch "$TMP/DreamlandLiveRtcService.php" "$BASE/common/components/DreamlandLiveR
 fetch "$TMP/HealthController.php" "$BASE/api/modules/v1/controllers/HealthController.php"
 fetch "$TMP/DreamlandMetaController.php" "$BASE/api/modules/v1/controllers/DreamlandMetaController.php"
 fetch "$TMP/LiveController.php" "$BASE/api/modules/v1/controllers/LiveController.php"
+fetch "$TMP/CreatorController.php" "$BASE/api/modules/v1/controllers/CreatorController.php"
 fetch "$TMP/build-version.json" "$GITHUB/web/build-version.json"
 
 install "$TMP/DreamlandLiveRtcService.php" "$DL/common/components/DreamlandLiveRtcService.php"
 install "$TMP/HealthController.php" "$DL/api/modules/v1/controllers/HealthController.php"
 install "$TMP/DreamlandMetaController.php" "$DL/api/modules/v1/controllers/DreamlandMetaController.php"
 install "$TMP/LiveController.php" "$DL/api/modules/v1/controllers/LiveController.php"
+install "$TMP/CreatorController.php" "$DL/api/modules/v1/controllers/CreatorController.php"
 
 if [ -d "$WEB" ]; then
   mkdir -p "$WEB/js" "$WEB/live-socket"

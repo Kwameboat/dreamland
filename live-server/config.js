@@ -24,6 +24,27 @@ function parseFlyAnnouncedIp() {
   return undefined;
 }
 
+function buildIceServers() {
+  const servers = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+  ];
+
+  const turnUrl = process.env.DREAMLAND_TURN_URL || process.env.TURN_URL;
+  const turnUser = process.env.DREAMLAND_TURN_USERNAME || process.env.TURN_USERNAME;
+  const turnCred = process.env.DREAMLAND_TURN_CREDENTIAL || process.env.TURN_CREDENTIAL;
+  if (turnUrl && turnUser && turnCred) {
+    servers.push({
+      urls: turnUrl.split(',').map((s) => s.trim()).filter(Boolean),
+      username: turnUser,
+      credential: turnCred,
+    });
+  }
+
+  return servers;
+}
+
 module.exports = {
   port: Number(process.env.PORT || process.env.DREAMLAND_LIVE_PORT || 4443),
   internalSecret: process.env.DREAMLAND_LIVE_SECRET || 'dreamland-live-dev-secret',
@@ -38,8 +59,5 @@ module.exports = {
     rtcMinPort: Number(process.env.DREAMLAND_LIVE_RTC_MIN || 40000),
     rtcMaxPort: Number(process.env.DREAMLAND_LIVE_RTC_MAX || (isFly ? 40100 : 49999)),
   },
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-  ],
+  iceServers: buildIceServers(),
 };

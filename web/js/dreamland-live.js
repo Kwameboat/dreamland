@@ -8,6 +8,7 @@ function normalizeRtcConfig(rtc, live = {}) {
     ...base,
     signaling_url: String(base.signaling_url || '').replace(/\/$/, ''),
     signaling_url_direct: String(base.signaling_url_direct || base.signaling_url || '').replace(/\/$/, ''),
+    signaling_url_proxy: String(base.signaling_url_proxy || '').replace(/\/$/, ''),
     live_id: Number(base.live_id || live.id || 0),
     token: String(base.token || live.token || ''),
     ice_servers: base.ice_servers || base.iceServers || [],
@@ -19,15 +20,27 @@ function resolveSignalingUrls(cfg) {
   const urls = [];
   const host = window.location.hostname;
   const onDreamlandProd = /dreamlandgh\.app$/i.test(host) && window.location.protocol === 'https:';
-  if (onDreamlandProd) {
-    urls.push(`${window.location.origin}/live-socket`);
+
+  // TikTok-style: connect to dedicated WebRTC edge (Fly SFU) first — WebSocket signaling.
+  const edge = normalized.signaling_url_direct || normalized.signaling_url || '';
+  if (edge && !/onrender\.com/i.test(edge)) urls.push(edge.replace(/\/$/, ''));
+
+  if (onDreamlandProd && !urls.includes(DREAMLAND_LIVE_FLY_URL)) {
+    urls.unshift(DREAMLAND_LIVE_FLY_URL);
   }
+
+  const proxy = normalized.signaling_url_proxy || (onDreamlandProd ? `${window.location.origin}/live-socket` : '');
+  if (proxy && !urls.includes(proxy.replace(/\/$/, ''))) {
+    urls.push(proxy.replace(/\/$/, ''));
+  }
+
   for (const candidate of [normalized.signaling_url, normalized.signaling_url_direct]) {
     if (!candidate || urls.includes(candidate)) continue;
-    if (onDreamlandProd && /onrender\.com/i.test(candidate)) continue;
+    if (/onrender\.com/i.test(candidate)) continue;
     urls.push(candidate);
   }
-  return urls;
+
+  return [...new Set(urls)];
 }
 
 const DREAMLAND_LIVE_FLY_URL = 'https://dreamland-live.fly.dev';
@@ -63,12 +76,8 @@ async function resolveLiveSignalingUrls(cfg) {
   const badProxy = health && (health.deploy === 'render' || announcedIp.startsWith('216.24.'));
   if (!badProxy) return urls;
 
-  console.warn('Live proxy still points at Render — connecting to Fly.io directly');
-  const withoutProxy = urls.filter((url) => url !== proxyUrl);
-  if (!withoutProxy.includes(DREAMLAND_LIVE_FLY_URL)) {
-    withoutProxy.unshift(DREAMLAND_LIVE_FLY_URL);
-  }
-  return withoutProxy;
+  console.warn('Live proxy points at Render — using Fly.io edge only');
+  return urls.filter((url) => url !== proxyUrl);
 }
 
 function isProxiedSignalingUrl(signalingUrl) {
@@ -79,10 +88,13 @@ function socketIoOptions(signalingUrl) {
   const proxied = isProxiedSignalingUrl(signalingUrl);
   const connectTimeout = /onrender\.com/i.test(signalingUrl) ? 50000 : 35000;
   const opts = {
-    transports: proxied ? ['polling'] : ['polling', 'websocket'],
+    transports: proxied ? ['polling'] : ['websocket', 'polling'],
     upgrade: !proxied,
     withCredentials: false,
-    reconnection: false,
+    reconnection: !proxied,
+    reconnectionAttempts: proxied ? 0 : 4,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 4000,
     forceNew: true,
     timeout: connectTimeout,
   };
@@ -573,7 +585,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
         return;
       }
       attempts += 1;
-      if (attempts > 25) {
+      if (attempts > 60) {
         clearProducerPoll();
         if (!session.remoteStream?.getTracks().length) {
           callbacks.onWaiting?.('Host camera not detected — ask them to restart the broadcast.');
@@ -645,10 +657,10 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
 
     onStatus?.('Connecting camera to server…');
     const iceOk = await Promise.race([
-      waitForTransportConnection(sendTransport, 18000).then(() => true).catch(() => false),
-      new Promise((resolve) => window.setTimeout(() => resolve(false), 18000)),
+      waitForTransportConnection(sendTransport, 22000).then(() => true).catch(() => false),
+      new Promise((resolve) => window.setTimeout(() => resolve(true), 22000)),
     ]);
-    if (!iceOk) {
+    if (!iceOk && count < 2) {
       throw new Error('Camera could not connect to live server — end and try Go live again');
     }
 
@@ -770,6 +782,11 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       }
       onWaiting?.('Host reconnecting — video will resume shortly…');
       startProducerPolling(session, callbacks);
+    });
+
+    socket.on('live:hostEnded', () => {
+      onWaiting?.('Host ended the broadcast.');
+      clearProducerPoll();
     });
 
     socket.on('live:stats', (stats) => {

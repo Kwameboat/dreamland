@@ -8,6 +8,8 @@ const mediasoup = require('mediasoup');
 const { Server } = require('socket.io');
 const config = require('./config');
 
+const HOST_RECONNECT_GRACE_MS = 45000;
+
 const mediaCodecs = [
   {
     kind: 'audio',
@@ -54,6 +56,8 @@ class LiveRoom {
     this.transports = new Map();
     this.consumers = new Map();
     this.chat = [];
+    this.hostReconnectTimer = null;
+    this.hostDisconnectAt = null;
   }
 
   viewerCount() {
@@ -159,9 +163,28 @@ function requireRoom(liveId) {
   return room;
 }
 
+function clearHostReconnectTimer(room) {
+  if (room.hostReconnectTimer) {
+    clearTimeout(room.hostReconnectTimer);
+    room.hostReconnectTimer = null;
+  }
+}
+
+function clearStaleProducers(room) {
+  for (const [producerId, producer] of room.producers) {
+    try {
+      producer.close();
+    } catch (_) {
+      /* noop */
+    }
+    room.producers.delete(producerId);
+  }
+}
+
 async function closeRoom(liveId) {
   const room = rooms.get(Number(liveId));
   if (!room) return;
+  clearHostReconnectTimer(room);
   for (const transport of room.transports.values()) {
     try {
       transport.close();
@@ -282,6 +305,12 @@ async function boot() {
         socket.join(`live:${liveId}`);
 
         if (role === 'host') {
+          const wasDisconnected = !room.hostSocketId;
+          clearHostReconnectTimer(room);
+          room.hostDisconnectAt = null;
+          if (wasDisconnected) {
+            clearStaleProducers(room);
+          }
           room.hostSocketId = socket.id;
         } else {
           room.viewers.add(socket.id);
@@ -470,17 +499,19 @@ async function boot() {
       if (room) {
         if (room.hostSocketId === socket.id) {
           room.hostSocketId = null;
-          for (const [producerId, producer] of room.producers) {
-            try {
-              producer.close();
-            } catch (_) {
-              /* noop */
-            }
-            room.producers.delete(producerId);
-          }
+          room.hostDisconnectAt = Date.now();
+          clearHostReconnectTimer(room);
           io.to(`live:${meta.liveId}`).emit('live:hostReconnecting', {
             liveId: meta.liveId,
           });
+          room.hostReconnectTimer = setTimeout(() => {
+            if (!room.hostSocketId) {
+              clearStaleProducers(room);
+              io.to(`live:${meta.liveId}`).emit('live:hostEnded', {
+                liveId: meta.liveId,
+              });
+            }
+          }, HOST_RECONNECT_GRACE_MS);
         }
         room.viewers.delete(socket.id);
         io.to(`live:${meta.liveId}`).emit('live:stats', {

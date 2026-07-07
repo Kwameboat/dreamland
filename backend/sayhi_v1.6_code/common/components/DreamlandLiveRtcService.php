@@ -23,6 +23,8 @@ class DreamlandLiveRtcService extends Component
     /** @var array<int, array<string, mixed>> */
     public $iceServers = [
         ['urls' => 'stun:stun.l.google.com:19302'],
+        ['urls' => 'stun:stun1.l.google.com:19302'],
+        ['urls' => 'stun:stun.cloudflare.com:3478'],
     ];
 
     public function init()
@@ -53,7 +55,20 @@ class DreamlandLiveRtcService extends Component
     }
 
     /**
-     * URL browsers should use for Socket.IO (same-origin proxy on production PWA).
+     * Public WebRTC edge URL — browsers connect here directly (TikTok-style SFU signaling).
+     */
+    public function edgeSignalingUrl(): string
+    {
+        $url = rtrim($this->signalingUrl, '/');
+        if (stripos($url, 'onrender.com') !== false) {
+            $url = 'https://dreamland-live.fly.dev';
+        }
+        return $url;
+    }
+
+    /**
+     * URL browsers should use for Socket.IO.
+     * Production uses Fly.io edge directly (WebSocket); same-origin proxy is fallback only.
      */
     public function browserSignalingUrl(): string
     {
@@ -63,9 +78,9 @@ class DreamlandLiveRtcService extends Component
         }
         $pwa = getenv('DREAMLAND_PWA_URL') ?: getenv('PWA_URL') ?: '';
         if ($pwa !== '' && stripos($pwa, 'dreamlandgh.app') !== false) {
-            return rtrim($pwa, '/') . '/live-socket';
+            return $this->edgeSignalingUrl();
         }
-        return rtrim($this->signalingUrl, '/');
+        return $this->edgeSignalingUrl();
     }
 
     /**
@@ -73,11 +88,17 @@ class DreamlandLiveRtcService extends Component
      */
     public function clientConfig(UserLiveHistory $live, string $role = 'viewer'): array
     {
-        $direct = rtrim($this->signalingUrl, '/');
+        $edge = $this->edgeSignalingUrl();
+        $pwa = getenv('DREAMLAND_PWA_URL') ?: getenv('PWA_URL') ?: '';
+        $proxy = ($pwa !== '' && stripos($pwa, 'dreamlandgh.app') !== false)
+            ? rtrim($pwa, '/') . '/live-socket'
+            : '';
+
         return [
             'provider' => 'dreamland',
-            'signaling_url' => $this->browserSignalingUrl(),
-            'signaling_url_direct' => $direct,
+            'signaling_url' => $edge,
+            'signaling_url_direct' => $edge,
+            'signaling_url_proxy' => $proxy,
             'live_id' => (int) $live->id,
             'token' => (string) $live->token,
             'role' => $role,
@@ -91,8 +112,21 @@ class DreamlandLiveRtcService extends Component
             'liveId' => $liveId,
             'hostUserId' => $hostUserId,
             'token' => $token,
-        ]);
+        ], 15);
         return is_array($result) && !empty($result['ok']);
+    }
+
+    public function registerRoomWithRetry(int $liveId, int $hostUserId, string $token, int $attempts = 3): bool
+    {
+        for ($i = 0; $i < $attempts; $i++) {
+            if ($this->registerRoom($liveId, $hostUserId, $token)) {
+                return true;
+            }
+            if ($i < $attempts - 1) {
+                usleep(600000 * ($i + 1));
+            }
+        }
+        return false;
     }
 
     public function closeRoom(int $liveId): bool

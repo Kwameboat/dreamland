@@ -96,7 +96,12 @@ class LiveController extends ActiveController
 
         $viewerCount = (int) LiveCallViewer::find()->where(['live_call_id' => $live->id])->count();
 
-        $this->ensureLiveRoomRegistered($live);
+        if (!$this->ensureLiveRoomRegistered($live)) {
+            return [
+                'statusCode' => 503,
+                'message' => 'Live video server is starting — try again in a moment.',
+            ];
+        }
 
         return [
             'message' => 'Live stream ready.',
@@ -161,7 +166,12 @@ class LiveController extends ActiveController
 
         $viewerCount = (int) LiveCallViewer::find()->where(['live_call_id' => $liveId])->count();
 
-        $this->ensureLiveRoomRegistered($live);
+        if (!$this->ensureLiveRoomRegistered($live)) {
+            return [
+                'statusCode' => 503,
+                'message' => 'Live video server is starting — try again in a moment.',
+            ];
+        }
 
         $rtc = null;
         if (Yii::$app->has('dreamlandLive')) {
@@ -211,10 +221,10 @@ class LiveController extends ActiveController
         return $card;
     }
 
-    private function ensureLiveRoomRegistered(UserLiveHistory $live): void
+    private function ensureLiveRoomRegistered(UserLiveHistory $live): bool
     {
         if (!Yii::$app->has('dreamlandLive')) {
-            return;
+            return false;
         }
 
         /** @var \common\components\DreamlandLiveRtcService $rtc */
@@ -222,9 +232,9 @@ class LiveController extends ActiveController
         $liveId = (int) $live->id;
         $status = $rtc->roomStatus($liveId);
         if (is_array($status) && !empty($status['active'])) {
-            return;
+            return true;
         }
 
-        $rtc->registerRoom($liveId, (int) $live->user_id, (string) $live->token);
+        return $rtc->registerRoomWithRetry($liveId, (int) $live->user_id, (string) $live->token);
     }
 }

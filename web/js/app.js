@@ -2454,10 +2454,25 @@ async function resumeLiveBroadcast() {
   const live = state.creatorDashboard?.live;
   if (!live?.rtc) return;
   try {
+    if (live.id) {
+      const form = new FormData();
+      form.append('title', live.title || 'Dreamland Live');
+      form.append('is_monetized', live.is_monetized ? '1' : '0');
+      if (live.price_credits) form.append('price_credits', String(live.price_credits));
+      try {
+        const res = await apiUpload(API_ROUTES.creatorStartLive, form, { timeoutMs: 30000 });
+        if (res?.data?.live?.rtc) {
+          state.creatorDashboard.live = { ...live, ...res.data.live, rtc: res.data.live.rtc };
+        }
+      } catch {
+        /* resume with existing rtc */
+      }
+    }
+    const rtc = state.creatorDashboard?.live?.rtc || live.rtc;
     const liveClient = await ensureDreamlandLive();
     if (!liveClient.isBroadcasting()) {
       await liveClient.startBroadcast({
-        rtc: live.rtc,
+        rtc,
         userId: state.user?.id,
         localStream: cameraStream,
         onStats: (stats) => {
@@ -2468,6 +2483,7 @@ async function resumeLiveBroadcast() {
     }
   } catch (err) {
     console.warn('Resume live broadcast failed:', err.message);
+    showToast(err.message || 'Could not resume live broadcast');
   }
 }
 
