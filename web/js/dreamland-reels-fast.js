@@ -11,6 +11,7 @@ export function createFastReelsEngine(ctx) {
     posterUrl,
     hlsUrl,
     getSlotHeight = () => feedList?.clientHeight || window.innerHeight,
+    isLiveUiActive = () => false,
   } = ctx;
 
   let posts = [];
@@ -71,7 +72,24 @@ export function createFastReelsEngine(ctx) {
     prefetchVideos.set(url, video);
   }
 
+  function pauseAllPrefetch() {
+    prefetchVideos.forEach((video) => {
+      try {
+        video._playGen = (video._playGen || 0) + 1;
+        video.pause();
+        video.muted = true;
+        video.setAttribute('muted', '');
+        video.removeAttribute('src');
+        video.load();
+        video.remove();
+      } catch { /* ignore */ }
+    });
+    prefetchVideos.clear();
+    prefetchedUrls.clear();
+  }
+
   function prefetchAround(index) {
+    if (isLiveUiActive()) return;
     if (!posts.length) return;
     const start = Math.max(0, index - 1);
     const end = Math.min(posts.length, index + MAX_PREFETCH);
@@ -170,7 +188,7 @@ export function createFastReelsEngine(ctx) {
   }
 
   function onScroll() {
-    if (rendering || !posts.length) return;
+    if (rendering || !posts.length || isLiveUiActive()) return;
     clearTimeout(scrollTimer);
     scrollTimer = window.setTimeout(() => {
       const h = getSlotHeight();
@@ -225,12 +243,9 @@ export function createFastReelsEngine(ctx) {
     attachVideoSources,
     hidePosterForVideo,
     cleanupWarm() {
-      prefetchVideos.forEach((video) => {
-        try { video.remove(); } catch { /* ignore */ }
-      });
-      prefetchVideos.clear();
-      prefetchedUrls.clear();
+      pauseAllPrefetch();
     },
+    pauseAllPrefetch,
   };
 }
 

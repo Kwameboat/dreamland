@@ -475,8 +475,13 @@ function resumeFeedPlaybackIfNeeded() {
 }
 
 function pauseMediaForLive() {
+  if (reelScrollRaf) {
+    cancelAnimationFrame(reelScrollRaf);
+    reelScrollRaf = 0;
+  }
   resetReelPlaybackSession();
   cleanupWarmReelVideos();
+  fastReels?.pauseAllPrefetch?.();
   const liveIds = new Set(['live-watch-video', 'live-broadcast-video']);
   document.querySelectorAll('video').forEach((video) => {
     if (liveIds.has(video.id)) return;
@@ -1067,6 +1072,7 @@ function initFastReels() {
     mediaUrl,
     posterUrl,
     hlsUrl,
+    isLiveUiActive,
     getSlotHeight: () => els.feedList?.clientHeight || window.innerHeight,
     onBeforeWindowRender: () => {
       pauseAllReelVideos();
@@ -1291,6 +1297,7 @@ function destroyVideoHls(video) {
 
 function playReelVideo(video, { force = false } = {}) {
   if (!video || video.tagName !== 'VIDEO') return;
+  if (!force && isLiveUiActive()) return;
   video.playsInline = true;
   video.setAttribute('playsinline', '');
   video.setAttribute('webkit-playsinline', '');
@@ -4581,11 +4588,12 @@ async function enterLiveRoom(liveId) {
 }
 
 async function openLiveWatchRoom(live, liveId = live?.id) {
+  state.activeLiveWatch = live;
+  document.body.classList.add('live-room-open');
   pauseMediaForLive();
   if (dreamlandLive) {
     try { await dreamlandLive.stopWatching(); } catch { /* ignore */ }
   }
-  state.activeLiveWatch = live;
   const creator = live.creator || {};
   const initial = (creator.username || creator.name || 'C').charAt(0).toUpperCase();
   document.getElementById('live-watch-avatar').textContent = initial;
@@ -4599,7 +4607,6 @@ async function openLiveWatchRoom(live, liveId = live?.id) {
   const room = document.getElementById('live-watch');
   room?.classList.remove('hidden');
   room?.setAttribute('aria-hidden', 'false');
-  document.body.classList.add('live-room-open');
 
   const videoEl = document.getElementById('live-watch-video');
   if (videoEl) {
@@ -4638,11 +4645,10 @@ async function openLiveWatchRoom(live, liveId = live?.id) {
         live,
         userId: state.user?.id,
         videoEl,
-        onStatus: (msg) => {
-          if (msg) setLiveWatchStatus(msg);
-        },
+        onStatus: (msg) => setLiveWatchStatus(msg || ''),
         onChat: (msg) => appendLiveChatMessage(msg, 'live-chat-list'),
         onStreamReady: () => {
+          pauseMediaForLive();
           setLiveWatchStatus('');
           document.getElementById('live-watch-visual')?.classList.add('live-watch-visual--playing');
           if (videoEl) {
@@ -4656,7 +4662,13 @@ async function openLiveWatchRoom(live, liveId = live?.id) {
             });
           }
         },
-        onWaiting: (msg) => setLiveWatchStatus(msg || 'Waiting for host camera…'),
+        onWaiting: (msg) => {
+          if (!msg) {
+            setLiveWatchStatus('');
+            return;
+          }
+          setLiveWatchStatus(msg);
+        },
       });
       lastErr = null;
       break;

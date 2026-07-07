@@ -532,13 +532,17 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
   async function finalizeViewerPlayback(session, callbacks = {}) {
     const { recvTransport, remoteStream, videoEl } = session;
     if (!remoteStream?.getTracks().length) return false;
-    callbacks.onWaiting?.('Buffering live video…');
-    await waitForTransportConnection(recvTransport, 25000).catch((err) => {
-      console.warn('Viewer transport connect:', err.message);
-    });
-    if (videoEl) await attachRemoteStreamToVideo(videoEl, remoteStream).catch(() => {});
+
+    if (videoEl) {
+      await attachRemoteStreamToVideo(videoEl, remoteStream).catch(() => {});
+    }
+    callbacks.onWaiting?.('');
     callbacks.onStatus?.('');
     callbacks.onStreamReady?.(remoteStream);
+
+    waitForTransportConnection(recvTransport, 12000).catch((err) => {
+      console.warn('Viewer transport connect:', err.message);
+    });
     return true;
   }
 

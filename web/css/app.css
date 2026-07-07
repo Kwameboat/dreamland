@@ -2700,12 +2700,6 @@ body {
   font-weight: 600;
 }
 
-.feed-refresh-btn {
-  font-size: 1.15rem;
-  font-weight: 700;
-  line-height: 1;
-}
-
 .feed-pull-indicator {
   position: absolute;
   top: 0;
@@ -4891,6 +4885,14 @@ body.live-broadcast-open .live-broadcast:not(.hidden) {
 body.live-broadcast-open #app video:not(#live-broadcast-video),
 body.live-room-open #app video:not(#live-watch-video) {
   display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body.live-room-open video:not(#live-watch-video),
+body.live-broadcast-open video:not(#live-broadcast-video) {
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 .signup-page {
