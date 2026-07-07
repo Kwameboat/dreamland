@@ -30,6 +30,47 @@ function resolveSignalingUrls(cfg) {
   return urls;
 }
 
+const DREAMLAND_LIVE_FLY_URL = 'https://dreamland-live.fly.dev';
+
+async function probeLiveProxyHealth(proxyBase) {
+  try {
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => ctrl.abort(), 5000);
+    const resp = await fetch(`${String(proxyBase).replace(/\/$/, '')}/health`, {
+      cache: 'no-store',
+      signal: ctrl.signal,
+    });
+    window.clearTimeout(timer);
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch {
+    return null;
+  }
+}
+
+/** Skip same-origin proxy when it still forwards to Render (no WebRTC UDP). */
+async function resolveLiveSignalingUrls(cfg) {
+  const urls = resolveSignalingUrls(cfg);
+  const host = window.location.hostname;
+  const onDreamlandProd = /dreamlandgh\.app$/i.test(host) && window.location.protocol === 'https:';
+  if (!onDreamlandProd) return urls;
+
+  const proxyUrl = `${window.location.origin}/live-socket`;
+  if (!urls.includes(proxyUrl)) return urls;
+
+  const health = await probeLiveProxyHealth(proxyUrl);
+  const announcedIp = String(health?.webrtc?.[0]?.announcedIp || '');
+  const badProxy = health && (health.deploy === 'render' || announcedIp.startsWith('216.24.'));
+  if (!badProxy) return urls;
+
+  console.warn('Live proxy still points at Render — connecting to Fly.io directly');
+  const withoutProxy = urls.filter((url) => url !== proxyUrl);
+  if (!withoutProxy.includes(DREAMLAND_LIVE_FLY_URL)) {
+    withoutProxy.unshift(DREAMLAND_LIVE_FLY_URL);
+  }
+  return withoutProxy;
+}
+
 function isProxiedSignalingUrl(signalingUrl) {
   return /\/live-socket\/?$/i.test(signalingUrl) || String(signalingUrl).includes('/live-socket/');
 }
@@ -87,6 +128,7 @@ export async function prepareForLiveConnect() {
   const host = window.location.hostname;
   if (/dreamlandgh\.app$/i.test(host) && window.location.protocol === 'https:') {
     wakeUrls.push(`${window.location.origin}/live-socket`);
+    wakeUrls.push(DREAMLAND_LIVE_FLY_URL);
   }
   const envSignal = window.__DL_ENV__?.live_signaling_url;
   if (envSignal) wakeUrls.push(String(envSignal).replace(/\/$/, ''));
@@ -263,7 +305,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       throw new Error('Live room credentials are missing — refresh and try again');
     }
     const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const signalingUrls = resolveSignalingUrls(cfg);
+    const signalingUrls = await resolveLiveSignalingUrls(cfg);
     if (!signalingUrls.length) {
       throw new Error('Live signaling URL is missing');
     }
