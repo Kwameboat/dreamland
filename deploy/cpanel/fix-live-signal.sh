@@ -47,10 +47,28 @@ fi
 
 rm -rf "$DL/api/runtime/cache/"* 2>/dev/null || true
 
+# Ensure .env points at Fly (Render has no WebRTC UDP)
+ENV="$HOME_DIR/dreamland/.env"
+FLY_URL="${DREAMLAND_LIVE_FLY_URL:-https://dreamland-live.fly.dev}"
+if [ -f "$ENV" ]; then
+  upsert_env() {
+    local key="$1" val="$2"
+    if grep -q "^${key}=" "$ENV" 2>/dev/null; then
+      sed -i "s|^${key}=.*|${key}=${val}|" "$ENV"
+    else
+      echo "${key}=${val}" >> "$ENV"
+    fi
+  }
+  if grep -q 'onrender.com' "$ENV" 2>/dev/null || ! grep -q '^DREAMLAND_LIVE_SERVER_URL=' "$ENV" 2>/dev/null; then
+    upsert_env DREAMLAND_LIVE_SERVER_URL "$FLY_URL"
+    upsert_env DREAMLAND_LIVE_SIGNALING_URL "$FLY_URL"
+    echo "Wired .env live URLs → $FLY_URL"
+  fi
+fi
+
 BUILD="$(grep -o 'build-[0-9]*' "$TMP/build-version.json" | head -1 || echo unknown)"
 echo ""
-echo "Testing same-origin live proxy..."
-curl -fsSL -A "DreamlandDeploy/1.0" "https://dreamlandgh.app/live-socket/health" | head -c 120 || echo "WARN: proxy /health not reachable yet"
+echo "Testing same-origin live proxy (must show deploy:fly)..."
+curl -fsSL -A "DreamlandDeploy/1.0" "https://dreamlandgh.app/live-socket/health" | head -c 200 || echo "WARN: proxy /health not reachable yet"
 echo ""
 echo "Done ($BUILD). One hard-refresh (Ctrl+Shift+R) after deploy."
-echo "If stuck on Loading live video: migrate live-server to Fly.io (deploy/fly/FLY-LIVE-SERVER.md)."

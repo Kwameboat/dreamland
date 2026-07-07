@@ -1,14 +1,73 @@
 <?php
 /**
- * Same-origin Socket.IO proxy → Render live-server (fixes xhr poll / CORS on PWA).
- * Browsers connect to https://dreamlandgh.app/live-socket — this forwards to DREAMLAND_LIVE_SIGNALING_URL.
+ * Same-origin Socket.IO proxy → Fly live-server (WebRTC SFU).
+ * Browsers connect to https://dreamlandgh.app/live-socket — forwards to DREAMLAND_LIVE_SIGNALING_URL.
  */
 declare(strict_types=1);
 
-$upstream = getenv('DREAMLAND_LIVE_SIGNALING_URL')
-    ?: getenv('DREAMLAND_LIVE_SERVER_URL')
-    ?: 'https://dreamland-live.onrender.com';
-$upstream = rtrim($upstream, '/');
+const DREAMLAND_LIVE_FLY_DEFAULT = 'https://dreamland-live.fly.dev';
+
+/**
+ * Load ~/dreamland/.env on cPanel (standalone PHP does not run Yii bootstrap).
+ */
+function dreamland_load_env(): void
+{
+    $candidates = [
+        dirname(__DIR__, 2) . '/dreamland/.env',
+        dirname(__DIR__, 2) . '/.env',
+    ];
+    $home = getenv('HOME') ?: (getenv('USERPROFILE') ?: '');
+    if ($home !== '') {
+        $candidates[] = $home . '/dreamland/.env';
+    }
+
+    $envFile = null;
+    foreach ($candidates as $path) {
+        if (is_file($path)) {
+            $envFile = $path;
+            break;
+        }
+    }
+    if ($envFile === null) {
+        return;
+    }
+
+    foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        $line = trim($line);
+        if ($line === '' || $line[0] === '#') {
+            continue;
+        }
+        if (!str_contains($line, '=')) {
+            continue;
+        }
+        [$key, $value] = explode('=', $line, 2);
+        $key = trim($key);
+        $value = trim($value, " \t\"'");
+        if ($key !== '' && getenv($key) === false) {
+            putenv("{$key}={$value}");
+            $_ENV[$key] = $value;
+        }
+    }
+}
+
+function dreamland_live_upstream(): string
+{
+    dreamland_load_env();
+
+    $upstream = getenv('DREAMLAND_LIVE_SIGNALING_URL')
+        ?: getenv('DREAMLAND_LIVE_SERVER_URL')
+        ?: DREAMLAND_LIVE_FLY_DEFAULT;
+    $upstream = rtrim($upstream, '/');
+
+    // Render has no UDP — WebRTC video always fails through it.
+    if (stripos($upstream, 'onrender.com') !== false) {
+        $upstream = DREAMLAND_LIVE_FLY_DEFAULT;
+    }
+
+    return $upstream;
+}
+
+$upstream = dreamland_live_upstream();
 
 $uri = $_SERVER['REQUEST_URI'] ?? '/live-socket/';
 $path = '/';
@@ -65,6 +124,7 @@ curl_setopt_array($ch, [
     CURLOPT_HEADER => true,
     CURLOPT_FOLLOWLOCATION => false,
     CURLOPT_TIMEOUT => 120,
+    CURLOPT_CONNECTTIMEOUT => 30,
     CURLOPT_HTTPHEADER => $forwardHeaders,
     CURLOPT_POSTFIELDS => $body,
 ]);
@@ -103,5 +163,6 @@ foreach (preg_split('/\r\n/', $rawHeaders) as $line) {
 }
 
 header('Access-Control-Allow-Origin: ' . ($_SERVER['HTTP_ORIGIN'] ?? '*'));
+header('X-Dreamland-Live-Upstream: ' . $upstream);
 
 echo $payload;

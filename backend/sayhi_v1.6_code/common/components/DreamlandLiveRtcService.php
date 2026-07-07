@@ -30,10 +30,19 @@ class DreamlandLiveRtcService extends Component
         parent::init();
         $params = Yii::$app->params;
         if (!empty($params['dreamlandLiveServerUrl'])) {
-            $this->serverUrl = (string) $params['dreamlandLiveServerUrl'];
+            $url = (string) $params['dreamlandLiveServerUrl'];
+            // Render cannot carry WebRTC media — prefer Fly when misconfigured.
+            if (stripos($url, 'onrender.com') !== false) {
+                $url = 'https://dreamland-live.fly.dev';
+            }
+            $this->serverUrl = $url;
         }
         if (!empty($params['dreamlandLiveSignalingUrl'])) {
-            $this->signalingUrl = (string) $params['dreamlandLiveSignalingUrl'];
+            $url = (string) $params['dreamlandLiveSignalingUrl'];
+            if (stripos($url, 'onrender.com') !== false) {
+                $url = 'https://dreamland-live.fly.dev';
+            }
+            $this->signalingUrl = $url;
         }
         if (!empty($params['dreamlandLiveSecret'])) {
             $this->internalSecret = (string) $params['dreamlandLiveSecret'];

@@ -23,7 +23,9 @@ function resolveSignalingUrls(cfg) {
     urls.push(`${window.location.origin}/live-socket`);
   }
   for (const candidate of [normalized.signaling_url, normalized.signaling_url_direct]) {
-    if (candidate && !urls.includes(candidate)) urls.push(candidate);
+    if (!candidate || urls.includes(candidate)) continue;
+    if (onDreamlandProd && /onrender\.com/i.test(candidate)) continue;
+    urls.push(candidate);
   }
   return urls;
 }
