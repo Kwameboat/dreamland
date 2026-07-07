@@ -4562,7 +4562,10 @@ function openLivePaywall(liveId, price, title) {
 
 async function enterLiveRoom(liveId) {
   try {
-    if (!(await ensureLiveServerReady())) return;
+    if (!(await ensureLiveServerReady())) {
+      showToast('Live server not ready — try again');
+      return;
+    }
     const live = await refreshLiveCredentials(liveId);
     await openLiveWatchRoom(live, liveId);
     loadLives(true);
@@ -4608,7 +4611,11 @@ async function openLiveWatchRoom(live, liveId = live?.id) {
   }
   document.getElementById('live-watch-visual')?.classList.remove('live-watch-visual--playing');
 
-  const rtc = live.rtc;
+  const rtc = {
+    ...(live.rtc || {}),
+    live_id: live.rtc?.live_id || live.id,
+    token: live.rtc?.token || live.token,
+  };
   if (!rtc?.signaling_url) {
     setLiveWatchStatus('Live video is not available right now. The host may still be connecting — try again shortly.', true);
     showToast('Live video server unavailable');
@@ -4627,7 +4634,7 @@ async function openLiveWatchRoom(live, liveId = live?.id) {
       }
       const liveClient = await ensureDreamlandLive(attempt > 0);
       await liveClient.startWatching({
-        rtc: live.rtc,
+        rtc,
         live,
         userId: state.user?.id,
         videoEl,
@@ -4639,11 +4646,12 @@ async function openLiveWatchRoom(live, liveId = live?.id) {
           setLiveWatchStatus('');
           document.getElementById('live-watch-visual')?.classList.add('live-watch-visual--playing');
           if (videoEl) {
-            videoEl.muted = false;
-            videoEl.removeAttribute('muted');
-            videoEl.play().catch(() => {
-              videoEl.muted = true;
-              videoEl.setAttribute('muted', '');
+            videoEl.muted = true;
+            videoEl.setAttribute('muted', '');
+            videoEl.play().then(() => {
+              videoEl.muted = false;
+              videoEl.removeAttribute('muted');
+            }).catch(() => {
               setLiveWatchStatus('Tap the video to enable sound', false);
             });
           }

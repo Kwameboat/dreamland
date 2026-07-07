@@ -515,10 +515,31 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     videoEl.setAttribute('muted', '');
     videoEl.playsInline = true;
     videoEl.setAttribute('playsinline', '');
-    await videoEl.play().catch(() => {});
+    videoEl.autoplay = true;
+    for (let i = 0; i < 3; i++) {
+      try {
+        await videoEl.play();
+        break;
+      } catch {
+        await new Promise((r) => window.setTimeout(r, 400 * (i + 1)));
+      }
+    }
     if (remoteStream.getTracks().length) {
       videoEl.closest('.live-watch-visual')?.classList.add('live-watch-visual--playing');
     }
+  }
+
+  async function finalizeViewerPlayback(session, callbacks = {}) {
+    const { recvTransport, remoteStream, videoEl } = session;
+    if (!remoteStream?.getTracks().length) return false;
+    callbacks.onWaiting?.('Buffering live video…');
+    await waitForTransportConnection(recvTransport, 25000).catch((err) => {
+      console.warn('Viewer transport connect:', err.message);
+    });
+    if (videoEl) await attachRemoteStreamToVideo(videoEl, remoteStream).catch(() => {});
+    callbacks.onStatus?.('');
+    callbacks.onStreamReady?.(remoteStream);
+    return true;
   }
 
   async function consumeAll(socket, device, transport, videoEl, seedProducers = [], callbacks = {}) {
@@ -543,10 +564,10 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     }
 
     if (remoteStream.getTracks().length) {
-      void waitForTransportConnection(transport, 15000).catch((err) => {
-        console.warn('Transport connect:', err.message);
-      });
-      if (videoEl) await attachRemoteStreamToVideo(videoEl, remoteStream).catch(() => {});
+      await finalizeViewerPlayback(
+        { recvTransport: transport, remoteStream, videoEl },
+        callbacks,
+      );
     }
 
     return { remoteStream, transport, device, consumedProducerIds, consumeAttempted };
@@ -554,7 +575,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
 
   async function syncProducers(session, callbacks = {}) {
     const { socket, device, recvTransport, videoEl, remoteStream, consumedProducerIds } = session;
-    const list = await emitAck(socket, 'live:getProducers');
+    const list = await emitAck(socket, 'live:getProducers', {}, 10000);
     let added = false;
 
     for (const item of list.items || []) {
@@ -568,9 +589,8 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       }
     }
 
-    if (added && videoEl) {
-      await attachRemoteStreamToVideo(videoEl, remoteStream);
-      callbacks.onStreamReady?.(remoteStream);
+    if (added) {
+      await finalizeViewerPlayback(session, callbacks);
     }
 
     return added;
@@ -731,7 +751,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       consumedProducerIds: new Set(),
     };
 
-    const callbacks = { onStreamReady, onWaiting };
+    const callbacks = { onStreamReady, onWaiting, onStatus };
     const seedProducers = Array.isArray(join.producers) ? join.producers : [];
 
     watchSession = session;
@@ -749,9 +769,26 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
           ? 'Receiving host video…'
           : 'Waiting for host camera…';
       onWaiting?.(waitingMsg);
+
+      const gotTracks = await Promise.race([
+        new Promise((resolve) => {
+          const check = window.setInterval(() => {
+            if (session.remoteStream.getTracks().length) {
+              window.clearInterval(check);
+              resolve(true);
+            }
+          }, 500);
+          window.setTimeout(() => {
+            window.clearInterval(check);
+            resolve(false);
+          }, 90000);
+        }),
+      ]);
+      if (gotTracks) {
+        await finalizeViewerPlayback(session, { onStreamReady, onWaiting, onStatus });
+        clearProducerPoll();
+      }
     } else {
-      onStatus?.('');
-      onStreamReady?.(session.remoteStream);
       clearProducerPoll();
     }
 
@@ -760,12 +797,7 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
       try {
         await consumeProducer(socket, device, recvTransport, producerId, session.remoteStream);
         session.consumedProducerIds.add(producerId);
-        void waitForTransportConnection(recvTransport, 15000).catch(() => {});
-        if (videoEl) {
-          await attachRemoteStreamToVideo(videoEl, session.remoteStream);
-        }
-        onStatus?.('');
-        onStreamReady?.(session.remoteStream);
+        await finalizeViewerPlayback(session, { onStreamReady, onWaiting, onStatus });
         clearProducerPoll();
       } catch (err) {
         console.warn('Consume new producer failed:', err.message);
@@ -804,6 +836,10 @@ export function createDreamlandLive({ showToast, formatCount } = {}) {
     if (join.viewerCount != null) {
       const el = document.getElementById('live-watch-viewers');
       if (el && formatCount) el.textContent = `${formatCount(join.viewerCount)} watching`;
+    }
+
+    if (!session.remoteStream.getTracks().length) {
+      throw new Error('Host video did not arrive — try again in a moment');
     }
 
     watchSession = session;

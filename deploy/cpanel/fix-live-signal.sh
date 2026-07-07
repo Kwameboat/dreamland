@@ -29,6 +29,11 @@ fetch "$TMP/DreamlandMetaController.php" "$BASE/api/modules/v1/controllers/Dream
 fetch "$TMP/LiveController.php" "$BASE/api/modules/v1/controllers/LiveController.php"
 fetch "$TMP/CreatorController.php" "$BASE/api/modules/v1/controllers/CreatorController.php"
 fetch "$TMP/build-version.json" "$GITHUB/web/build-version.json"
+fetch "$TMP/env-config.js" "$GITHUB/web/env-config.js"
+
+mkdir -p "$TMP/vendor"
+fetch "$TMP/vendor/socket.io.esm.min.js" "https://cdn.socket.io/4.8.1/socket.io.esm.min.js"
+fetch "$TMP/vendor/mediasoup-client.esm.js" "https://esm.sh/mediasoup-client@3.7.17?bundle"
 
 install "$TMP/DreamlandLiveRtcService.php" "$DL/common/components/DreamlandLiveRtcService.php"
 install "$TMP/HealthController.php" "$DL/api/modules/v1/controllers/HealthController.php"
@@ -37,7 +42,7 @@ install "$TMP/LiveController.php" "$DL/api/modules/v1/controllers/LiveController
 install "$TMP/CreatorController.php" "$DL/api/modules/v1/controllers/CreatorController.php"
 
 if [ -d "$WEB" ]; then
-  mkdir -p "$WEB/js" "$WEB/live-socket"
+  mkdir -p "$WEB/js" "$WEB/live-socket" "$WEB/js/vendor"
   install "$TMP/dreamland-live.js" "$WEB/js/dreamland-live.js"
   install "$TMP/app.js" "$WEB/js/app.js"
   install "$TMP/sw.js" "$WEB/sw.js"
@@ -45,6 +50,9 @@ if [ -d "$WEB" ]; then
   install "$TMP/live-socket-index.php" "$WEB/live-socket/index.php"
   install "$TMP/live-socket-htaccess" "$WEB/live-socket/.htaccess"
   install "$TMP/build-version.json" "$WEB/build-version.json"
+  install "$TMP/env-config.js" "$WEB/env-config.js"
+  install "$TMP/vendor/socket.io.esm.min.js" "$WEB/js/vendor/socket.io.esm.min.js"
+  install "$TMP/vendor/mediasoup-client.esm.js" "$WEB/js/vendor/mediasoup-client.esm.js"
 fi
 
 rm -rf "$DL/api/runtime/cache/"* 2>/dev/null || true
