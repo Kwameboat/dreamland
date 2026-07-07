@@ -2549,44 +2549,89 @@ async function getUserMediaWithTimeout(constraints, timeoutMs = 15000) {
   ]);
 }
 
+async function fetchWithTimeout(url, timeoutMs = 10000) {
+  const ctrl = new AbortController();
+  const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { cache: 'no-store', mode: 'cors', credentials: 'omit', signal: ctrl.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+const DREAMLAND_LIVE_FLY_URL = 'https://dreamland-live.fly.dev';
+
+function isBrokenLiveHealth(data) {
+  if (!data || !data.ok) return true;
+  const ip = String(data?.webrtc?.[0]?.announcedIp || '');
+  return data.deploy === 'render' || ip.startsWith('216.24.');
+}
+
+async function probeLiveSignalingHealth() {
+  const bases = [];
+  const onProd = /dreamlandgh\.app$/i.test(window.location.hostname) && window.location.protocol === 'https:';
+  if (onProd) bases.push(`${window.location.origin}/live-socket`);
+  bases.push(DREAMLAND_LIVE_FLY_URL);
+
+  for (const base of bases) {
+    try {
+      const res = await fetchWithTimeout(`${String(base).replace(/\/$/, '')}/health`, 12000);
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (isBrokenLiveHealth(data)) continue;
+      return { ok: true, base, deploy: data.deploy };
+    } catch {
+      /* try next */
+    }
+  }
+  return { ok: false };
+}
+
 async function wakeProductionLiveServer() {
   const host = window.location.hostname;
   if (!/dreamlandgh\.app$/i.test(host) || window.location.protocol !== 'https:') return;
-  try {
-    await fetch(`${window.location.origin}/live-socket/health`, { cache: 'no-store', mode: 'cors', credentials: 'omit' });
-  } catch { /* cold start */ }
+  await Promise.allSettled([
+    fetchWithTimeout(`${window.location.origin}/live-socket/health`, 8000).catch(() => {}),
+    fetchWithTimeout(`${DREAMLAND_LIVE_FLY_URL}/health`, 8000).catch(() => {}),
+  ]);
 }
 
 async function ensureLiveServerReady(onStatus) {
   try {
     onStatus?.('Waking live server…');
     await wakeProductionLiveServer();
+
     onStatus?.('Checking live server…');
-    let res = await api(API_ROUTES.health, { timeoutMs: 20000 });
-    const checks = res.data?.checks || {};
-    const signaling = String(res.data?.services?.live_signaling || '');
-    const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const probe = await Promise.race([
+      probeLiveSignalingHealth(),
+      new Promise((resolve) => window.setTimeout(() => resolve({ ok: false, timedOut: true }), 14000)),
+    ]);
 
-    if (checks.live_server === false) {
-      await new Promise((r) => window.setTimeout(r, 4000));
-      await wakeProductionLiveServer();
-      res = await api(API_ROUTES.health, { timeoutMs: 25000 });
-    }
+    if (probe.ok) return true;
 
-    const liveOk = res.data?.checks?.live_server !== false;
-    if (!liveOk) {
-      if (/dreamlandgh\.app\/live-socket/i.test(signaling)) {
-        showToast('Live server is waking up — trying anyway…');
+    try {
+      const res = await api(API_ROUTES.health, { timeoutMs: 10000 });
+      const liveOk = res.data?.checks?.live_server !== false;
+      const signaling = String(res.data?.services?.live_signaling || '');
+      const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (liveOk) {
+        if (!isLocalHost && /localhost|127\.0\.0\.1/i.test(signaling)) {
+          showToast('Live signaling is not configured for production yet');
+          return false;
+        }
         return true;
       }
-      showToast('Live server is offline — wait 30 seconds and try again');
-      return false;
+    } catch {
+      /* fall through */
     }
-    if (!isLocalHost && /localhost|127\.0\.0\.1/i.test(signaling)) {
-      showToast('Live signaling is not configured for production yet');
-      return false;
+
+    if (probe.timedOut || /dreamlandgh\.app$/i.test(window.location.hostname)) {
+      showToast('Live server is waking up — trying anyway…');
+      return true;
     }
-    return true;
+
+    showToast('Live server is offline — wait 30 seconds and try again');
+    return false;
   } catch (err) {
     showToast(err.message || 'Could not verify live server');
     return false;
@@ -2609,7 +2654,16 @@ async function startLiveSession() {
 
   let apiLiveStarted = false;
   try {
-    if (!(await ensureLiveServerReady((msg) => setStartBtn(msg)))) return;
+    const liveReady = await Promise.race([
+      ensureLiveServerReady((msg) => setStartBtn(msg)),
+      new Promise((_, reject) => {
+        window.setTimeout(() => reject(new Error('Live server check timed out — try again')), 28000);
+      }),
+    ]).catch((err) => {
+      showToast(err.message || 'Could not verify live server');
+      return false;
+    });
+    if (!liveReady) return;
 
     pauseMediaForLive();
     setStartBtn('Opening camera…');
