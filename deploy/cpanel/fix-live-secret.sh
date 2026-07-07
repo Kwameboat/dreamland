@@ -18,6 +18,16 @@ FLY_URL="${DREAMLAND_LIVE_FLY_URL:-https://dreamland-live.fly.dev}"
 
 LIVE_SECRET="${LIVE_SECRET:-${1:-}}"
 
+if [ -z "$LIVE_SECRET" ]; then
+  echo "ERROR: LIVE_SECRET is required."
+  echo ""
+  echo "  export LIVE_SECRET=\"your-fly-secret\""
+  echo "  curl -fsSL -A \"DreamlandDeploy/1.0\" https://raw.githubusercontent.com/Kwameboat/dreamland/main/deploy/cpanel/fix-live-secret.sh | bash"
+  echo ""
+  echo "  OR: curl ... | LIVE_SECRET=\"your-secret\" bash"
+  exit 1
+fi
+
 upsert() {
   local key="$1" val="$2"
   touch "$ENV"
