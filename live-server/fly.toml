@@ -33,6 +33,18 @@ primary_region = 'iad'
     start_port = 40000
     end_port = 40100
 
+# ICE-TCP fallback: viewers on networks that block UDP (mobile/corporate NAT)
+# connect to the same RTC port range over raw TCP. mediasoup advertises TCP
+# candidates via enableTcp=true, so this is required for them to reach the SFU.
+[[services]]
+  protocol = 'tcp'
+  internal_port = 40000
+  processes = ['app']
+
+  [[services.ports]]
+    start_port = 40000
+    end_port = 40100
+
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'
